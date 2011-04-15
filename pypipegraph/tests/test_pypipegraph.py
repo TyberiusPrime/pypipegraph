@@ -383,6 +383,20 @@ class MultiFileGeneratingJobTests(PPGPerTest):
         for f in of:
             self.assertFalse(os.path.exists(f))
 
+    def test_exception_destroys_renames_files(self):
+        of = ['out/a', 'out/b']
+        def do_write():
+            for f in of:
+                append(f, 'shu')
+            raise ValueError("explode")
+        job = ppg.MultiFileGeneratingJob(of, do_write, rename_broken = True)
+        try:
+            ppg.run_pipegraph()
+            raise ValueError("should not be reached")
+        except ppg.RuntimeError:
+            pass
+        for f in of:
+            self.assertFalse(os.path.exists(f + '.broken'))
     def test_invalidation_removes_all_files(self):
         of = ['out/a', 'out/b']
         sentinel = 'out/sentinel'
@@ -471,11 +485,28 @@ class DataLoadingJobTests(PPGPerTest):
         ofC = 'out/c'
         def do_write():
             write(ofC, ofC)
-        jobC = ppg.DataLoadingJob(ofC, do_write).depends_on(jobB)
+        jobC = ppg.FileGeneratingJob(ofC, do_write).depends_on(jobB)
         ppg.run_pipegraph()
         self.assertTrue(os.path.exists(of))
         self.assertTrue(os.path.exists(ofB))
         self.assertTrue(os.path.exists(ofC))
+
+    def test_chain_with_filegenerating_works(self):
+        of = 'out/a'
+        def do_write():
+            write(of, of)
+        jobA = ppg.FileGeneratingJob(of, do_write)
+        o = Dummy()
+        def do_load():
+            o.a = read(of)
+        jobB = ppg.DataLoadingJob('loadme', do_load).depends_on(jobA)
+        ofB = 'out/b'
+        def write2():
+            write(ofB, o.a)
+        jobC = ppg.FileGeneratingJob(ofB, write2).depends_on(jobB)
+        ppg.run_pipegraph()
+        self.assertEqual(read(of), of)
+        self.assertEqual(read(ofB), of)
 
 
     def test_does_get_run_depending_on_jobgenjob(self):
@@ -1332,6 +1363,64 @@ class ResourceCoordinatorTests:
         self.assertTrue(int(read('out/A')) <= 3 ) #the other jobs might have run in parallel
         self.assertTrue(int(read('out/B')) <= 3 ) #the other jobs might have run in parallel
         self.assertTrue(int(read('out/C')) <= 3 ) #the other jobs might have run in parallel
+
+    def test_needs_too_much_ram(self):
+        coordinator = TestResourceCoordinator(
+                [('pinky', 4, 4096)])
+        ppg.new_pipegraph(coordinator)
+        def get_job(of):
+            def do_write():
+                write(of, "%i" % ppg.get_running_job_count())
+            return ppg.FileGeneratingJob(of, do_write)
+        jobA = get_job('out/A')
+        jobB = get_job('out/B')
+        jobC = get_job('out/C')
+        jobD = get_job('out/D')
+        jobD.needed_memory = 5580
+        try:
+            ppg.run_pipegraph()
+            raise ValueError("should not be reached")
+        except ppg.RuntimeError:
+            pass         
+        self.assertFalse(os.path.exists('out/D'))
+        self.assertTrue(int(read('out/A')) <= 3 ) #the other jobs might have run in parallel
+        self.assertTrue(int(read('out/B')) <= 3 ) #the other jobs might have run in parallel
+        self.assertTrue(int(read('out/C')) <= 3 ) #the other jobs might have run in parallel
+        self.assertTrue(jobD.failed)
+        self.assertTrue(jobD.error_reason.find('too much') != -1)
+        self.assertFalse(jobD.exception)
+
+    def test_needs_too_many_cores(self):
+        coordinator = TestResourceCoordinator(
+                [('pinky', 4, 4096)])
+        ppg.new_pipegraph(coordinator)
+        def get_job(of):
+            def do_write():
+                write(of, "%i" % ppg.get_running_job_count())
+            return ppg.FileGeneratingJob(of, do_write)
+        jobA = get_job('out/A')
+        jobB = get_job('out/B')
+        jobC = get_job('out/C')
+        jobD = get_job('out/D')
+        jobD.cores_needed = 16
+        try:
+            ppg.run_pipegraph()
+            raise ValueError("should not be reached")
+        except ppg.RuntimeError:
+            pass         
+        self.assertFalse(os.path.exists('out/D'))
+        self.assertTrue(int(read('out/A')) <= 3 ) #the other jobs might have run in parallel
+        self.assertTrue(int(read('out/B')) <= 3 ) #the other jobs might have run in parallel
+        self.assertTrue(int(read('out/C')) <= 3 ) #the other jobs might have run in parallel
+        self.assertTrue(jobD.failed)
+        self.assertTrue(jobD.error_reason.find('too much') != -1)
+        self.assertFalse(jobD.exception)
+
+
+
+
+
+
 
 
 

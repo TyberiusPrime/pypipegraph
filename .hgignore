@@ -1,0 +1,3 @@
+syntax:glob
+*.pyc
+readme.html
