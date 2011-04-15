@@ -242,7 +242,7 @@ Notes
 
 Exceptions
 -----------
-pypipegraph has a small set of exceptions
+pypipegraph has a small set of exceptions (all descending from PyPipelineGraphError).
 * RuntimeError get's thrown by pypipegraph.run if a job raised an exception, communication lines were broken etc
 * JobContractError is stored in a job's .exception if the job's callback did not comply with it's requirements (e.g. a FileGeneratingJob did not actually create the file)
 * CycleError: you have fabricated a cycle in your dependencies. Unfortunatly it's currently not reported where the cycle is (todo)
