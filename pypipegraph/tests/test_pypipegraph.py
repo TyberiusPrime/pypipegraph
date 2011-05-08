@@ -695,7 +695,7 @@ class TempFileGeneratingJobTest(PPGPerTest):
             raise ValueError("should not be reached")
         except ppg.RuntimeError:
             pass
-        ppg.run_pipegraph()
+        #ppg.run_pipegraph()
         self.assertFalse(os.path.exists(ofA))
         self.assertTrue(os.path.exists(temp_file))
 
@@ -750,7 +750,6 @@ class TempFileGeneratingJobTest(PPGPerTest):
         self.assertFalse(os.path.exists(ofA))
 
 
-
 class InvariantTests(PPGPerTest):
 
     def setUp(self):
@@ -764,10 +763,23 @@ class InvariantTests(PPGPerTest):
     def tearDown(self):
         shutil.rmtree('out')
 
+    def sentinel_count(self):
+        sentinel = 'out/sentinel'
+        try:
+            op = open(sentinel, 'rb')
+            count = int(op.read())
+            op.close()
+        except:
+            count = 1
+        op = open(sentinel, 'wb')
+        op.write("%i" % (count + 1))
+        op.close()
+        return count
+
     def test_filegen_jobs_detect_code_change(self):
         of = 'out/a'
         def do_write():
-            append(of, 'shu')
+            append(of, 'shu' * self.sentinel_count())
         job = ppg.FileGeneratingJob(of, do_write)
         ppg.run_pipegraph()
         self.assertEqual(read(of), 'shu')
@@ -777,21 +789,23 @@ class InvariantTests(PPGPerTest):
         self.assertEqual(read(of), 'shu') #has not been run again...
         def do_write2():
             append(of, 'sha')
+        ppg.new_pipegraph()
         job = ppg.FileGeneratingJob(of, do_write2)
         ppg.run_pipegraph()
-        self.assertEqual(read(of), 'shusha') #has been run again ;).
+        self.assertEqual(read(of), 'sha') #has been run again ;).
 
     def test_filegen_jobs_ignores_code_change(self):
         of = 'out/a'
         def do_write():
-            append(of, 'shu')
+            append(of, 'shu' * self.sentinel_count())
         job = ppg.FileGeneratingJob(of, do_write)
         ppg.run_pipegraph()
+
         self.assertEqual(read(of), 'shu')
         ppg.new_pipegraph()
         job = ppg.FileGeneratingJob(of, do_write)
         ppg.run_pipegraph()
-        self.assertEqual(read(of), 'shu') #has not been run again...
+        self.assertEqual(read(of), 'shu') #has not been run again, for no change
 
         ppg.new_pipegraph()
         def do_write2():
@@ -799,17 +813,18 @@ class InvariantTests(PPGPerTest):
         job = ppg.FileGeneratingJob(of, do_write2)
         job.ignore_code_changes()
         ppg.run_pipegraph()
-        self.assertEqual(read(of), 'shu') #has not been run again.
+        self.assertEqual(read(of), 'shu') #has not been run again, since we ignored the changes
 
         ppg.new_pipegraph()
         job = ppg.FileGeneratingJob(of, do_write2)
         ppg.run_pipegraph()
-        self.assertEqual(read(of), 'shu') #and the new code has been stored.
+        self.assertEqual(read(of), 'sha') #But the new code had not been stored, not ignoring => redoing.
 
     def test_parameter_dependency(self):
         of = 'out/a'
+        sentinel = 'out/sentinel'
         def do_write():
-            append(of, 'shu')
+            append(of, 'shu' * self.sentinel_count())
         job = ppg.FileGeneratingJob(of, do_write)
         param_dep = ppg.ParameterInvariant('myparam', (1,2,3))
         job.depends_on(param_dep)
@@ -821,16 +836,18 @@ class InvariantTests(PPGPerTest):
         job.depends_on(param_dep)
         ppg.run_pipegraph()
         self.assertEqual(read(of), 'shu') #has not been run again...
+        ppg.new_pipegraph()
         job = ppg.FileGeneratingJob(of, do_write)
         param_dep = ppg.ParameterInvariant('myparam', (1,2,3, 4))
         job.depends_on(param_dep)
         ppg.run_pipegraph()
-        self.assertEqual(read(of), 'shusha') #has been run again ;).
+        self.assertEqual(read(of), 'shushu') #has been run again ;).
 
     def test_filetime_dependency(self):
         of = 'out/a'
         def do_write():
-            append(of, 'shu')
+            append(of, 'shu' * self.sentinel_count())
+
         ftfn = 'out/ftdep'
         write(ftfn,'hello')
         write(of,'hello')
@@ -860,10 +877,14 @@ class InvariantTests(PPGPerTest):
     def test_filechecksum_dependency(self):
         of = 'out/a'
         def do_write():
-            append(of, 'shu')
+            append(of, 'shu' * self.sentinel_count())
         ftfn = 'out/ftdep'
         write(ftfn,'hello')
+        import stat
+        logging.info('file time after creating %s'% os.stat(ftfn)[stat.ST_MTIME])
+
         write(of,'hello')
+
         job = ppg.FileGeneratingJob(of, do_write)
         dep = ppg.FileChecksumInvariant(ftfn)
         job.depends_on(dep)
@@ -877,6 +898,7 @@ class InvariantTests(PPGPerTest):
         self.assertEqual(read(of), 'shu') #job does not get rerun...
 
         time.sleep(1) #so linux actually advances the file time in the next line
+        logging.info("NOW REWRITE")
         write(ftfn,'hello') #same content, different time
 
         ppg.new_pipegraph()

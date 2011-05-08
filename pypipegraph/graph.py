@@ -158,9 +158,16 @@ class Pipegraph(object):
 
         for job in self.jobs.values():
             old = self.invariant_status[job.job_id]
-            inv = job.get_invariant(old)
+            try:
+                inv = job.get_invariant(old)
+            except util.NothingChanged, e:
+                logging.info("Invariant difference, but NothingChanged")
+                inv = e.new_value
+                old = inv #so no change...
             if inv != old:
+                logging.info("Invariant change for %s was %s ,now %s" % (job, old, inv))
                 job.invalidated()
+                self.invariant_status[job.job_id] = inv # for now, it is the dependant job's job to clean up so they get reinvalidated if the executing is terminated before they are reubild (ie. filegenjobs delete their outputfiles)
 
     def build_todo_list(self):
         """Go through each job. If it needs to be done, invalidate() all dependands.
