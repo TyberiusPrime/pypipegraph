@@ -2,8 +2,9 @@ pypipegraph
 =============
 
 pypipegraph is a library for constructing a workflow piece by piece and 
-executing just the parts of it that need to be (re-)done on multiple machines
-in a viable order.
+executing just the parts of it that need to be (re-)done.
+It supports using multiple cores (SMP) and machines (cluster) and is
+a hybrid between a dependency tracker (think 'make') and a cluster engine.
 
 More specifically, you construct Jobs_, which encapsulate output (i.e. stuff that
 needs to be done), invariants (which force re-evaluation of output jobs if 
@@ -32,10 +33,10 @@ unning pypipegraphs) and spawns one compute slave (cs) for each machine.
 Now each compute slave receives a copy of all jobs (which are just definitions,
 and therefore pretty small).  One by one the mcp (talking to the
 resource-coordinator) asks the cs to execute jobs (while talking to the
-resource-coordinater), collects their feedback, prunes the graph on errors and
+resource-coordinater to share resources with others), collects their feedback, prunes the graph on errors and
 returns control to you once all of them have been done (or failed ;) ).
 
-The MCP knows (thanks to the resource coordinator) about the resources available
+The mcp knows (thanks to the resource coordinator) about the resources available
 (number of cpu cores, memory) and doesn't overload the nodes (by spawning more
 processes than there are cores or by spawning too many memory hungry jobs at once).
 
