@@ -58,6 +58,9 @@ class Job(object):
 
         return util.job_uniquifier[job_id]
 
+    def __getnewargs__(self):  #so that unpickling works
+        return (self.job_id, )
+
     def __init__(self, job_id):
         self.job_id = job_id
         self.cores_needed = 1
@@ -153,6 +156,9 @@ class Job(object):
 
     def __iter__(self):
         yield self
+
+    def __str__(self):
+        return "%s (job_id=%s)" % (self.__class__.__name__, self.job_id)
 
 lambdare = re.compile('<code	object	<lambda>	at	0x[a-f0-9]+[^>]+')
 class FunctionInvariant(Job):
@@ -438,7 +444,9 @@ class DependencyInjectionJob(Job):
                 for new_job in util.global_pipeline.new_jobs.values():
                     if new_job in job.prerequisites:
                         raise exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was added to the prerequisites of %s, but %s was not dependant on the DependencyInjectionJob" % (self.job_id, new_job.job_id, job.job_id))
-        return util.global_pipeline.new_jobs()
+        res = util.global_pipeline.new_jobs()
+        util.global_pipeline.new_jobs = False
+        return res
 
 
 
@@ -456,21 +464,23 @@ class JobGeneratingJob(Job):
             self.depends_on(FunctionInvariant(self.job_id + '_func', self.callback))
 
     def is_done(self):
-        return False
+        return self.was_run 
 
     def modifies_jobgraph(self):
-        return False
+        return True
 
     def run(self):
-        util.global_pipeline.new_jobs = {}
+        util.global_pipegraph.new_jobs = {}
         self.callback()
         #I need to check: All new jobs are now prereqs of my dependands
         #I also need to check that none of the jobs that ain't dependand on me have been injected
-        for job in util.global_pipeline.jobs.values():
-            for new_job in util.global_pipeline.new_jobs.values():
+        for job in util.global_pipegraph.jobs.values():
+            for new_job in util.global_pipegraph.new_jobs.values():
                 if new_job in job.prerequisites:
                     raise exceptions.JobContractError("JobGeneratingJob %s created a job %s that was added to the prerequisites of %s, which is invalid. Use a DependencyInjectionJob instead, this one might only create 'leave' nodes" % (self.job_id, new_job.job_id, job.job_id))
-        return util.global_pipeline.new_jobs()
+        res = util.global_pipegraph.new_jobs
+        util.global_pipegraph.new_jobs = False
+        return res
 
 def PlotJob(output_filename, calc_function, plot_function): #a convienence wrapper for a quick plotting
     if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):

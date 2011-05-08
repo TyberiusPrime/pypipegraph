@@ -43,16 +43,19 @@ class Pipegraph(object):
         self.jobs = {}
         self.running = False
         self.was_run = False
+        self.new_jobs = False
 
     def __del__(self):
         self.rc.pipegraph = None
 
     def add_job(self, job):
-        if self.was_run:
-            raise ValueError("This pipegraph was already run. You need to create a new one for more jobs")
         if not self.running:
+            if self.was_run:
+                raise ValueError("This pipegraph was already run. You need to create a new one for more jobs")
             self.jobs[job.job_id] = job
         else:
+            if self.new_jobs is False:
+                raise ValueError("Trying to add new jobs to running pipeline without havving new_jobs set")
             if not job.job_id in self.jobs:
                 self.new_jobs[job.job_id] = job
 
@@ -60,6 +63,7 @@ class Pipegraph(object):
     def run(self):
         if self.was_run:
             raise ValueError("Each pipegraph may be run only once.")
+        logging.info("MCP pid: %i" % os.getpid())
         #internal to the mcp
         self.inject_auto_invariants()
         self.was_run = True #since build_
@@ -204,6 +208,7 @@ class Pipegraph(object):
         self.running_jobs = set()
         if self.possible_execution_order: #no jobs, no spawning...
             self.rc.enter_loop() #doesn't return until all jobs have been done.
+        logging.info("Control returned from ResourceCoordinator")
 
 
     def start_jobs(self): #I really don't like this function... and I also have the strong inkling it should acttually sit in the resource coordinatora
@@ -302,6 +307,37 @@ class Pipegraph(object):
         self.running_jobs.remove(job)
         #self.signal_job_done()
         return bool(self.running_jobs) or bool(self.possible_execution_order)
+
+    def new_jobs_generated_during_runtime(self, new_jobs):
+        """Received jobs from one of the generators. 
+        We'll integrate them into the graph, and add them to the possible_execution_order.
+        Beauty of the job-singeltonization is that all dependands that are not new"""
+        logging.info('new_jobs_generated_during_runtime')
+        def check_preqs(job):
+            for preq in job.prerequisites:
+                if not preq.job_id in self.jobs and not preq.job_id in new_jobs:
+                    raise ValueError("New job dependen on job that is not in the job list but also not in the new jobs")
+            for dep in job.dependants:
+                if not dep.job_id in self.jobs and not dep.job_id in new_jobs:
+                    raise ValueError("New job was depedency for is not in the job list but also not in the new jobs")
+                    #the case that it is injected as a dependency for a job that might have already been done
+                    #is being taken care of in the JobGeneratingJob and DependencyInjectionJob s
+        for job in new_jobs.values():
+            print job
+            print job.prerequisites
+            check_preqs(job)
+            self.jobs[job.job_id] = job
+        for job in new_jobs.values():
+            if not job.is_done():
+                job.invalidated()
+        for job in new_jobs.values():
+            if not job.is_loadable:
+                logging.info("Adding gen. job to possible_execution_order: %s" % job)
+            elif not job.is_done():
+                self.possible_execution_order.append(job)
+           
+
+
 
 
 

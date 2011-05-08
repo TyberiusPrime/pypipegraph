@@ -1293,7 +1293,7 @@ class TestResourceCoordinator:
 
 
 
-class ResourceCoordinatorTests:
+class ResourceCoordinatorTests(unittest.TestCase):
     def setUp(self):
         try:
             os.mkdir('out')
@@ -1461,16 +1461,42 @@ class ResourceCoordinatorTests:
         self.assertFalse(jobD.exception)
 
 
+class NotYetImplementedTests(unittest.TestCase):
 
 
+    def test_dying_jobs(self):
+        #create a job that makes the process die in a not-python-exception-wrapped way
+        #sys.exit(), probably works. That should get an appropriate exception instead
+        #of an endless loop
+        raise NotImplementedError()
+    def test_generated_job_depending_on_job_that_cant_have_finished(self):
+        #basic idea. You have jobgen A, and filegen B.
+        #filegenB depends on jobgenA.
+        #jobGenA created C depends on filegenB
+        #Perhaps add a filegen D that's independand of jobGenA, but C also deps on D
 
+        raise NotImplementedError()
 
+    def test_generated_job_depending_on_each_other(self):
+        #basic idea. You have jobgen A, 
+        #it not only creates filegenB, but also filegenC that depends on B
+        #does that work
 
+        raise NotImplementedError()
 
+    def test_generated_job_depending_on_each_other_one_of_them_is_loading(self):
+        #basic idea. You have jobgen A, 
+        #it not only creates filegenB, but also DataloadingC that depends on B
+        #does that work
 
+        raise NotImplementedError()
 
+    def test_generated_job_depending_on_each_other_one_of_them_is_Invariant(self):
+        #basic idea. You have jobgen A, 
+        #it not only creates filegenB, but also ParameterDependencyC that A depends on
+        #does that work
 
-
+        raise NotImplementedError()
 
 
 
