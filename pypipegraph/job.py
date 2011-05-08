@@ -71,7 +71,7 @@ class Job(object):
         self.error_reason = "no error"
         self.stdout = None
         self.stderr = None
-        self.exceptions = None
+        self.exception = None
         self.was_run = False
         self.was_loaded = False
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
@@ -117,8 +117,11 @@ class Job(object):
             dep.invalidated()
 
     def can_run_now(self):
+        logging.info("can_run_now %s" % self)
         for preq in self.prerequisites:
-            if not preq.is_done():
+            if (not preq.is_done() or 
+            (not preq.was_run and not preq.is_loadable())): #was_run is necessary, a filegen job might have already created the file (and written a bit to it), but that does not mean that it's done enough to start the next one...
+                logging.info("Cannot because of %s" % preq)
                 return False
         return True
 
@@ -127,9 +130,11 @@ class Job(object):
 
     def check_prerequisites_for_cleanup(self):
         for preq in self.prerequisites:
+            logging.info("check_prerequisites_for_cleanup %s" % preq)
             all_done = True
             for dep in preq.dependants:
                 if dep.failed or not dep.was_run:
+                    print' leaving because of %s %s %s' % (dep , dep.failed, not dep.was_run)
                     all_done = False
                     break
             if all_done:
@@ -384,6 +389,8 @@ class DataLoadingJob(Job):
 class AttributeLoadingJob(DataLoadingJob):
 
     def __init__(self, job_id, object, attribute_name, callback):
+        self.object = object
+        self.attribute_name = attribute_name
         DataLoadingJob.__init__(self, job_id, callback)
 
     def ignore_code_changes(self):
@@ -394,12 +401,13 @@ class AttributeLoadingJob(DataLoadingJob):
             self.depends_on(FunctionInvariant(self.job_id + '_func', self.callback))
 
     def load(self):
+        logging.info("%s load" % self)
         if self.was_loaded:
             return
         for preq in self.prerequisites: #load whatever is necessary...
             if preq.is_loadable():
                 preq.load()
-        self.callback()
+        setattr(self.object, self.attribute_name, self.callback())
         self.was_loaded = True
 
     def is_loadable(self):
@@ -410,6 +418,10 @@ class AttributeLoadingJob(DataLoadingJob):
             if not preq.is_done():
                 return False
         return True
+
+    def cleanup(self):
+        logging.info("Cleanup on %s" % self.attribute_name)
+        delattr(self.object, self.attribute_name)
 
 class DependencyInjectionJob(Job):
     def __init__(self, job_id, callback):

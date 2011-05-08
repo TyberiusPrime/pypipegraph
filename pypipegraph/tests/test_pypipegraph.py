@@ -17,7 +17,7 @@ def read(filename):
 
 def write(filename, string):
     """open file for writing, dump string, close file"""
-    logging.info("Writting %s" % filename)
+    logging.info("Writting %s: %s" % (filename, string))
     op = open(filename, 'wb')
     op.write(string)
     op.close()
@@ -649,11 +649,12 @@ class AttributeJobTests(PPGPerTest):
         of2 = 'out/B'
         def later_write():
             write(of2, o.a)
-        fgjobB = ppg.FileGeneratingJob(of2, later_write).depends_on(fgjob)
+        fgjobB = ppg.FileGeneratingJob(of2, later_write).depends_on(fgjob)#now, this one does not depend on job, o it should not be able to access o.a
         of3 = 'out/C'
         def also_write():
             write(of3, o.a)
         fgjobC = ppg.FileGeneratingJob(of3, also_write).depends_on(job)
+        fgjobB.depends_on(fgjobC) #otherwise, B might be started C returned, and the cleanup will not have occured!
         try:
             ppg.run_pipegraph()
             raise ValueError("should not be reached")

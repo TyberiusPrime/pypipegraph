@@ -180,6 +180,8 @@ class Pipegraph(object):
                 and not job.is_loadable #and it is not a loading job (these the slaves do automagically for now)
                 ):
                 needs_to_be_run.add(job.job_id)
+            elif (not job.runs_in_slave()):
+                job.was_run = True #invarites get marked as ran..
         #now prune the possible_execution_order
         self.possible_execution_order = [job for job in self.possible_execution_order if job.job_id in needs_to_be_run]
 
@@ -302,7 +304,7 @@ class Pipegraph(object):
             else:
                 job.error_reason = "Unknown/died"
         else:
-            job.was_ran = True
+            job.was_run = True
             job.check_prerequisites_for_cleanup()
         self.running_jobs.remove(job)
         #self.signal_job_done()
