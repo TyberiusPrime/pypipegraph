@@ -10,6 +10,7 @@ import dis
 import shutil
 import hashlib
 import cPickle
+import traceback
 
 
 
@@ -74,6 +75,8 @@ class Job(object):
         self.exception = None
         self.was_run = False
         self.was_loaded = False
+        self.was_invalidated = False
+        print util.job_uniquifier.keys()
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
 
     def depends_on(self, job_joblist_or_list_of_jobs):
@@ -215,7 +218,8 @@ class ParameterInvariant(Job):
 class FileTimeInvariant(Job):
 
     def __init__(self, filename):
-        Job.__init__(filename)
+        Job.__init__(self, filename)
+        self.input_file = filename
 
     def runs_in_slave(self):
         return False
@@ -224,10 +228,12 @@ class FileTimeInvariant(Job):
         st = os.stat(self.input_file)
         return st[stat.ST_MTIME]
 
+
 class FileChecksumInvariant(Job):
 
     def __init__(self, filename):
-        Job.__init__(filename)
+        Job.__init__(self, filename)
+        self.input_file = filename
 
     def runs_in_slave(self):
         return False
@@ -237,7 +243,11 @@ class FileChecksumInvariant(Job):
         filetime = st[stat.ST_MTIME]
         filesize = st[stat.ST_SIZE]
         if not old or old[1] != filesize or old[0] != filetime:
-            return filetime, filesize, self.checksum()
+            chksum = self.checksum()
+            if old and old[2] == chksum:
+                raise util.NothingChanged((filetime, filesize, chksum))
+            else:
+                return filetime, filesize, chksum
         else:
             return old
 
@@ -263,7 +273,10 @@ class FileGeneratingJob(Job):
 
     def inject_auto_invariants(self):
         if not self.do_ignore_code_changes:
+            logging.info("Injecting outa invariants %s" % self)
             self.depends_on(FunctionInvariant(self.job_id + '_func', self.callback))
+        else:
+            logging.info("not Injecting outa invariants %s" % self)
 
     def is_done(self):
         return util.output_file_exists(self.job_id)
@@ -279,6 +292,7 @@ class FileGeneratingJob(Job):
         try:
             self.callback()
         except Exception, e:
+            sys.stderr.write(traceback.format_exc())
             try:
                 if self.rename_broken:
                     shutil.move(self.job_id, self.job_id + '.broken')
