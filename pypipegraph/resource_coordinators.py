@@ -1,9 +1,13 @@
 import logging
+import os
 import traceback
 import multiprocessing
 import Queue
 import sys
 import cStringIO
+import cloudpickle
+import cPickle
+import exceptions
 
 class LocalSystem:
     """A ResourceCoordinator that uses the current machine,
@@ -36,7 +40,7 @@ class LocalSystem:
         while True:
             try:
                 logging.info("Listening to que")
-                was_ok, job_id_done, stdout, stderr,exception, trace = self.que.get(block=True, timeout=15) #was there a job done?
+                was_ok, job_id_done, stdout, stderr,exception, trace, new_jobs = self.que.get(block=True, timeout=15) #was there a job done?
                 logging.info("Job returned: %s, was_ok: %s" % (job_id_done, was_ok))
                 job = self.pipegraph.jobs[job_id_done]
                 job.stdout = stdout
@@ -50,6 +54,15 @@ class LocalSystem:
                         logging.info("Trace: %s" % trace)
                     logging.info("stdout: %s" % stdout)
                     logging.info("stderr: %s" % stderr)
+                if new_jobs:
+                    if not job.modifies_jobgraph():
+                        job.exception = exceptions.JobContractError("%s created jobs, but was not a job with modifies_jobgraph() returning True" % job)
+                        job.failed = True
+                    else:
+                        new_jobs = cPickle.loads(new_jobs)
+                        print new_jobs
+                        logging.info("We retrieved %i new jobs from %s"  % (len(new_jobs), job))
+                        self.pipegraph.new_jobs_generated_during_runtime(new_jobs)
 
                 more_jobs = self.pipegraph.job_executed(job)
                 if job.cores_needed == -1:
@@ -68,6 +81,7 @@ class LocalSlave:
 
     def __init__(self, rc):
         self.rc = rc
+        logging.info("LocalSlave pid: %i (runs in MCP!)" % os.getpid())
 
     def spawn(self, job):
         logging.info("Spawning %s" % job.job_id)
@@ -90,10 +104,13 @@ class LocalSlave:
         sys.stdout = stdout
         sys.stderr = stderr
         trace = ''
+        new_jobs = False
         try:
-            job.run()
+            temp = job.run()
             was_ok = True
             exception = None
+            if job.modifies_jobgraph():
+                new_jobs = cloudpickle.dumps(temp,2)
         except Exception, e:
             print 'job threw exception', e
             trace = traceback.format_exc()
@@ -110,7 +127,8 @@ class LocalSlave:
                     stdout,
                     stderr,
                     exception,
-                    trace
+                    trace, 
+                    new_jobs,
                 ))
 
             
