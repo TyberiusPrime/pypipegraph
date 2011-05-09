@@ -40,14 +40,18 @@ class PPGPerTest(unittest.TestCase):
     """For those testcases that need a new pipeline each time..."""
     def setUp(self):
         try:
+            logging.info("rmtre out")
+            shutil.rmtree('out')
+        except:
+            pass
+        try:
             os.mkdir('out')
+            logging.info('mkdir out')
         except OSError:
             pass
         ppg.forget_job_status()
         ppg.new_pipegraph()
 
-    def tearDown(self):
-        shutil.rmtree('out')
 
 class SimpleTests(unittest.TestCase):
 
@@ -352,9 +356,11 @@ class FileGeneratingJobTests(PPGPerTest):
         ppg.run_pipegraph()
         self.assertTrue(os.path.exists(of))
         self.assertTrue(os.path.exists(sentinel))
+
         ppg.new_pipegraph()
         job = ppg.FileGeneratingJob(of, do_write)
         dep = ppg.ParameterInvariant('my_params', (2,)) #same name ,changed params, job needs to rerun, but explodes...
+        job.depends_on(dep) #on average, half the mistakes are in the tests...
         try:
             ppg.run_pipegraph()
             raise ValueError("Should not have been reached")
@@ -573,17 +579,6 @@ class Dummy(object):
 
 class AttributeJobTests(PPGPerTest):
 
-    def setUp(self):
-        try:
-            os.mkdir('out')
-        except OSError:
-            pass
-        ppg.forget_job_status()
-        ppg.new_pipegraph()
-
-    def tearDown(self):
-        shutil.rmtree('out')
- 
     def test_basic_attribute_loading(self):
         o = Dummy()
         def load():
@@ -945,11 +940,13 @@ class DependencyTests(PPGPerTest):
         def write_a():
             append(ofA, 'hello')
         jobA = ppg.FileGeneratingJob(ofA, write_a)
+
         ofB = 'out/B'
         def write_b():
             raise ValueError("shu")
         jobB = ppg.FileGeneratingJob(ofB, write_b)
         jobB.depends_on(jobA)
+
         ofC = 'out/C'
         def write_c():
             write(ofC, 'hello')
@@ -978,6 +975,35 @@ class DependencyTests(PPGPerTest):
         self.assertTrue(os.path.exists(ofB)) 
         self.assertTrue(os.path.exists(ofC))
 
+    def test_done_filejob_does_not_gum_up_execution(self):
+        ofA = 'out/A'
+        write(ofA, '1111')
+        def write_a():
+            append(ofA, 'hello')
+        jobA = ppg.FileGeneratingJob(ofA, write_a)
+        jobA.ignore_code_changes() #or it will inject a function dependency and run never the less...
+
+        ofB = 'out/B'
+        def write_b():
+            append(ofB, 'hello')
+        jobB = ppg.FileGeneratingJob(ofB, write_b)
+        jobB.depends_on(jobA)
+
+        ofC = 'out/C'
+        def write_c():
+            write(ofC, 'hello')
+        jobC = ppg.FileGeneratingJob(ofC, write_c)
+        jobC.depends_on(jobB)
+        self.assertTrue(os.path.exists(ofA))
+
+        ppg.run_pipegraph()
+
+        self.assertTrue(os.path.exists(ofB))
+        self.assertTrue(os.path.exists(ofC))
+        self.assertEqual(read(ofA), '1111')
+     
+
+
     def test_invariant_violation_redoes_deps_but_not_nondeps(self):
         def get_job(name):
             fn = 'out/' + name
@@ -998,9 +1024,9 @@ class DependencyTests(PPGPerTest):
         dep = ppg.ParameterInvariant('myparam', ('hello',))
         jobA.depends_on(dep)
         ppg.run_pipegraph()
-        self.assertTrue(read('out/A', 'A'))
-        self.assertTrue(read('out/B', 'B'))
-        self.assertTrue(read('out/C', 'C'))
+        self.assertTrue(read('out/A'), 'A')
+        self.assertTrue(read('out/B'), 'B')
+        self.assertTrue(read('out/C'), 'C')
 
         ppg.new_pipegraph()
         jobA = get_job('A')
@@ -1012,10 +1038,10 @@ class DependencyTests(PPGPerTest):
         dep = ppg.ParameterInvariant('myparam', ('hello stranger',))
         jobA.depends_on(dep) #now, the invariant has been changed, all jobs rerun...
         ppg.run_pipegraph()
-        self.assertTrue(read('out/A', 'AA')) #thanks to our smart rerun aware job definition...
-        self.assertTrue(read('out/B', 'BB'))
-        self.assertTrue(read('out/C', 'CC'))
-        self.assertTrue(read('out/D', 'D')) #since that one does not to be rerun...
+        self.assertTrue(read('out/A'), 'AA') #thanks to our smart rerun aware job definition..
+        self.assertTrue(read('out/B'), 'BB')
+        self.assertTrue(read('out/C'), 'CC')
+        self.assertTrue(read('out/D'), 'D') #since that one does not to be rerun...
 
 
 class DependencyInjectionJobTests(PPGPerTest):

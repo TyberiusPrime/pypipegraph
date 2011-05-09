@@ -21,6 +21,8 @@ def new_pipegraph(resource_coordinator = None):
     util.global_pipegraph = Pipegraph(resource_coordinator)
     util.job_uniquifier = {}
     util.func_hashes = {}
+    logging.info("\n\n")
+    logging.info("New Pipegraph")
 
 def forget_job_status():
     try:
@@ -69,7 +71,7 @@ class Pipegraph(object):
         self.was_run = True #since build_
 
         self.running = True
-        self.new_jobs = set()
+        self.new_jobs = False #this get's changed in graph modifying jobs, but they reset it to false, which means 'don't accept any new jobs while we are running'
         self.connect_graph()
         self.check_cycles()
         self.load_invariant_status()
@@ -165,7 +167,7 @@ class Pipegraph(object):
                 inv = e.new_value
                 old = inv #so no change...
             if inv != old:
-                logging.info("Invariant change for %s was %s ,now %s" % (job, old, inv))
+                logging.info("Invariant change for %s" % job)
                 job.invalidated()
                 self.invariant_status[job.job_id] = inv # for now, it is the dependant job's job to clean up so they get reinvalidated if the executing is terminated before they are reubild (ie. filegenjobs delete their outputfiles)
 
@@ -180,9 +182,11 @@ class Pipegraph(object):
                 job.invalidated()
                 #for preq in job.prerequisites:
                     #preq.require_loading() #think I can get away with  lettinng the slaves what they need to execute a given job...
+            else:
+                logging.info("was done %s. Invalidation status: %s" % (job, job.was_invalidated))
 
         for job in self.jobs.values():
-            if ( job.was_invalidated #this job is not done, or has been invalidated
+            if ( job.was_invalidated #this has been invalidated
                 and job.runs_in_slave #it is not one of the invariantes
                 and not job.is_loadable #and it is not a loading job (these the slaves do automagically for now)
                 ):
@@ -191,6 +195,7 @@ class Pipegraph(object):
                 job.was_run = True #invarites get marked as ran..
         #now prune the possible_execution_order
         self.possible_execution_order = [job for job in self.possible_execution_order if job.job_id in needs_to_be_run]
+        logging.info(" possible execution order %s" % [str(x) for x in self.possible_execution_order])
 
     def spawn_slaves(self):
         logging.info("Spawning slaves")
@@ -245,6 +250,9 @@ class Pipegraph(object):
         to_remove = []
         error_count = len(self.jobs) * 2
         runnable_jobs = [job for job in self.possible_execution_order if job.can_run_now()]
+        if self.possible_execution_order and not runnable_jobs and not self.running_jobs:
+            raise exceptions.RuntimeException(
+            """We had more jobs that needed to be done, none of them could be run right now and none were running. Sounds like a dependency graph bug to me""")
         while resources_available(resources) and runnable_jobs:
             logging.info("resources were available")
             for slave in resources:
