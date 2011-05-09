@@ -45,6 +45,7 @@ class JobList(object):
 class Job(object):
 
     def __new__(cls, job_id, *args, **kwargs):
+        logging.info("New for %s %s" % (cls, job_id))
         if not isinstance(job_id, str):
             raise exceptions.JobContractError("Job_id must be a string")
         if not job_id in util.job_uniquifier:
@@ -576,10 +577,81 @@ def PlotJob(output_filename, calc_function, plot_function): #a convienence wrapp
     return plot_job
 
 
-class CachedJob(DataLoadingJob):
+class _LazyFileGeneratingJob(Job):
+    """A job that only needs to be done if it's
+    data_loading_job is dependend on somewhere"""
 
+    def __init__(self, job_id, calc_function, dl_job):
+        Job.__init__(self, job_id)
+        self.cache_filename = job_id
+        self.callback = calc_function
+        self.data_loading_job = dl_job
+        self.do_ignore_code_changes = False
+
+    def __del__(self):
+        self.data_loading_job = None
+
+    def is_done(self):
+        if util.output_file_exists(self.job_id):
+            return True
+        else:
+            if self.data_loading_job.dependants:
+                return False
+            else:
+                return True
+
+    def ignore_code_changes(self):
+        self.do_ignore_code_changes = True
+
+    def inject_auto_invariants(self):
+        if not self.do_ignore_code_changes:
+            func_invariant = FunctionInvariant(self.job_id + '_func', self.callback)
+            self.depends_on(func_invariant)
+            self.data_loading_job.depends_on(func_invariant)
+        else:
+            logging.info("not Injecting outa invariants %s" % self)
+
+    def invalidated(self):
+        try:
+            os.unlink(self.job_id)
+        except OSError:
+            pass
+        self.was_invalidated = True
+        #Job.invalidated(self) #no going back up the dependants... the cached job takes care of that
+
+    def run(self):
+        data = self.callback()
+        op = open(self.cache_filename, 'wb')
+        cPickle.dump(data, op, cPickle.HIGHEST_PROTOCOL)
+        op.close()
+
+class CachedJob(AttributeLoadingJob):
+    
+    def __new__(cls, job_id, *args, **kwargs):
+        return Job.__new__(cls, job_id + '_load')
+    
     def __init__(self, cache_filename, target_object, target_attribute, calculating_function):
-        pass
+        def do_load():
+            op = open(cache_filename, 'rb')
+            data = cPickle.load(op)
+            op.close()
+            return data
+        AttributeLoadingJob.__init__(self, cache_filename + '_load', target_object, target_attribute, do_load)
+        lfg = _LazyFileGeneratingJob(cache_filename, calculating_function, self)
+        self.depends_on(lfg)
+        self.lfg = lfg
+
+    def ignore_code_changes(self):
+        self.lfg.ignore_code_changes()
+
+    def __del__(self):
+        self.lfg = None
+
+    def invalidated(self):
+        self.lfg.invalidated()
+        Job.invalidated(self)
+
+    
 
     #TODOs
 

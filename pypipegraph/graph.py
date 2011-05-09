@@ -58,7 +58,7 @@ class Pipegraph(object):
             self.jobs[job.job_id] = job
         else:
             if self.new_jobs is False:
-                raise ValueError("Trying to add new jobs to running pipeline without havving new_jobs set")
+                raise ValueError("Trying to add new jobs to running pipeline without having new_jobs set (ie. outside of a graph modifying job)")
             if not job.job_id in self.jobs:
                 logging.info("Adding job to new_jobs %s %s" % (job, id(self.new_jobs)))
                 self.new_jobs[job.job_id] = job
@@ -182,8 +182,9 @@ class Pipegraph(object):
         needs_to_be_run = set()
         for job in self.jobs.values():
             if not job.is_done():
-                needs_to_be_run.add(job.job_id)
-                job.invalidated()
+                if not job.is_loadable():
+                    needs_to_be_run.add(job.job_id)
+                    job.invalidated()
                 #for preq in job.prerequisites:
                     #preq.require_loading() #think I can get away with  lettinng the slaves what they need to execute a given job...
             else:
