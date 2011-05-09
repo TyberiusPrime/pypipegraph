@@ -8,6 +8,7 @@ import cStringIO
 import cloudpickle
 import cPickle
 import exceptions
+import util
 
 class LocalSystem:
     """A ResourceCoordinator that uses the current machine,
@@ -49,6 +50,13 @@ class LocalSystem:
                 job.trace = trace
                 job.failed = not was_ok
                 if job.failed:
+                    try:
+                        logging.info("Before depickle %s" % type(exception))
+                        job.exception = cPickle.loads(exception)
+                        logging.info("After depickle %s" % type(job.exception))
+                        logging.info("exception stored at %s" % (job))
+                    except cPickle.UnpicklingError:#some exceptions can't be pickled, so we send a string instead#some exceptions can't be pickled, so we send a string instead
+                        pass
                     if job.exception:
                         logging.info("Exception: %s" % repr(exception))
                         logging.info("Trace: %s" % trace)
@@ -60,7 +68,6 @@ class LocalSystem:
                         job.failed = True
                     else:
                         new_jobs = cPickle.loads(new_jobs)
-                        print new_jobs
                         logging.info("We retrieved %i new jobs from %s"  % (len(new_jobs), job))
                         self.pipegraph.new_jobs_generated_during_runtime(new_jobs)
 
@@ -85,8 +92,10 @@ class LocalSlave:
 
     def spawn(self, job):
         logging.info("Spawning %s" % job.job_id)
+        logging.info("preqs are %s" % [preq.job_id for preq in job.prerequisites])
         for preq in job.prerequisites:
             if preq.is_loadable():
+                logging.info("Loading %s" % preq)
                 preq.load()
         if job.cores_needed == -1:
             self.rc.cores_available = 0
@@ -111,11 +120,17 @@ class LocalSlave:
             exception = None
             if job.modifies_jobgraph():
                 new_jobs = cloudpickle.dumps(temp,2)
+            elif temp:
+                raise exceptions.JobContractError("Job returned a value (which should be new jobs generated here) without having modifies_jobgraph() returning True")
         except Exception, e:
-            print 'job threw exception', e
+            #print 'job threw exception', e
             trace = traceback.format_exc()
             was_ok = False
             exception = e
+            try:
+                exception = cPickle.dumps(exception)
+            except cPickle.PicklingError: #some exceptions can't be pickled, so we send a string instead
+                exception = str(exception)
         stdout = stdout.getvalue()
         stderr = stderr.getvalue()
         sys.stdout = old_stdout
@@ -132,5 +147,15 @@ class LocalSlave:
                 ))
 
             
+    def transmit_new_jobs(self, new_jobs):
+        logging.info("slave received %i new jobs" % len(new_jobs))
+        for job_id in new_jobs:
+            logging.info("newjob %s" % new_jobs[job_id])
+            util.global_pipegraph.jobs[job_id] = new_jobs[job_id]
+            logging.info("preqs %s" % new_jobs[job_id].prerequisites)
+            logging.info("deps %s" % new_jobs[job_id].dependants)
+            for dep in new_jobs[job_id].dependants:
+                logging.info("Adding %s to preqs of %s" % (new_jobs[job_id], dep))
+                dep.prerequisites.add(new_jobs[job_id])
 
 

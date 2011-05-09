@@ -1046,21 +1046,17 @@ class DependencyTests(PPGPerTest):
 
 class DependencyInjectionJobTests(PPGPerTest):
 
-    def setUp(self):
-        try:
-            os.mkdir('out')
-        except OSError:
-            pass
-        ppg.forget_job_status()
-        ppg.new_pipegraph()
-
-    def tearDown(self):
-        shutil.rmtree('out')
-
     def test_basic(self):
+        #TODO: there is a problem with this apporach. The AttributeLoadingJob
+        #references different objects, since it get's pickled alongside with the method,
+        #and depickled again, and then it's not the same object anymore,
+        #so the FileGeneratingJob and the AttributeLoadingJob in this test
+        #reference different objects.
+        #I'm not sure how to handle this right now though.
         o = Dummy()
         of = 'out/A'
         def do_write():
+            logging.info("Accessing dummy (o) %i in pid %s" % (id(o), os.getpid()))
             write(of, o.A + o.B)
         job = ppg.FileGeneratingJob(of, do_write)
         def generate_deps():
@@ -1068,8 +1064,10 @@ class DependencyInjectionJobTests(PPGPerTest):
                 return "A"
             def load_b():
                 return "B"
+            logging.info("Creating dl on %i in pid %s" % (id(o), os.getpid()))
             dlA = ppg.AttributeLoadingJob('dlA', o, 'A', load_a)
-            dlB = ppg.AttributeLoadingJob('dlA', o, 'B', load_b)
+            logging.info("created dlA")
+            dlB = ppg.AttributeLoadingJob('dlB', o, 'B', load_b)
             job.depends_on(dlA)
             job.depends_on(dlB)
         gen_job = ppg.DependencyInjectionJob('C', generate_deps)
@@ -1106,17 +1104,6 @@ class DependencyInjectionJobTests(PPGPerTest):
 
 class JobGeneratingJobTests(PPGPerTest):
 
-    def setUp(self):
-        try:
-            os.mkdir('out')
-        except OSError:
-            pass
-        ppg.forget_job_status()
-        ppg.new_pipegraph()
-
-    def tearDown(self):
-        shutil.rmtree('out')
-
     def test_basic(self):
         def gen():
             jobA = ppg.FileGeneratingJob('out/A', lambda : write('out/A', 'A'))
@@ -1129,13 +1116,19 @@ class JobGeneratingJobTests(PPGPerTest):
         self.assertTrue(read('out/C'), 'C')
 
 
+import exptools # i really don't like this, but it seems to be the only way to test this
+exptools.load_software('pyggplot')
+
+
 class PlotJobTests(PPGPerTest):
+    def setUp(self):
+        PPGPerTest.setUp(self)
 
     def test_basic(self):
         import pydataframe
         import pyggplot
         def calc():
-            return pydataframe.DataFrame({"X": range(0, 100), 'y': range(50, 150)})
+            return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
         def plot(df):
             return pyggplot.Plot(df).add_scatter('X','Y')
         of = 'out/test.png'
@@ -1147,7 +1140,7 @@ class PlotJobTests(PPGPerTest):
         import pydataframe
         import pyggplot
         def calc():
-            return pydataframe.DataFrame({"X": range(0, 100), 'y': range(50, 150)})
+            return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
         def plot(df):
             return pyggplot.Plot(df).add_scatter('X','Y')
         of = 'out/test.pdf'
@@ -1159,7 +1152,7 @@ class PlotJobTests(PPGPerTest):
         import pydataframe
         import pyggplot
         def calc():
-            return pydataframe.DataFrame({"X": range(0, 100), 'y': range(50, 150)})
+            return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
         def plot(df):
             return pyggplot.Plot(df).add_scatter('X','Y')
         of = 'out/test.shu'
@@ -1173,7 +1166,7 @@ class PlotJobTests(PPGPerTest):
         import pyggplot
         def calc():
             append('out/calc', 'A')
-            return pydataframe.DataFrame({"X": range(0, 100), 'y': range(50, 150)})
+            return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
         def plot(df):
             append('out/plot', 'B')
             return pyggplot.Plot(df).add_scatter('X','Y')
@@ -1200,7 +1193,7 @@ class PlotJobTests(PPGPerTest):
         import pyggplot
         def calc():
             append('out/calc', 'A')
-            return pydataframe.DataFrame({"X": range(0, 100), 'y': range(50, 150)})
+            return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
         def plot(df):
             append('out/plot', 'B')
             return pyggplot.Plot(df).add_scatter('X','Y')
@@ -1215,7 +1208,7 @@ class PlotJobTests(PPGPerTest):
         def calc2():
             append('out/calc', 'A')
             x = 5
-            return pydataframe.DataFrame({"X": range(0, 100), 'y': range(50, 150)})
+            return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
         job = ppg.PlotJob(of, calc2, plot)
         ppg.run_pipegraph()
         self.assertTrue(magic(of).find('PNG image') != -1)
@@ -1237,13 +1230,13 @@ class PlotJobTests(PPGPerTest):
             raise ValueError("should not be reached")
         except ppg.RuntimeError:
             pass 
-        self.assertTrue(isinstance(job.exception, ppg.JobContractError))
+        self.assertTrue(isinstance(job.cache_job.exception, ppg.JobContractError))
 
     def test_raises_if_plot_returns_non_plot(self):
         import pydataframe
         #import pyggplot
         def calc():
-            return pydataframe.DataFrame({"X": range(0, 100), 'y': range(50, 150)})
+            return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
         def plot(df):
             return None
         of = 'out/test.png'
@@ -1253,6 +1246,7 @@ class PlotJobTests(PPGPerTest):
             raise ValueError("should not be reached")
         except ppg.RuntimeError:
             pass 
+        print job.exception
         self.assertTrue(isinstance(job.exception, ppg.JobContractError))
 
 class CachedJobTests(PPGPerTest):

@@ -51,6 +51,7 @@ class Pipegraph(object):
         self.rc.pipegraph = None
 
     def add_job(self, job):
+        logging.info("Adding job %s" % job)
         if not self.running:
             if self.was_run:
                 raise ValueError("This pipegraph was already run. You need to create a new one for more jobs")
@@ -59,7 +60,10 @@ class Pipegraph(object):
             if self.new_jobs is False:
                 raise ValueError("Trying to add new jobs to running pipeline without havving new_jobs set")
             if not job.job_id in self.jobs:
+                logging.info("Adding job to new_jobs %s %s" % (job, id(self.new_jobs)))
                 self.new_jobs[job.job_id] = job
+            else:
+                logging.info("Already knew the job %s, not keeping it as new" % job)
 
 
     def run(self):
@@ -259,7 +263,7 @@ class Pipegraph(object):
                 if resources[slave]['cores'] > 0 and resources[slave]['memory'] > 0:
                     next_job = 0
                     logging.info('remaining %i jobs'% len(self.possible_execution_order))
-                    while next_job < len(self.possible_execution_order):
+                    while next_job < len(self.possible_execution_order): #todo: restrict to runnable_jobs
                         job = self.possible_execution_order[next_job]
                         if job.can_run_now():
                             #Todo: Keep track of which dataloadingjobs have already been performed on each node
@@ -331,11 +335,11 @@ class Pipegraph(object):
         Beauty of the job-singeltonization is that all dependands that are not new"""
         logging.info('new_jobs_generated_during_runtime')
         def check_preqs(job):
-            for preq in job.prerequisites:
-                if not preq.job_id in self.jobs and not preq.job_id in new_jobs:
+            for preq_job_id in job.prerequisites:
+                if not preq_job_id in self.jobs and not preq_job_id in new_jobs:
                     raise ValueError("New job dependen on job that is not in the job list but also not in the new jobs")
-            for dep in job.dependants:
-                if not dep.job_id in self.jobs and not dep.job_id in new_jobs:
+            for dep_job_id in job.dependants:
+                if not dep_job_id in self.jobs and not dep_job_id in new_jobs:
                     raise ValueError("New job was depedency for is not in the job list but also not in the new jobs")
                     #the case that it is injected as a dependency for a job that might have already been done
                     #is being taken care of in the JobGeneratingJob and DependencyInjectionJob s
@@ -343,6 +347,8 @@ class Pipegraph(object):
             print job
             print job.prerequisites
             check_preqs(job)
+            job.prequisites = [self.jobs[job_id] for job_id in job.prerequisites]
+            job.dependants = [self.jobs[job_id] for job_id in job.dependants]
             self.jobs[job.job_id] = job
         for job in new_jobs.values():
             if not job.is_done():
@@ -352,6 +358,8 @@ class Pipegraph(object):
                 logging.info("Adding gen. job to possible_execution_order: %s" % job)
             elif not job.is_done():
                 self.possible_execution_order.append(job)
+        for slave in self.slaves.values():
+            slave.transmit_new_jobs(new_jobs)
            
 
 
