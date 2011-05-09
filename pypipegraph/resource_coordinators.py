@@ -19,13 +19,14 @@ class LocalSystem:
 
     def __init__(self, max_cores_to_use = 8):
         self.max_cores_to_use = max_cores_to_use
-        self.slave = None
+        self.slave = LocalSlave(self)
         self.cores_available = max_cores_to_use
         self.memory_available = 50 * 1024 * 1024 * 1024 #50 gigs ;), todo, update to actual memory + swap...
+        self.timeout = 15
 
     def spawn_slaves(self):
         return {
-                'LocalSlave': LocalSlave(self)
+                'LocalSlave': self.slave
                 }
 
     def get_resources(self):
@@ -41,7 +42,7 @@ class LocalSystem:
         while True:
             try:
                 logging.info("Listening to que")
-                was_ok, job_id_done, stdout, stderr,exception, trace, new_jobs = self.que.get(block=True, timeout=15) #was there a job done?
+                was_ok, job_id_done, stdout, stderr,exception, trace, new_jobs = self.que.get(block=True, timeout=self.timeout) #was there a job done?
                 logging.info("Job returned: %s, was_ok: %s" % (job_id_done, was_ok))
                 job = self.pipegraph.jobs[job_id_done]
                 job.stdout = stdout
@@ -82,13 +83,16 @@ class LocalSystem:
                  
             except Queue.Empty, IOError: #either timeout, or the que failed
                 logging.info("Timout")
+                self.slave.check_for_dead_jobs()
                 pass
+        self.slave.check_for_dead_jobs()
 
 class LocalSlave:
 
     def __init__(self, rc):
         self.rc = rc
         logging.info("LocalSlave pid: %i (runs in MCP!)" % os.getpid())
+        self.process_to_job = {}
 
     def spawn(self, job):
         logging.info("Spawning %s" % job.job_id)
@@ -103,6 +107,7 @@ class LocalSlave:
             self.rc.cores_available -= job.cores_needed
         p = multiprocessing.Process(target=self.run_a_job, args=[job,])
         p.start()
+        self.process_to_job[p] = job
         print p.pid
 
     def run_a_job(self, job): #this runs in the spawned processes...
@@ -137,11 +142,11 @@ class LocalSlave:
         sys.stderr = old_stderr
         self.rc.que.put(
                 (
-                    was_ok,
-                    job.job_id, 
-                    stdout,
-                    stderr,
-                    exception,
+                    was_ok, #failed?
+                    job.job_id, #id...
+                    stdout, #output
+                    stderr, #output
+                    exception, 
                     trace, 
                     new_jobs,
                 ))
@@ -158,4 +163,22 @@ class LocalSlave:
                 logging.info("Adding %s to preqs of %s" % (new_jobs[job_id], dep))
                 dep.prerequisites.add(new_jobs[job_id])
 
+    def check_for_dead_jobs(self):
+        remove = []
+        for proc in self.process_to_job:
+            if not proc.is_alive():
+                remove.append(proc)
+                if proc.exitcode != 0:
+                    job = self.process_to_job[proc]
+                    self.rc.que.put((
+                            False,
+                            job.job_id, 
+                            'no stdout available', 
+                            'no stderr available', 
+                            cPickle.dumps(exceptions.JobDied(proc.exitcode)),
+                            '',
+                            False #no new jobs
+                            ))
+        for proc in remove:
+            del self.process_to_job[proc]
 

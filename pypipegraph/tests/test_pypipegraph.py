@@ -1510,15 +1510,29 @@ class ResourceCoordinatorTests(unittest.TestCase):
         self.assertTrue(jobD.error_reason.find('too much') != -1)
         self.assertFalse(jobD.exception)
 
+class TestingTheUnexpectedTests(PPGPerTest):
+
+    def test_job_killing_python(self):
+        def dies():
+            import sys
+            logging.info("Now terminating child python")
+            sys.exit(5)
+        fg = ppg.FileGeneratingJob('out/A', dies)
+        try:
+            ppg.util.global_pipegraph.rc.timeout = 1
+            ppg.run_pipegraph()
+            raise ValueError("should not be reached")
+        except ppg.RuntimeError:
+            pass
+        self.assertFalse(os.path.exists('out/A'))
+        self.assertTrue(isinstance(fg.exception, ppg.exceptions.JobDied))
+        self.assertEqual(fg.exception.exit_code, 5)
+
+
 
 class NotYetImplementedTests(unittest.TestCase):
 
 
-    def test_dying_jobs(self):
-        #create a job that makes the process die in a not-python-exception-wrapped way
-        #sys.exit(), probably works. That should get an appropriate exception instead
-        #of an endless loop
-        raise NotImplementedError()
     def test_generated_job_depending_on_job_that_cant_have_finished(self):
         #basic idea. You have jobgen A, and filegen B.
         #filegenB depends on jobgenA.
