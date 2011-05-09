@@ -122,10 +122,20 @@ class Job(object):
     def can_run_now(self):
         logging.info("can_run_now %s" % self)
         for preq in self.prerequisites:
-            if (not preq.is_done() or 
-            (not preq.was_run and not preq.is_loadable())): #was_run is necessary, a filegen job might have already created the file (and written a bit to it), but that does not mean that it's done enough to start the next one...
-                logging.info("Cannot because of %s" % preq)
+            if preq.is_done():
+                if preq.was_invalidated and not preq.was_run and not preq.is_loadable(): 
+                    #was_run is necessary, a filegen job might have already created the file (and written a bit to it), but that does not mean that it's done enough to start the next one. Was_run means it has returned.
+                    #On the other hand, it might have been a job that didn't need to run, then was_invalidated should be false.
+                    #or it was a loadable job anyhow, then it doesn't matter.
+                    logging.info("case 1")
+                    return False #false means no way
+                else:
+                    logging.info("case 2") #but we still need to try the other preqs if it was ok
+                    pass
+            else:
+                logging.info("case 3")
                 return False
+        logging.info("case 4")
         return True
 
     def run(self):
