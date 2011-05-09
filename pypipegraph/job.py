@@ -127,15 +127,15 @@ class Job(object):
                     #was_run is necessary, a filegen job might have already created the file (and written a bit to it), but that does not mean that it's done enough to start the next one. Was_run means it has returned.
                     #On the other hand, it might have been a job that didn't need to run, then was_invalidated should be false.
                     #or it was a loadable job anyhow, then it doesn't matter.
-                    logging.info("case 1")
+                    logging.info("case 1 - false")
                     return False #false means no way
                 else:
-                    logging.info("case 2") #but we still need to try the other preqs if it was ok
+                    logging.info("case 2 - delay") #but we still need to try the other preqs if it was ok
                     pass
             else:
-                logging.info("case 3")
+                logging.info("case 3 - false because of %s" % preq)
                 return False
-        logging.info("case 4")
+        logging.info("case 4 - true")
         return True
 
     def run(self):
@@ -176,7 +176,7 @@ class Job(object):
         yield self
 
     def __str__(self):
-        return "%s (job_id=%s)" % (self.__class__.__name__, self.job_id)
+        return "%s (job_id=%s,id=%s)" % (self.__class__.__name__, self.job_id, id(self))
 
 lambdare = re.compile('<code	object	<lambda>	at	0x[a-f0-9]+[^>]+')
 class FunctionInvariant(Job):
@@ -431,6 +431,7 @@ class AttributeLoadingJob(DataLoadingJob):
         for preq in self.prerequisites: #load whatever is necessary...
             if preq.is_loadable():
                 preq.load()
+        logging.info("setting %s on id %i in pid %i" % (self.attribute_name, id(self.object), os.getpid()))
         setattr(self.object, self.attribute_name, self.callback())
         self.was_loaded = True
 
@@ -447,63 +448,78 @@ class AttributeLoadingJob(DataLoadingJob):
         logging.info("Cleanup on %s" % self.attribute_name)
         delattr(self.object, self.attribute_name)
 
-class DependencyInjectionJob(Job):
-    def __init__(self, job_id, callback):
-        Job.__init__(self, job_id)
-        self.callback = callback
-        self.do_ignore_code_changes = False
-
-    def ignore_code_changes(self):
-        self.do_ignore_code_changes = True
-
-    def inject_auto_invariants(self):
-        if not self.do_ignore_code_changes:
-            self.depends_on(FunctionInvariant(self.job_id + '_func', self.callback))
-
-    def is_done(self):
-        return False
-
-    def modifies_jobgraph(self):
-        return False
-
-    def run(self):
-        util.global_pipeline.new_jobs = {}
-        self.callback()
-        #I need to check: All new jobs are now prereqs of my dependands
-        #I also need to check that none of the jobs that ain't dependand on me have been injected
-        for job in util.global_pipeline.jobs.values():
-            if job in self.dependants:
-                for new_job in util.global_pipeline.new_jobs.values():
-                    if not new_job in job.prerequisites:
-                        raise exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was not added to the prerequisites of %s" % (self.job_id, new_job.job_id, job.job_id))
-            else:
-                for new_job in util.global_pipeline.new_jobs.values():
-                    if new_job in job.prerequisites:
-                        raise exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was added to the prerequisites of %s, but %s was not dependant on the DependencyInjectionJob" % (self.job_id, new_job.job_id, job.job_id))
-        res = util.global_pipeline.new_jobs()
-        util.global_pipeline.new_jobs = False
-        return res
-
-
-
-class JobGeneratingJob(Job):
-    def __init__(self, job_id, callback):
-        Job.__init__(self, job_id)
-        self.callback = callback
-        self.do_ignore_code_changes = False
-
-    def ignore_code_changes(self):
-        self.do_ignore_code_changes = True
-
-    def inject_auto_invariants(self):
-        if not self.do_ignore_code_changes:
-            self.depends_on(FunctionInvariant(self.job_id + '_func', self.callback))
-
-    def is_done(self):
-        return self.was_run 
+class _GraphModifyingJob(Job):
 
     def modifies_jobgraph(self):
         return True
+
+    def is_done(self):
+        return self.was_run
+
+    def package_dependencies(self, job_dict):
+        """When traveling back, jobs-dependencies are wrapped as strings - this should 
+        prevent nasty suprises"""
+        for job in job_dict.values():
+            job.prerequisites = [preq.job_id for preq in job.prerequisites]
+            job.dependants = [dep.job_id for dep in job.dependants]
+
+
+
+
+class DependencyInjectionJob(_GraphModifyingJob):
+    def __init__(self, job_id, callback):
+        Job.__init__(self, job_id)
+        self.callback = callback
+        self.do_ignore_code_changes = False
+
+    def ignore_code_changes(self):
+        self.do_ignore_code_changes = True
+
+    def inject_auto_invariants(self):
+        if not self.do_ignore_code_changes:
+            self.depends_on(FunctionInvariant(self.job_id + '_func', self.callback))
+
+    def run(self):
+        #this is different form JobGeneratingJob.run in it's checking of the contract
+        util.global_pipegraph.new_jobs = {}
+        logging.info("new_jobs id %s"  %id(util.global_pipegraph.new_jobs))
+        self.callback()
+        #we now need to fill new_jobs.dependants
+        for job in util.global_pipegraph.jobs.values():
+            for nw in util.global_pipegraph.new_jobs.values():
+                if nw in job.prerequisites:
+                    nw.dependants.add(job)
+        #I need to check: All new jobs are now prereqs of my dependands
+        #I also need to check that none of the jobs that ain't dependand on me have been injected
+        for job in util.global_pipegraph.jobs.values():
+            if job in self.dependants:
+                for new_job in util.global_pipegraph.new_jobs.values():
+                    if not new_job in job.prerequisites:
+                        raise exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was not added to the prerequisites of %s" % (self.job_id, new_job.job_id, job.job_id))
+            else:
+                for new_job in util.global_pipegraph.new_jobs.values():
+                    if new_job in job.prerequisites:
+                        raise exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was added to the prerequisites of %s, but %s was not dependant on the DependencyInjectionJob" % (self.job_id, new_job.job_id, job.job_id))
+        res = util.global_pipegraph.new_jobs
+        self.package_dependencies(res)
+        logging.info('returning %i new jobs' % len(res))
+        logging.info('%s' % ",".join(res.keys()))
+        util.global_pipegraph.new_jobs = False
+        return res
+
+class JobGeneratingJob(_GraphModifyingJob):
+    def __init__(self, job_id, callback):
+        Job.__init__(self, job_id)
+        self.callback = callback
+        self.do_ignore_code_changes = False
+
+    def ignore_code_changes(self):
+        self.do_ignore_code_changes = True
+
+    def inject_auto_invariants(self):
+        if not self.do_ignore_code_changes:
+            self.depends_on(FunctionInvariant(self.job_id + '_func', self.callback))
+
 
     def run(self):
         util.global_pipegraph.new_jobs = {}
@@ -516,24 +532,31 @@ class JobGeneratingJob(Job):
                     raise exceptions.JobContractError("JobGeneratingJob %s created a job %s that was added to the prerequisites of %s, which is invalid. Use a DependencyInjectionJob instead, this one might only create 'leave' nodes" % (self.job_id, new_job.job_id, job.job_id))
         res = util.global_pipegraph.new_jobs
         util.global_pipegraph.new_jobs = False
+        self.package_dependencies(res)
         return res
 
 def PlotJob(output_filename, calc_function, plot_function): #a convienence wrapper for a quick plotting
+    """Calculate some data for plotting, cache it in cache/outputfilename, and plot from there.
+    creates two jobs, a plot_job (FileGeneratingJob) and a cache_job (FileGeneratingJob), 
+    returns plot_job, with plot_jbo.cache_job = cache_job
+    """
+
+    
     if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):
         raise ValueError("Don't know how to create this file %s, must end on .png or .pdf" % output_filename)
     import pydataframe
     import pyggplot
     cache_filename = os.path.join('cache', output_filename)
     def run_calc():
-        df = calc_function
+        df = calc_function()
         if not isinstance(df, pydataframe.DataFrame):
-            raise exceptions.JobGeneratingJob("%s.calc_function did not return a DataFrame " % (output_filename))
+            raise exceptions.JobContractError("%s.calc_function did not return a DataFrame, was %s " % (output_filename, df.__class__))
         try:
             os.makedirs(os.path.dirname(cache_filename))
         except OSError:
             pass
         of = open(cache_filename, 'wb')
-        cPickle.dump(of, df, cPickle.HIGHEST_PROTOCOL)
+        cPickle.dump(df, of, cPickle.HIGHEST_PROTOCOL)
         of.close()
     def run_plot():
         of = open(cache_filename, 'rb')
@@ -541,7 +564,7 @@ def PlotJob(output_filename, calc_function, plot_function): #a convienence wrapp
         of.close()
         plot = plot_function(df)
         if not isinstance(plot, pyggplot.Plot):
-            raise exceptions.JobGeneratingJob("%s.plot_function did not return a pyggplot.Plot " % (output_filename))
+            raise exceptions.JobContractError("%s.plot_function did not return a pyggplot.Plot " % (output_filename))
         plot.render(output_filename)
 
     cache_job = FileGeneratingJob(cache_filename, run_calc)
@@ -549,6 +572,7 @@ def PlotJob(output_filename, calc_function, plot_function): #a convienence wrapp
     plot_job = FileGeneratingJob(output_filename, run_plot)
     plot_job.depends_on(FunctionInvariant(output_filename + '.plotfunc', plot_function))
     plot_job.depends_on(cache_job)
+    plot_job.cache_job = cache_job
     return plot_job
 
 
