@@ -1053,6 +1053,12 @@ class DependencyInjectionJobTests(PPGPerTest):
         #so the FileGeneratingJob and the AttributeLoadingJob in this test
         #reference different objects.
         #I'm not sure how to handle this right now though.
+
+        #I have an idea: Do JobGraphModifyingJobs in each slave, and send back just the
+        #dependency data (and new job name).
+        #that way, we can still execute on any slave, and all the pointers should be
+        #right.
+
         o = Dummy()
         of = 'out/A'
         def do_write():
@@ -1250,7 +1256,7 @@ class PlotJobTests(PPGPerTest):
         self.assertTrue(isinstance(job.exception, ppg.JobContractError))
 
 class CachedJobTests(PPGPerTest):
-
+ 
     def test_simple(self):
         o = Dummy()
         def calc():
@@ -1287,6 +1293,7 @@ class CachedJobTests(PPGPerTest):
                 read(of),
                 ", ".join(str(x) for x in range(0, 100)))
 
+        ppg.new_pipegraph()
         def calc2():
             return ", ".join(str(x) for x in range(0, 200))
         job = ppg.CachedJob('out/mycalc', o, 'a', calc2)
@@ -1310,6 +1317,7 @@ class CachedJobTests(PPGPerTest):
                 read(of),
                 ", ".join(str(x) for x in range(0, 100)))
 
+        ppg.new_pipegraph()
         def calc2():
             return ", ".join(str(x) for x in range(0, 200))
         job = ppg.CachedJob('out/mycalc', o, 'a', calc2)
@@ -1320,14 +1328,13 @@ class CachedJobTests(PPGPerTest):
                 read(of),
                 ", ".join(str(x) for x in range(0, 100)))
 
-        def calc3():
-            return ", ".join(str(x) for x in range(0, 200))
-        job = ppg.CachedJob('out/mycalc', o, 'a', calc3)
+        ppg.new_pipegraph()
+        job = ppg.CachedJob('out/mycalc', o, 'a', calc2)
         jobB = ppg.FileGeneratingJob(of, do_write).depends_on(job)
         ppg.run_pipegraph()
         self.assertEqual(
                 read(of),
-                ", ".join(str(x) for x in range(0, 100))) #still the same old stuff, after all now we have the new code version stored.
+                ", ".join(str(x) for x in range(0, 200))) #The new stuff - you either have an explicit ignore_code_changes in our codebase, or we enforce consistency between code and result
 
 class TestResourceCoordinator:
     def __init__(self, list_of_slaves):
