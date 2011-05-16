@@ -1134,6 +1134,36 @@ class JobGeneratingJobTests(PPGPerTest):
         self.assertTrue(read('out/B'), 'B')
         self.assertTrue(read('out/C'), 'C')
 
+    def test_raises_if_needs_more_cores_than_we_have(self):
+        def gen():
+            jobA = ppg.FileGeneratingJob('out/A', lambda : write('out/A', 'A'))
+            jobA.cores_needed = 20000
+        genjob = ppg.JobGeneratingJob('genjob', gen)
+        try:
+            ppg.run_pipegraph()
+            raise ValueError("should not be reached")
+        except ppg.RuntimeError:
+            pass
+        self.assertFalse(os.path.exists('out/A')) #since the gen job crashed
+        jobGenerated = ppg.util.global_pipegraph.jobs['out/A']
+        self.assertTrue(jobGenerated.failed)
+        self.assertEqual(jobGenerated.error_reason, "Needed to much memory/cores")
+
+    def test_raises_if_needs_more_ram_than_we_have(self):
+        def gen():
+            jobA = ppg.FileGeneratingJob('out/A', lambda : write('out/A', 'A'))
+            jobA.memory_needed = 1024 * 1024 * 1024 * 1024
+        genjob = ppg.JobGeneratingJob('genjob', gen)
+        try:
+            ppg.run_pipegraph()
+            raise ValueError("should not be reached")
+        except ppg.RuntimeError:
+            pass
+        self.assertFalse(os.path.exists('out/A')) #since the gen job crashed
+        jobGenerated = ppg.util.global_pipegraph.jobs['out/A']
+        self.assertTrue(jobGenerated.failed)
+        self.assertEqual(jobGenerated.error_reason, "Needed to much memory/cores")
+
     def test_injecting_multiple_stages(self):
         def gen():
             def genB():
