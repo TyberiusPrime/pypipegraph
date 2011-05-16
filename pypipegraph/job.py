@@ -447,7 +447,13 @@ class AttributeLoadingJob(DataLoadingJob):
 
     def cleanup(self):
         logging.info("Cleanup on %s" % self.attribute_name)
-        delattr(self.object, self.attribute_name)
+        try:
+            delattr(self.object, self.attribute_name)
+        except AttributeError: #this can happen if you have a messed up DependencyInjectionJob, but it would block the messed up reporting...
+            pass
+
+    def __str__(self):
+        return "AttributeLoadingJob (job_id=%s,id=%i,target=%i)" % (self.job_id, id(self), id(self.object))
 
 class _GraphModifyingJob(Job):
 
@@ -456,13 +462,6 @@ class _GraphModifyingJob(Job):
 
     def is_done(self):
         return self.was_run
-
-    def package_dependencies(self, job_dict):
-        """When traveling back, jobs-dependencies are wrapped as strings - this should 
-        prevent nasty suprises"""
-        for job in job_dict.values():
-            job.prerequisites = [preq.job_id for preq in job.prerequisites]
-            job.dependants = [dep.job_id for dep in job.dependants]
 
 
 
@@ -489,6 +488,9 @@ class DependencyInjectionJob(_GraphModifyingJob):
         for job in util.global_pipegraph.jobs.values():
             for nw in util.global_pipegraph.new_jobs.values():
                 if nw in job.prerequisites:
+                    logging.info("Checking %s against %s - %s" % (nw, job, job in self.dependants))
+                    if not job in self.dependants:
+                        raise exceptions.JobContractError("DependencyInjectionJob %s tried to inject %s into %s, but %s was not dependand on the DependencyInjectionJob" % (self, nw, job, job))
                     nw.dependants.add(job)
         #I need to check: All new jobs are now prereqs of my dependands
         #I also need to check that none of the jobs that ain't dependand on me have been injected
@@ -499,10 +501,9 @@ class DependencyInjectionJob(_GraphModifyingJob):
                         raise exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was not added to the prerequisites of %s" % (self.job_id, new_job.job_id, job.job_id))
             else:
                 for new_job in util.global_pipegraph.new_jobs.values():
-                    if new_job in job.prerequisites:
+                    if new_job in job.prerequisites or job in new_job.dependants: #no connect_graph building so far...
                         raise exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was added to the prerequisites of %s, but %s was not dependant on the DependencyInjectionJob" % (self.job_id, new_job.job_id, job.job_id))
         res = util.global_pipegraph.new_jobs
-        self.package_dependencies(res)
         logging.info('returning %i new jobs' % len(res))
         logging.info('%s' % ",".join(res.keys()))
         util.global_pipegraph.new_jobs = False
@@ -533,7 +534,6 @@ class JobGeneratingJob(_GraphModifyingJob):
                     raise exceptions.JobContractError("JobGeneratingJob %s created a job %s that was added to the prerequisites of %s, which is invalid. Use a DependencyInjectionJob instead, this one might only create 'leave' nodes" % (self.job_id, new_job.job_id, job.job_id))
         res = util.global_pipegraph.new_jobs
         util.global_pipegraph.new_jobs = False
-        self.package_dependencies(res)
         return res
 
 def PlotJob(output_filename, calc_function, plot_function): #a convienence wrapper for a quick plotting

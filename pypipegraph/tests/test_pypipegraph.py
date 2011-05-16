@@ -1067,8 +1067,10 @@ class DependencyInjectionJobTests(PPGPerTest):
         job = ppg.FileGeneratingJob(of, do_write)
         def generate_deps():
             def load_a():
+                logging.info('executing load A')
                 return "A"
             def load_b():
+                logging.info('executing load B')
                 return "B"
             logging.info("Creating dl on %i in pid %s" % (id(o), os.getpid()))
             dlA = ppg.AttributeLoadingJob('dlA', o, 'A', load_a)
@@ -1087,14 +1089,14 @@ class DependencyInjectionJobTests(PPGPerTest):
         def do_write():
             write(of, o.A + o.B)
         job = ppg.FileGeneratingJob(of, do_write)
-        jobD = ppg.FileGeneratingJob(of, lambda : write('out/D', 'D'))
+        jobD = ppg.FileGeneratingJob('out/D', lambda : write('out/D', 'D'))
         def generate_deps():
             def load_a():
                 return "A"
             def load_b():
                 return "B"
             dlA = ppg.AttributeLoadingJob('dlA', o, 'A', load_a)
-            dlB = ppg.AttributeLoadingJob('dlA', o, 'B', load_b)
+            dlB = ppg.AttributeLoadingJob('dlB', o, 'B', load_b)
             job.depends_on(dlA)
             jobD.depends_on(dlB) #this line must raise
         gen_job = ppg.DependencyInjectionJob('C', generate_deps)
@@ -1108,6 +1110,9 @@ class DependencyInjectionJobTests(PPGPerTest):
         self.assertTrue(os.path.exists('out/D')) #since it has no relation to the gen job actually...
         self.assertTrue(isinstance(gen_job.exception, ppg.JobContractError))
 
+    def test_injecting_filegenrating_job(self):
+        raise NotImplementedError()
+
 class JobGeneratingJobTests(PPGPerTest):
 
     def test_basic(self):
@@ -1120,6 +1125,9 @@ class JobGeneratingJobTests(PPGPerTest):
         self.assertTrue(read('out/A'), 'A')
         self.assertTrue(read('out/B'), 'B')
         self.assertTrue(read('out/C'), 'C')
+
+    def test_injecting_multiple_stages(self):
+        raise NotImplementedError()
 
 
 import exptools # i really don't like this, but it seems to be the only way to test this
