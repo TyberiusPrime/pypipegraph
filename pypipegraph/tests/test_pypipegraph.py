@@ -486,16 +486,12 @@ class DataLoadingJobTests(PPGPerTest):
         #global shared
         #shared = "I was the the global in the mcp"
         def load():
-            print' doing load'
             global shared
             shared = "shared data"
         of = 'out/a'
         def do_write():
-            print 'doing write'
             global shared
-            print 'globalized'
             write(of, shared) #this might actually be a problem when defining this?
-            print 'result'
         dlJo = ppg.DataLoadingJob('myjob', load)
         writejob = ppg.FileGeneratingJob(of, do_write)
         writejob.depends_on(dlJo)
@@ -1260,7 +1256,6 @@ class PlotJobTests(PPGPerTest):
             raise ValueError("should not be reached")
         except ppg.RuntimeError:
             pass 
-        print job.exception
         self.assertTrue(isinstance(job.exception, ppg.JobContractError))
 
 class CachedJobTests(PPGPerTest):
