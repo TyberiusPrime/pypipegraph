@@ -95,22 +95,26 @@ class LocalSlave:
         self.process_to_job = {}
 
     def spawn(self, job):
-        logging.info("Spawning %s" % job.job_id)
-        logging.info("preqs are %s" % [preq.job_id for preq in job.prerequisites])
+        logging.info("Slave: Spawning %s" % job.job_id)
+        logging.info("Slave: preqs are %s" % [preq.job_id for preq in job.prerequisites])
         for preq in job.prerequisites:
             if preq.is_loadable():
-                logging.info("Loading %s" % preq)
+                logging.info("Slave: Loading %s" % preq)
                 preq.load()
         if job.cores_needed == -1:
             self.rc.cores_available = 0
         else:
             self.rc.cores_available -= job.cores_needed
-        p = multiprocessing.Process(target=self.run_a_job, args=[job,])
-        p.start()
-        self.process_to_job[p] = job
-        print p.pid
+        if job.modifies_jobgraph():
+            logging.info("Slave: Running %s in slave" % job)
+            self.run_a_job(job)
+        else:
+            p = multiprocessing.Process(target=self.run_a_job, args=[job,])
+            p.start()
+            self.process_to_job[p] = job
+            print p.pid
 
-    def run_a_job(self, job): #this runs in the spawned processes...
+    def run_a_job(self, job): #this runs in the spawned processes, except for job.modifies_jobgraph()==True jobs
         stdout = cStringIO.StringIO()
         stderr = cStringIO.StringIO()
         old_stdout = sys.stdout 
@@ -124,7 +128,7 @@ class LocalSlave:
             was_ok = True
             exception = None
             if job.modifies_jobgraph():
-                new_jobs = cloudpickle.dumps(temp,2)
+                new_jobs = self.prepare_jobs_for_transfer(temp)
             elif temp:
                 raise exceptions.JobContractError("Job returned a value (which should be new jobs generated here) without having modifies_jobgraph() returning True")
         except Exception, e:
@@ -151,17 +155,18 @@ class LocalSlave:
                     new_jobs,
                 ))
 
+    def prepare_jobs_for_transfer(self, job_dict):
+        """When traveling back, jobs-dependencies are wrapped as strings - this should 
+        prevent nasty suprises"""
+        #package as strings
+        for job in job_dict.values():
+            job.prerequisites = [preq.job_id for preq in job.prerequisites]
+            job.dependants = [dep.job_id for dep in job.dependants]
+        #unpackanging is don in new_jobs_generated_during_runtime
+        self.rc.pipegraph.new_jobs_generated_during_runtime(job_dict)
+        return [] # The LocalSlave does not need to serialize back the jobs, it already is running in the space of the MCP
+
             
-    def transmit_new_jobs(self, new_jobs):
-        logging.info("slave received %i new jobs" % len(new_jobs))
-        for job_id in new_jobs:
-            logging.info("newjob %s" % new_jobs[job_id])
-            util.global_pipegraph.jobs[job_id] = new_jobs[job_id]
-            logging.info("preqs %s" % new_jobs[job_id].prerequisites)
-            logging.info("deps %s" % new_jobs[job_id].dependants)
-            for dep in new_jobs[job_id].dependants:
-                logging.info("Adding %s to preqs of %s" % (new_jobs[job_id], dep))
-                dep.prerequisites.add(new_jobs[job_id])
 
     def check_for_dead_jobs(self):
         remove = []

@@ -264,8 +264,9 @@ class Pipegraph(object):
                 if resources[slave]['cores'] > 0 and resources[slave]['memory'] > 0:
                     next_job = 0
                     logging.info('remaining %i jobs'% len(self.possible_execution_order))
-                    while next_job < len(self.possible_execution_order): #todo: restrict to runnable_jobs
-                        job = self.possible_execution_order[next_job]
+                    #while next_job < len(self.possible_execution_order): #todo: restrict to runnable_jobs
+                    while next_job < len(runnable_jobs):
+                        job = runnable_jobs[next_job]
                         if job.can_run_now():
                             #Todo: Keep track of which dataloadingjobs have already been performed on each node
                             #and prioritize by that...
@@ -348,19 +349,23 @@ class Pipegraph(object):
             print job
             print job.prerequisites
             check_preqs(job)
-            job.prequisites = [self.jobs[job_id] for job_id in job.prerequisites]
-            job.dependants = [self.jobs[job_id] for job_id in job.dependants]
+            job.prequisites = set([self.jobs[job_id] for job_id in job.prerequisites])
+            job.dependants = set([self.jobs[job_id] for job_id in job.dependants])
             self.jobs[job.job_id] = job
         for job in new_jobs.values():
             if not job.is_done():
                 job.invalidated()
         for job in new_jobs.values():
-            if not job.is_loadable:
-                logging.info("Adding gen. job to possible_execution_order: %s" % job)
+            if job.is_loadable():
+                logging.info("Ignoring %s" % job)
             elif not job.is_done():
+                logging.info("Adding %s to possible_execution_order"%  job)
                 self.possible_execution_order.append(job)
-        for slave in self.slaves.values():
-            slave.transmit_new_jobs(new_jobs)
+            else:
+                logging.info("Not doing anything with"%  job)
+        self.connect_graph()
+        #for slave in self.slaves.values():
+            #slave.transmit_new_jobs(new_jobs)
            
 
 
