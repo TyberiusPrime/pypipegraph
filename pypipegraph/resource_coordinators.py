@@ -42,9 +42,10 @@ class LocalSystem:
         while True:
             try:
                 logging.info("Listening to que")
-                was_ok, job_id_done, stdout, stderr,exception, trace, new_jobs = self.que.get(block=True, timeout=self.timeout) #was there a job done?
+                slave_id, was_ok, job_id_done, stdout, stderr,exception, trace, new_jobs = self.que.get(block=True, timeout=self.timeout) #was there a job done?
                 logging.info("Job returned: %s, was_ok: %s" % (job_id_done, was_ok))
                 job = self.pipegraph.jobs[job_id_done]
+                job.was_done_on.add(slave_id)
                 job.stdout = stdout
                 job.stderr = stderr
                 job.exception = exception
@@ -91,6 +92,7 @@ class LocalSlave:
 
     def __init__(self, rc):
         self.rc = rc
+        self.slave_id = 'LocalSlave'
         logging.info("LocalSlave pid: %i (runs in MCP!)" % os.getpid())
         self.process_to_job = {}
 
@@ -112,7 +114,6 @@ class LocalSlave:
             p = multiprocessing.Process(target=self.run_a_job, args=[job,])
             p.start()
             self.process_to_job[p] = job
-            print p.pid
 
     def run_a_job(self, job): #this runs in the spawned processes, except for job.modifies_jobgraph()==True jobs
         stdout = cStringIO.StringIO()
@@ -132,7 +133,6 @@ class LocalSlave:
             elif temp:
                 raise exceptions.JobContractError("Job returned a value (which should be new jobs generated here) without having modifies_jobgraph() returning True")
         except Exception, e:
-            #print 'job threw exception', e
             trace = traceback.format_exc()
             was_ok = False
             exception = e
@@ -146,6 +146,7 @@ class LocalSlave:
         sys.stderr = old_stderr
         self.rc.que.put(
                 (
+                    self.slave_id,
                     was_ok, #failed?
                     job.job_id, #id...
                     stdout, #output
@@ -176,6 +177,7 @@ class LocalSlave:
                 if proc.exitcode != 0:
                     job = self.process_to_job[proc]
                     self.rc.que.put((
+                            self.slave_id, 
                             False,
                             job.job_id, 
                             'no stdout available', 

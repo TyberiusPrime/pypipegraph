@@ -5,7 +5,7 @@ import cPickle
 import exceptions
 import util
 import logging
-logging.basicConfig(level=logging.INFO)
+#logging.basicConfig(level=logging.INFO)
 
 invariant_status_filename= '.pypipegraph_status'
 
@@ -270,29 +270,36 @@ class Pipegraph(object):
                         if job.can_run_now():
                             #Todo: Keep track of which dataloadingjobs have already been performed on each node
                             #and prioritize by that...
-                            if (job.cores_needed == -1 and resources[slave]['cores'] == resources[slave['total cores']]
-                                and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
+                            if job.modifies_jobgraph():
+                                for slave in self.slaves:
                                     self.slaves[slave].spawn(job)
                                     self.running_jobs.add(job)
                                     to_remove.append(job)
-                                    resources[slave]['cores'] = 0
-                                    #don't worry about memory...
-                                    continue
-                            elif (job.cores_needed < resources[slave]['cores'] 
-                                and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
-                                self.slaves[slave].spawn(job)
-                                self.running_jobs.add(job)
-                                to_remove.append(job)
-                                resources[slave]['cores'] -= job.cores_needed
-                                if job.memory_needed == -1:
-                                    resources[slave]['memory'] -= resources[slave]['memory/core']
-                                else:
-                                    resources[slave]['memory'] -= job.memory_needed
-                                    continue
+                                    resources[slave]['cores'] = 0 #since the job modifying blocks the Slave-Process (runs in it), no point in spawning further ones till it has returned.
                             else:
-                                #this job needed to much resources, or was not runnable
-                                logging.info("Job needed too many resources %s" % job)
-                                runnable_jobs.remove(job)
+                                if (job.cores_needed == -1 and resources[slave]['cores'] == resources[slave['total cores']]
+                                    and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
+                                        self.slaves[slave].spawn(job)
+                                        self.running_jobs.add(job)
+                                        to_remove.append(job)
+                                        resources[slave]['cores'] = 0
+                                        #don't worry about memory...
+                                        continue
+                                elif (job.cores_needed < resources[slave]['cores'] 
+                                    and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
+                                    self.slaves[slave].spawn(job)
+                                    self.running_jobs.add(job)
+                                    to_remove.append(job)
+                                    resources[slave]['cores'] -= job.cores_needed
+                                    if job.memory_needed == -1:
+                                        resources[slave]['memory'] -= resources[slave]['memory/core']
+                                    else:
+                                        resources[slave]['memory'] -= job.memory_needed
+                                        continue
+                                else:
+                                    #this job needed to much resources, or was not runnable
+                                    logging.info("Job needed too many resources %s" % job)
+                                    runnable_jobs.remove(job)
                         next_job += 1
                 for job in to_remove:
                     logging.info("removing job %s" % job)
@@ -346,8 +353,6 @@ class Pipegraph(object):
                     #the case that it is injected as a dependency for a job that might have already been done
                     #is being taken care of in the JobGeneratingJob and DependencyInjectionJob s
         for job in new_jobs.values():
-            print job
-            print job.prerequisites
             check_preqs(job)
             job.prequisites = set([self.jobs[job_id] for job_id in job.prerequisites])
             job.dependants = set([self.jobs[job_id] for job_id in job.dependants])

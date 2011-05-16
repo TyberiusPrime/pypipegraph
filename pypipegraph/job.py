@@ -75,9 +75,9 @@ class Job(object):
         self.stderr = None
         self.exception = None
         self.was_run = False
+        self.was_done_on = set() #on which slave(s) was this job run?
         self.was_loaded = False
         self.was_invalidated = False
-        print util.job_uniquifier.keys()
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
 
     def depends_on(self, job_joblist_or_list_of_jobs):
@@ -148,7 +148,6 @@ class Job(object):
             all_done = True
             for dep in preq.dependants:
                 if dep.failed or not dep.was_run:
-                    print' leaving because of %s %s %s' % (dep , dep.failed, not dep.was_run)
                     all_done = False
                     break
             if all_done:
