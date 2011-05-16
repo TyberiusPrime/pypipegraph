@@ -1106,8 +1106,20 @@ class DependencyInjectionJobTests(PPGPerTest):
         self.assertTrue(os.path.exists('out/D')) #since it has no relation to the gen job actually...
         self.assertTrue(isinstance(gen_job.exception, ppg.JobContractError))
 
-    def test_injecting_filegenrating_job(self):
-        raise NotImplementedError()
+    def test_injecting_filegenerating_job(self):
+        of = 'out/A'
+        def do_write():
+            write(of, read("out/B"))
+        job = ppg.FileGeneratingJob(of, do_write)
+        def generate_dep():
+            def write_B():
+                write("out/B", "B")
+            inner_job = ppg.FileGeneratingJob('out/B', write_B)
+            job.depends_on(inner_job)
+        job_gen = ppg.DependencyInjectionJob('gen_job', generate_dep)
+        job.depends_on(job_gen)
+        ppg.run_pipegraph()
+        self.assertEqual(read("out/A"), 'B')
 
 class JobGeneratingJobTests(PPGPerTest):
 
@@ -1123,7 +1135,113 @@ class JobGeneratingJobTests(PPGPerTest):
         self.assertTrue(read('out/C'), 'C')
 
     def test_injecting_multiple_stages(self):
-        raise NotImplementedError()
+        def gen():
+            def genB():
+                def genC():
+                    jobD = ppg.FileGeneratingJob('out/D', lambda : write('out/D', 'D'))
+                jobC = ppg.JobGeneratingJob('C', genC)
+            jobB = ppg.JobGeneratingJob('B', genB)
+
+        job = ppg.JobGeneratingJob('A', gen)
+        ppg.run_pipegraph()
+        self.assertTrue(read('out/D'), 'D')
+
+    def test_generated_job_depending_on_each_other_one_of_them_is_Invariant(self):
+        #basic idea. You have jobgen A, 
+        #it not only creates filegenB, but also ParameterDependencyC that A depends on
+        #does that work
+        def gen():
+            jobB = ppg.FileGeneratingJob('out/B', lambda : write('out/B', 'B'))
+            jobB.ignore_code_changes()
+            jobC = ppg.ParameterInvariant('C', ('ccc',))
+            jobB.depends_on(jobC)
+        jobA = ppg.JobGeneratingJob("A", gen)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/B'), 'B')
+
+        ppg.new_pipegraph()
+        def gen2():
+            jobB = ppg.FileGeneratingJob('out/B', lambda : write('out/B', 'C'))
+            jobB.ignore_code_changes()
+            jobC = ppg.ParameterInvariant('C', ('ccc',))
+            jobB.depends_on(jobC)
+        jobA = ppg.JobGeneratingJob("A", gen2)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/B'), 'B') #no rerun
+
+        ppg.new_pipegraph()
+        def gen3():
+            jobB = ppg.FileGeneratingJob('out/B', lambda : write('out/B', 'C'))
+            jobB.ignore_code_changes()
+            jobCX = ppg.ParameterInvariant('C', ('DDD',))
+            jobB.depends_on(jobCX)
+        jobA = ppg.JobGeneratingJob("A", gen3)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/B'), 'C') #did get rerun
+
+
+    def test_generated_job_depending_on_job_that_cant_have_finished(self):
+        #basic idea. You have jobgen A, and filegen B.
+        #filegenB depends on jobgenA.
+        #jobGenA created C depends on filegenB
+        #Perhaps add a filegen D that's independand of jobGenA, but C also deps on D
+        def a():
+            jobB = ppg.FileGeneratingJob('out/B', lambda: write('out/B', 'B'))
+            def genA():
+                jobC = ppg.FileGeneratingJob('out/C', lambda: write('out/C', 'C'))
+                jobC.depends_on(jobB)
+            jobA = ppg.JobGeneratingJob('A', genA)
+            jobB.depends_on(jobA)
+            ppg.run_pipegraph()
+            self.assertEqual(read('out/B'), 'B')
+            self.assertEqual(read('out/C'), 'C')
+        def b():
+            jobB = ppg.FileGeneratingJob('out/B', lambda: write('out/B', 'B'))
+            jobD = ppg.FileGeneratingJob('out/D', lambda: write('out/D', 'D'))
+            def genA():
+                jobC = ppg.FileGeneratingJob('out/C', lambda: write('out/C', 'C'))
+                jobC.depends_on(jobB)
+                jobC.depends_on(jobD)
+            jobA = ppg.JobGeneratingJob('A', genA)
+            jobB.depends_on(jobA)
+            ppg.run_pipegraph()
+            self.assertEqual(read('out/B'), 'B')
+            self.assertEqual(read('out/C'), 'C')
+        a()
+        ppg.new_pipegraph()
+        b()
+
+    def test_generated_job_depending_on_each_other(self):
+        #basic idea. You have jobgen A, 
+        #it not only creates filegenB, but also filegenC that depends on B
+        #does that work
+        def gen():
+            jobB = ppg.FileGeneratingJob('out/B', lambda: write('out/B', 'B'))
+            jobC = ppg.FileGeneratingJob('out/C', lambda: write('out/C', read('out/B')))
+            jobC.depends_on(jobB)
+        jobA = ppg.JobGeneratingJob('A', gen)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/B'), 'B')
+        self.assertEqual(read('out/C'), 'B')
+
+    def test_generated_job_depending_on_each_other_one_of_them_is_loading(self):
+        #basic idea. You have jobgen A, 
+        #it not only creates filegenB, but also DataloadingC that depends on B
+        #does that work
+        def gen():
+            def load():
+                global shu
+                shu = "123"
+            def do_write():
+                global shu
+                write('out/A', shu)
+            dl = ppg.DataLoadingJob('dl', load)
+            jobB = ppg.FileGeneratingJob('out/A', do_write)
+            jobB.depends_on(dl)
+        ppg.JobGeneratingJob('gen', gen)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/A'), '123')
+
 
 
 import exptools # i really don't like this, but it seems to be the only way to test this
@@ -1534,36 +1652,9 @@ class TestingTheUnexpectedTests(PPGPerTest):
 
 
 class NotYetImplementedTests(unittest.TestCase):
+    pass
 
 
-    def test_generated_job_depending_on_job_that_cant_have_finished(self):
-        #basic idea. You have jobgen A, and filegen B.
-        #filegenB depends on jobgenA.
-        #jobGenA created C depends on filegenB
-        #Perhaps add a filegen D that's independand of jobGenA, but C also deps on D
-
-        raise NotImplementedError()
-
-    def test_generated_job_depending_on_each_other(self):
-        #basic idea. You have jobgen A, 
-        #it not only creates filegenB, but also filegenC that depends on B
-        #does that work
-
-        raise NotImplementedError()
-
-    def test_generated_job_depending_on_each_other_one_of_them_is_loading(self):
-        #basic idea. You have jobgen A, 
-        #it not only creates filegenB, but also DataloadingC that depends on B
-        #does that work
-
-        raise NotImplementedError()
-
-    def test_generated_job_depending_on_each_other_one_of_them_is_Invariant(self):
-        #basic idea. You have jobgen A, 
-        #it not only creates filegenB, but also ParameterDependencyC that A depends on
-        #does that work
-
-        raise NotImplementedError()
 
 
 

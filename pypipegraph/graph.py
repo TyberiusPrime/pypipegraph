@@ -5,7 +5,7 @@ import cPickle
 import exceptions
 import util
 import logging
-#logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO)
 
 invariant_status_filename= '.pypipegraph_status'
 
@@ -107,6 +107,7 @@ class Pipegraph(object):
     def connect_graph(self):
         """Convert the dependency graph in jobs into a bidirectional graph"""
         for job in self.jobs.values():
+            logging.info("X %s %s %s " % (job , job.prerequisites, job.dependants))
             for preq in job.prerequisites:
                 preq.dependants.add(job)
 
@@ -163,9 +164,12 @@ class Pipegraph(object):
         and propagate the invalidation by calling job.invalidated()"""
 
         for job in self.jobs.values():
+            if job.was_invalidated: #don't redo it just because we're calling this again after having received new jobs.
+                continue
             old = self.invariant_status[job.job_id]
             try:
                 inv = job.get_invariant(old)
+                logging.info("%s invariant was %s, is now %s" % (job, old,inv))
             except util.NothingChanged, e:
                 logging.info("Invariant difference, but NothingChanged")
                 inv = e.new_value
@@ -353,22 +357,27 @@ class Pipegraph(object):
                     #the case that it is injected as a dependency for a job that might have already been done
                     #is being taken care of in the JobGeneratingJob and DependencyInjectionJob s
         for job in new_jobs.values():
+            logging.info('new job %s' % job)
             check_preqs(job)
-            job.prequisites = set([self.jobs[job_id] for job_id in job.prerequisites])
-            job.dependants = set([self.jobs[job_id] for job_id in job.dependants])
             self.jobs[job.job_id] = job
+        for job in new_jobs.values():
+            job.prerequisites = set([self.jobs[job_id] for job_id in job.prerequisites])
+            job.dependants = set([self.jobs[job_id] for job_id in job.dependants])
         for job in new_jobs.values():
             if not job.is_done():
                 job.invalidated()
+        self.connect_graph()
+        self.distribute_invariant_changes()
         for job in new_jobs.values():
             if job.is_loadable():
                 logging.info("Ignoring %s" % job)
             elif not job.is_done():
                 logging.info("Adding %s to possible_execution_order"%  job)
                 self.possible_execution_order.append(job)
+            elif not job.runs_in_slave(): 
+                job.was_run = True #invarites get marked as ran..
             else:
-                logging.info("Not doing anything with"%  job)
-        self.connect_graph()
+                logging.info("Not doing anything with %s, was done"%  job)
         #for slave in self.slaves.values():
             #slave.transmit_new_jobs(new_jobs)
            
