@@ -128,7 +128,7 @@ class Job(object):
                     #was_run is necessary, a filegen job might have already created the file (and written a bit to it), but that does not mean that it's done enough to start the next one. Was_run means it has returned.
                     #On the other hand, it might have been a job that didn't need to run, then was_invalidated should be false.
                     #or it was a loadable job anyhow, then it doesn't matter.
-                    logging.info("case 1 - false")
+                    logging.info("case 1 - false %s" % preq)
                     return False #false means no way
                 else:
                     logging.info("case 2 - delay") #but we still need to try the other preqs if it was ok
