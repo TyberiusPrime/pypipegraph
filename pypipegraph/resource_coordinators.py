@@ -1,4 +1,6 @@
 import logging
+logger = logging.getLogger('ppg.RC')
+logger.setLevel(logging.INFO)
 import os
 import traceback
 import multiprocessing
@@ -37,13 +39,13 @@ class LocalSystem:
 
     def enter_loop(self):
         self.que = multiprocessing.Queue()
-        logging.info("Starting first batch of jobs")
+        logger.info("Starting first batch of jobs")
         self.pipegraph.start_jobs()
         while True:
             try:
-                logging.info("Listening to que")
+                logger.info("Listening to que")
                 slave_id, was_ok, job_id_done, stdout, stderr,exception, trace, new_jobs = self.que.get(block=True, timeout=self.timeout) #was there a job done?
-                logging.info("Job returned: %s, was_ok: %s" % (job_id_done, was_ok))
+                logger.info("Job returned: %s, was_ok: %s" % (job_id_done, was_ok))
                 job = self.pipegraph.jobs[job_id_done]
                 job.was_done_on.add(slave_id)
                 job.stdout = stdout
@@ -53,24 +55,24 @@ class LocalSystem:
                 job.failed = not was_ok
                 if job.failed:
                     try:
-                        logging.info("Before depickle %s" % type(exception))
+                        logger.info("Before depickle %s" % type(exception))
                         job.exception = cPickle.loads(exception)
-                        logging.info("After depickle %s" % type(job.exception))
-                        logging.info("exception stored at %s" % (job))
+                        logger.info("After depickle %s" % type(job.exception))
+                        logger.info("exception stored at %s" % (job))
                     except cPickle.UnpicklingError:#some exceptions can't be pickled, so we send a string instead#some exceptions can't be pickled, so we send a string instead
                         pass
                     if job.exception:
-                        logging.info("Exception: %s" % repr(exception))
-                        logging.info("Trace: %s" % trace)
-                    logging.info("stdout: %s" % stdout)
-                    logging.info("stderr: %s" % stderr)
+                        logger.info("Exception: %s" % repr(exception))
+                        logger.info("Trace: %s" % trace)
+                    logger.info("stdout: %s" % stdout)
+                    logger.info("stderr: %s" % stderr)
                 if new_jobs:
                     if not job.modifies_jobgraph():
                         job.exception = exceptions.JobContractError("%s created jobs, but was not a job with modifies_jobgraph() returning True" % job)
                         job.failed = True
                     else:
                         new_jobs = cPickle.loads(new_jobs)
-                        logging.info("We retrieved %i new jobs from %s"  % (len(new_jobs), job))
+                        logger.info("We retrieved %i new jobs from %s"  % (len(new_jobs), job))
                         self.pipegraph.new_jobs_generated_during_runtime(new_jobs)
 
                 more_jobs = self.pipegraph.job_executed(job)
@@ -83,7 +85,7 @@ class LocalSystem:
                 self.pipegraph.start_jobs()
                  
             except Queue.Empty, IOError: #either timeout, or the que failed
-                logging.info("Timout")
+                logger.info("Timout")
                 self.slave.check_for_dead_jobs()
                 pass
         self.slave.check_for_dead_jobs()
@@ -93,22 +95,22 @@ class LocalSlave:
     def __init__(self, rc):
         self.rc = rc
         self.slave_id = 'LocalSlave'
-        logging.info("LocalSlave pid: %i (runs in MCP!)" % os.getpid())
+        logger.info("LocalSlave pid: %i (runs in MCP!)" % os.getpid())
         self.process_to_job = {}
 
     def spawn(self, job):
-        logging.info("Slave: Spawning %s" % job.job_id)
-        logging.info("Slave: preqs are %s" % [preq.job_id for preq in job.prerequisites])
+        logger.info("Slave: Spawning %s" % job.job_id)
+        logger.info("Slave: preqs are %s" % [preq.job_id for preq in job.prerequisites])
         for preq in job.prerequisites:
             if preq.is_loadable():
-                logging.info("Slave: Loading %s" % preq)
+                logger.info("Slave: Loading %s" % preq)
                 preq.load()
         if job.cores_needed == -1:
             self.rc.cores_available = 0
         else:
             self.rc.cores_available -= job.cores_needed
         if job.modifies_jobgraph():
-            logging.info("Slave: Running %s in slave" % job)
+            logger.info("Slave: Running %s in slave" % job)
             self.run_a_job(job)
         else:
             p = multiprocessing.Process(target=self.run_a_job, args=[job,])

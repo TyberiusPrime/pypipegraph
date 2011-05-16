@@ -1,5 +1,7 @@
 import exceptions
 import logging
+logger = logging.getLogger('ppg.job')
+logger.setLevel(logging.INFO)
 import re
 import cStringIO
 import os
@@ -45,7 +47,7 @@ class JobList(object):
 class Job(object):
 
     def __new__(cls, job_id, *args, **kwargs):
-        logging.info("New for %s %s" % (cls, job_id))
+        logger.info("New for %s %s" % (cls, job_id))
         if not isinstance(job_id, str):
             raise exceptions.JobContractError("Job_id must be a string")
         if not job_id in util.job_uniquifier:
@@ -121,22 +123,22 @@ class Job(object):
             dep.invalidated()
 
     def can_run_now(self):
-        logging.info("can_run_now %s" % self)
+        logger.info("can_run_now %s" % self)
         for preq in self.prerequisites:
             if preq.is_done():
                 if preq.was_invalidated and not preq.was_run and not preq.is_loadable(): 
                     #was_run is necessary, a filegen job might have already created the file (and written a bit to it), but that does not mean that it's done enough to start the next one. Was_run means it has returned.
                     #On the other hand, it might have been a job that didn't need to run, then was_invalidated should be false.
                     #or it was a loadable job anyhow, then it doesn't matter.
-                    logging.info("case 1 - false %s" % preq)
+                    logger.info("case 1 - false %s" % preq)
                     return False #false means no way
                 else:
-                    logging.info("case 2 - delay") #but we still need to try the other preqs if it was ok
+                    logger.info("case 2 - delay") #but we still need to try the other preqs if it was ok
                     pass
             else:
-                logging.info("case 3 - false because of %s" % preq)
+                logger.info("case 3 - false because of %s" % preq)
                 return False
-        logging.info("case 4 - true")
+        logger.info("case 4 - true")
         return True
 
     def run(self):
@@ -144,7 +146,7 @@ class Job(object):
 
     def check_prerequisites_for_cleanup(self):
         for preq in self.prerequisites:
-            logging.info("check_prerequisites_for_cleanup %s" % preq)
+            logger.info("check_prerequisites_for_cleanup %s" % preq)
             all_done = True
             for dep in preq.dependants:
                 if dep.failed or not dep.was_run:
@@ -283,10 +285,10 @@ class FileGeneratingJob(Job):
 
     def inject_auto_invariants(self):
         if not self.do_ignore_code_changes:
-            logging.info("Injecting outa invariants %s" % self)
+            logger.info("Injecting outa invariants %s" % self)
             self.depends_on(FunctionInvariant(self.job_id + '_func', self.callback))
         else:
-            logging.info("not Injecting outa invariants %s" % self)
+            logger.info("not Injecting outa invariants %s" % self)
 
     def is_done(self):
         return util.output_file_exists(self.job_id)
@@ -338,7 +340,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
     def invalidated(self):
         for fn in self.filenames:
             try:
-                logging.info("Removing %s" % fn)
+                logger.info("Removing %s" % fn)
                 os.unlink(fn)
             except OSError:
                 pass
@@ -425,13 +427,13 @@ class AttributeLoadingJob(DataLoadingJob):
             self.depends_on(FunctionInvariant(self.job_id + '_func', self.callback))
 
     def load(self):
-        logging.info("%s load" % self)
+        logger.info("%s load" % self)
         if self.was_loaded:
             return
         for preq in self.prerequisites: #load whatever is necessary...
             if preq.is_loadable():
                 preq.load()
-        logging.info("setting %s on id %i in pid %i" % (self.attribute_name, id(self.object), os.getpid()))
+        logger.info("setting %s on id %i in pid %i" % (self.attribute_name, id(self.object), os.getpid()))
         setattr(self.object, self.attribute_name, self.callback())
         self.was_loaded = True
 
@@ -445,7 +447,7 @@ class AttributeLoadingJob(DataLoadingJob):
         return True
 
     def cleanup(self):
-        logging.info("Cleanup on %s" % self.attribute_name)
+        logger.info("Cleanup on %s" % self.attribute_name)
         try:
             delattr(self.object, self.attribute_name)
         except AttributeError: #this can happen if you have a messed up DependencyInjectionJob, but it would block the messed up reporting...
@@ -481,13 +483,13 @@ class DependencyInjectionJob(_GraphModifyingJob):
     def run(self):
         #this is different form JobGeneratingJob.run in it's checking of the contract
         util.global_pipegraph.new_jobs = {}
-        logging.info("new_jobs id %s"  %id(util.global_pipegraph.new_jobs))
+        logger.info("new_jobs id %s"  %id(util.global_pipegraph.new_jobs))
         self.callback()
         #we now need to fill new_jobs.dependants
         for job in util.global_pipegraph.jobs.values():
             for nw in util.global_pipegraph.new_jobs.values():
                 if nw in job.prerequisites:
-                    logging.info("Checking %s against %s - %s" % (nw, job, job in self.dependants))
+                    logger.info("Checking %s against %s - %s" % (nw, job, job in self.dependants))
                     if not job in self.dependants:
                         raise exceptions.JobContractError("DependencyInjectionJob %s tried to inject %s into %s, but %s was not dependand on the DependencyInjectionJob" % (self, nw, job, job))
                     nw.dependants.add(job)
@@ -503,8 +505,8 @@ class DependencyInjectionJob(_GraphModifyingJob):
                     if new_job in job.prerequisites or job in new_job.dependants: #no connect_graph building so far...
                         raise exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was added to the prerequisites of %s, but %s was not dependant on the DependencyInjectionJob" % (self.job_id, new_job.job_id, job.job_id))
         res = util.global_pipegraph.new_jobs
-        logging.info('returning %i new jobs' % len(res))
-        logging.info('%s' % ",".join(res.keys()))
+        logger.info('returning %i new jobs' % len(res))
+        logger.info('%s' % ",".join(res.keys()))
         util.global_pipegraph.new_jobs = False
         return res
 
@@ -608,7 +610,7 @@ class _LazyFileGeneratingJob(Job):
             self.depends_on(func_invariant)
             self.data_loading_job.depends_on(func_invariant)
         else:
-            logging.info("not Injecting outa invariants %s" % self)
+            logger.info("not Injecting outa invariants %s" % self)
 
     def invalidated(self):
         try:
