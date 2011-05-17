@@ -25,3 +25,7 @@ class JobDied(PyPipelineGraphError):
         self.exit_code = exit_code
         msg = "Exitcode was %s" % self.exit_code
         PyPipelineGraphError.__init__(self, msg)
+
+class CommunicationFailure(PyPipelineGraphError):
+    """something went wrong talking to a slave"""
+    pass

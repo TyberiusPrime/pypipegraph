@@ -11,16 +11,17 @@ import cloudpickle
 import cPickle
 import exceptions
 import util
+import subprocess
 
 class LocalSystem:
     """A ResourceCoordinator that uses the current machine,
     up to max_cores_to_use cores of it
     
-    It uses multiprocessing
+    It uses multiprocessing and the LocalSlave
     """
 
     def __init__(self, max_cores_to_use = 8):
-        self.max_cores_to_use = max_cores_to_use
+        self.max_cores_to_use = max_cores_to_use #todo: update to local cpu count...
         self.slave = LocalSlave(self)
         self.cores_available = max_cores_to_use
         self.memory_available = 50 * 1024 * 1024 * 1024 #50 gigs ;), todo, update to actual memory + swap...
@@ -190,4 +191,131 @@ class LocalSlave:
                             ))
         for proc in remove:
             del self.process_to_job[proc]
+
+
+
+
+class LocalTwisted:
+    """A ResourceCoordinator that uses the current machine,
+    up to max_cores_to_use cores of it
+    
+    It uses Twisted and one LocalTwistedSlave
+    """
+
+    def __init__(self, max_cores_to_use = 8):
+        self.max_cores_to_use = max_cores_to_use #todo: update to local cpu count...
+        self.slaves = {}
+        self.cores_available = max_cores_to_use
+        self.memory_available = 50 * 1024 * 1024 * 1024 #50 gigs ;), todo, update to actual memory + swap...
+        self.timeout = 15
+
+    def spawn_slaves(self):
+        if self.slaves:
+            raise ValueError("spawn_slaves called twice")
+        self.slaves = {
+                    'LocalSlave': self.LocalTwistedSlave()
+                    }
+        return self.slaves
+
+    def get_resources(self):
+        return {
+                'LocalSlave': {'cores': self.cores_available,
+                    'memory': self.memory_available}
+                }
+
+    def enter_loop(self):
+        self.slaves_ready_count = 0
+        for slave in self.slaves.values():
+            slave.transmit_pipegraph(self.pipegraph).addCallback(self.start_when_ready,
+                    self.slave_connection_failed)
+
+    def start_when_ready(self, status):
+        if status:
+            self.slaves_ready_count += 1
+            if self.slaves_ready_count == len(self.slave):
+                self.pipegraph.start_jobs()
+        else:
+            raise exceptions.CommunicationFailure()
+
+    def slave_connection_failed(self):
+            raise exceptions.CommunicationFailure()
+
+
+    def job_ended(self, slave_id, was_ok, job_id_done, stdout, stderr,exception, trace, new_jobs):
+        logger.info("Job returned: %s, was_ok: %s" % (job_id_done, was_ok))
+        job = self.pipegraph.jobs[job_id_done]
+        job.was_done_on.add(slave_id)
+        job.stdout = stdout
+        job.stderr = stderr
+        job.exception = exception
+        job.trace = trace
+        job.failed = not was_ok
+        if job.failed:
+            try:
+                logger.info("Before depickle %s" % type(exception))
+                job.exception = cPickle.loads(exception)
+                logger.info("After depickle %s" % type(job.exception))
+                logger.info("exception stored at %s" % (job))
+            except cPickle.UnpicklingError:#some exceptions can't be pickled, so we send a string instead#some exceptions can't be pickled, so we send a string instead
+                pass
+            if job.exception:
+                logger.info("Exception: %s" % repr(exception))
+                logger.info("Trace: %s" % trace)
+            logger.info("stdout: %s" % stdout)
+            logger.info("stderr: %s" % stderr)
+        if new_jobs:
+            if not job.modifies_jobgraph():
+                job.exception = exceptions.JobContractError("%s created jobs, but was not a job with modifies_jobgraph() returning True" % job)
+                job.failed = True
+            else:
+                new_jobs = cPickle.loads(new_jobs)
+                logger.info("We retrieved %i new jobs from %s"  % (len(new_jobs), job))
+                self.pipegraph.new_jobs_generated_during_runtime(new_jobs)
+
+        more_jobs = self.pipegraph.job_executed(job)
+        if job.cores_needed == -1:
+            self.cores_available = self.max_cores_to_use
+        else:
+            self.cores_available += job.cores_needed
+        if not more_jobs: #this means that all jobs are done and there are no longer any more running...
+            break
+        self.pipegraph.start_jobs()
+
+class LocalTwistedSlave:
+
+
+    def __init__(self, rc):
+        self.rc = rc
+        self.slave_id = 'LocalTwistedSlave'
+        self.start_subprocess()
+
+
+    def start_subprocess(self):
+        logger.info("LocalSlave pid: %i (runs in Slave process!)" % os.getpid())
+        cmd = ['python', os.path.join(os.path.dirname(__file__), 'util', 'twisted_slave.py')]
+        self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+        port = self.process.communicate()
+        todo..., open amp
+        pass
+
+    def transmit_pipegraph(self, pipegraph):
+        return self.send_message(("pipegraph", pipegraph))
+
+    def spawn(self, job):
+        logger.info("Slave: Spawning %s" % job.job_id)
+        self.send_message(('spawn', job.job_id)).addCallback(
+                self.job_done, lambda job_id=job.job_id: self.job_failed(job_id))
+
+    def job_done(self, encoded_argument):
+        args = cPickle.load(encoded_argument)
+        self.rc.job_ended(self.slave_id, *args)
+
+    def job_failed(self, job_id):
+        was_ok = False
+        stdout = ""
+        stderr = ""
+        exception = exceptions.CommunicationFailure
+        trace = ''
+        new_jobs = False
+        self.rc.job_ended(self.slave_id, was_ok, stdout, stderr, exception, trace, new_jobs)
 
