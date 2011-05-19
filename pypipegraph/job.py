@@ -1,4 +1,4 @@
-import exceptions
+import ppg_exceptions
 import logging
 logger = logging.getLogger('ppg.job')
 logger.setLevel(logging.INFO)
@@ -21,7 +21,7 @@ class JobList(object):
         jobs = list(jobs)
         for job in jobs:
             if not isinstance(job, Job):
-                raise exceptions.ValueError("%s was not a job object" % job)
+                raise ppg_exceptions.ValueError("%s was not a job object" % job)
         self.jobs = set(jobs)
 
     def __iter__(self):
@@ -49,12 +49,12 @@ class Job(object):
     def __new__(cls, job_id, *args, **kwargs):
         logger.info("New for %s %s" % (cls, job_id))
         if not isinstance(job_id, str):
-            raise exceptions.JobContractError("Job_id must be a string")
+            raise ppg_exceptions.JobContractError("Job_id must be a string")
         if not job_id in util.job_uniquifier:
             util.job_uniquifier[job_id] = object.__new__(cls)
         else:
             if util.job_uniquifier[job_id].__class__ != cls:
-                raise exceptions.JobContractError("Same job id, different job classes for %s" % job_id)
+                raise ppg_exceptions.JobContractError("Same job id, different job classes for %s" % job_id)
 
         if util.global_pipegraph is None:
             raise ValueError("You must first instanciate a pypipegraph before creating jobs""")

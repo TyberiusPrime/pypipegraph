@@ -1,4 +1,5 @@
 import logging
+import time
 logger = logging.getLogger('ppg.RC')
 logger.setLevel(logging.INFO)
 import os
@@ -10,8 +11,13 @@ import cStringIO
 import cloudpickle
 import cPickle
 import exceptions
-import util
+import ppg_exceptions
 import subprocess
+
+import messages
+from twisted.internet import reactor
+from twisted.internet.protocol import ClientCreator
+from twisted.protocols import amp
 
 class LocalSystem:
     """A ResourceCoordinator that uses the current machine,
@@ -69,7 +75,7 @@ class LocalSystem:
                     logger.info("stderr: %s" % stderr)
                 if new_jobs:
                     if not job.modifies_jobgraph():
-                        job.exception = exceptions.JobContractError("%s created jobs, but was not a job with modifies_jobgraph() returning True" % job)
+                        job.exception = ppg_exceptions.JobContractError("%s created jobs, but was not a job with modifies_jobgraph() returning True" % job)
                         job.failed = True
                     else:
                         new_jobs = cPickle.loads(new_jobs)
@@ -134,7 +140,7 @@ class LocalSlave:
             if job.modifies_jobgraph():
                 new_jobs = self.prepare_jobs_for_transfer(temp)
             elif temp:
-                raise exceptions.JobContractError("Job returned a value (which should be new jobs generated here) without having modifies_jobgraph() returning True")
+                raise ppg_exceptions.JobContractError("Job returned a value (which should be new jobs generated here) without having modifies_jobgraph() returning True")
         except Exception, e:
             trace = traceback.format_exc()
             was_ok = False
@@ -185,7 +191,7 @@ class LocalSlave:
                             job.job_id, 
                             'no stdout available', 
                             'no stderr available', 
-                            cPickle.dumps(exceptions.JobDied(proc.exitcode)),
+                            cPickle.dumps(ppg_exceptions.JobDied(proc.exitcode)),
                             '',
                             False #no new jobs
                             ))
@@ -213,7 +219,7 @@ class LocalTwisted:
         if self.slaves:
             raise ValueError("spawn_slaves called twice")
         self.slaves = {
-                    'LocalSlave': self.LocalTwistedSlave()
+                    'LocalSlave': LocalTwistedSlave(self)
                     }
         return self.slaves
 
@@ -225,20 +231,23 @@ class LocalTwisted:
 
     def enter_loop(self):
         self.slaves_ready_count = 0
-        for slave in self.slaves.values():
-            slave.transmit_pipegraph(self.pipegraph).addCallback(self.start_when_ready,
-                    self.slave_connection_failed)
+        logger.info("starting reactor")
+        reactor.run()
 
-    def start_when_ready(self, status):
+
+    def start_when_ready(self, response, slave_id): #this get's called when a slave has connected and transmitted the pipegraph...
+        status = response['ok']
+        logger.info("start_when_ready for %s, status was %s" % (slave_id, status))
         if status:
             self.slaves_ready_count += 1
-            if self.slaves_ready_count == len(self.slave):
+            if self.slaves_ready_count == len(self.slaves):
+                logger.info("Now calling start_jobs")
                 self.pipegraph.start_jobs()
         else:
-            raise exceptions.CommunicationFailure()
+            raise exceptions.CommunicationFailure("Slave %s could not load jobgraph. Exception: %s" % (slave_id, response['exception']))
 
-    def slave_connection_failed(self):
-            raise exceptions.CommunicationFailure()
+    def slave_connection_failed(self, slave_id):
+        raise exceptions.CommunicationFailure('Could not connect to slave %s' % slave_id)
 
 
     def job_ended(self, slave_id, was_ok, job_id_done, stdout, stderr,exception, trace, new_jobs):
@@ -256,7 +265,7 @@ class LocalTwisted:
                 job.exception = cPickle.loads(exception)
                 logger.info("After depickle %s" % type(job.exception))
                 logger.info("exception stored at %s" % (job))
-            except cPickle.UnpicklingError:#some exceptions can't be pickled, so we send a string instead#some exceptions can't be pickled, so we send a string instead
+            except (cPickle.UnpicklingError, exceptions.EOFError):#some exceptions can't be pickled, so we send a string instead#some exceptions can't be pickled, so we send a string instead
                 pass
             if job.exception:
                 logger.info("Exception: %s" % repr(exception))
@@ -277,9 +286,25 @@ class LocalTwisted:
             self.cores_available = self.max_cores_to_use
         else:
             self.cores_available += job.cores_needed
-        if not more_jobs: #this means that all jobs are done and there are no longer any more running...
-            break
-        self.pipegraph.start_jobs()
+        if not more_jobs: #this means that all jobs are done and there are no longer any more running, so we can return  now...
+            reactor.stop()
+        else:
+            self.pipegraph.start_jobs()
+
+class AMP_Return_Protocol(amp.AMP):
+    def __init__(self, slave):
+        self.slave = slave
+
+    def job_ended(self, arg_tuple_pickle):
+        self.slave.job_returned(arg_tuple_pickle)
+        return {}
+    messages.JobEnded.responder(job_ended)
+
+    def __call__(self):
+        return self
+
+
+
 
 class LocalTwistedSlave:
 
@@ -291,31 +316,53 @@ class LocalTwistedSlave:
 
 
     def start_subprocess(self):
-        logger.info("LocalSlave pid: %i (runs in Slave process!)" % os.getpid())
         cmd = ['python', os.path.join(os.path.dirname(__file__), 'util', 'twisted_slave.py')]
-        self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-        port = self.process.communicate()
-        todo..., open amp
+        self.process = subprocess.Popen(cmd, cwd=os.getcwd())#, stdout=subprocess.PIPE)
+        time.sleep(1)
+        #port = self.process.stdout.read()
+        #logger.info("Connecting to %s" % port)
+        logger.info("Connecting to 500001")
+        ClientCreator(reactor, AMP_Return_Protocol(self)).connectTCP('127.0.0.1', 50001).addCallbacks(
+                self.connected,
+                self.rc.slave_connection_failed
+                )
         pass
 
+    def connected(self, proto):
+        self.amp = proto
+        self.transmit_pipegraph(self.rc.pipegraph).addCallbacks(
+                lambda result: self.rc.start_when_ready(result, self.slave_id), 
+                self.transmit_pipegraph_failed)
+
+    def transmit_pipegraph_failed(self, failure):
+        self.rc.start_when_ready({'ok': False, 'exception': 'Unknown'}, self.slave_id)
+
     def transmit_pipegraph(self, pipegraph):
-        return self.send_message(("pipegraph", pipegraph))
+        data = cloudpickle.dumps(pipegraph.jobs, 0)
+        print data
+        cPickle.loads(data)
+        return self.amp.callRemote(messages.TransmitPipegraph, jobs=data)
 
     def spawn(self, job):
         logger.info("Slave: Spawning %s" % job.job_id)
-        self.send_message(('spawn', job.job_id)).addCallback(
-                self.job_done, lambda job_id=job.job_id: self.job_failed(job_id))
+        self.amp.callRemote(messages.StartJob, job_id = job.job_id).addErrback(
+                self.job_failed_to_start(job.job_id))
 
-    def job_done(self, encoded_argument):
-        args = cPickle.load(encoded_argument)
+    def job_returned(self, encoded_argument):
+        args = cPickle.loads(encoded_argument)
         self.rc.job_ended(self.slave_id, *args)
 
-    def job_failed(self, job_id):
-        was_ok = False
-        stdout = ""
-        stderr = ""
-        exception = exceptions.CommunicationFailure
-        trace = ''
-        new_jobs = False
-        self.rc.job_ended(self.slave_id, was_ok, stdout, stderr, exception, trace, new_jobs)
+    def job_failed_to_start(self, job_id):
+        def inner(failure, job_id = job_id):
+            self.rc.job_ended(
+                    self.slave_id, 
+                    False,
+                    job_id, 
+                    'Not Available',
+                    'Twisted communication error: %s' % failure, 
+                    '', 
+                    '', 
+                    False)
+        return inner
+
 

@@ -53,7 +53,7 @@ processes than there are cores or by spawning too many memory hungry jobs at onc
         op.close()
     jobA = pypipegraph.FileGeneratingJob(output_filename, do_the_work)
     pypipegraph.run()
-    print 'the pipegraph is done'
+    print 'the pipegraph is done and has returned control to you.'
     
 
 Jobs
