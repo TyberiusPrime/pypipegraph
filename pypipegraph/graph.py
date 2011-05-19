@@ -2,7 +2,7 @@ import os
 import collections
 import resource_coordinators
 import cPickle
-import exceptions
+import ppg_exceptions
 import util
 import logging
 logger = logging.getLogger('ppg.graph')
@@ -96,7 +96,7 @@ class Pipegraph(object):
         #and propagate if there was an exception
         for job in self.jobs.values():
             if job.failed:
-                raise exceptions.RuntimeError()
+                raise ppg_exceptions.RuntimeError()
 
     def inject_auto_invariants(self):
         """Go through each job and ask it to create the invariants it might need.
@@ -143,7 +143,7 @@ class Pipegraph(object):
         for job in self.jobs.values():
             del job.dependants_copy
         if has_edges:
-            raise exceptions.CycleError("A cycle in the graph was detected")
+            raise ppg_exceptions.CycleError("A cycle in the graph was detected")
         L.reverse()
         self.possible_execution_order = L
 
@@ -263,7 +263,7 @@ class Pipegraph(object):
         error_count = len(self.jobs) * 2
         runnable_jobs = [job for job in self.possible_execution_order if job.can_run_now()]
         if self.possible_execution_order and not runnable_jobs and not self.running_jobs:
-            raise exceptions.RuntimeException(
+            raise ppg_exceptions.RuntimeException(
             """We had more jobs that needed to be done, none of them could be run right now and none were running. Sounds like a dependency graph bug to me""")
         while resources_available(resources) and runnable_jobs:
             logger.info("resources were available")
@@ -331,7 +331,7 @@ class Pipegraph(object):
 
     def job_executed(self, job):
         """A job was done. Return whether there are more jobs read run""" 
-        logger.info("job_executed %s" % job)
+        logger.info("job_executed %s failed: %s" % (job, job.failed))
         if job.failed:
             self.prune_job(job)
             if job.exception:

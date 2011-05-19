@@ -38,7 +38,7 @@ class DataCollectingProcessProtocol(protocol.ProcessProtocol):
 class ForkedProcessTests(unittest.TestCase):
 
     @deferred(2)
-    def ARGHest_exit_ok(self):
+    def test_exit_ok(self):
         def callback():
             sys.exit(0)
         collector = DataCollectingProcessProtocol()
@@ -62,6 +62,21 @@ class ForkedProcessTests(unittest.TestCase):
         collector.deferred.addCallback(check_status)
         return collector.deferred
 
+    @deferred(2)
+    def test_print_exit_ok(self):
+        def callback():
+            print 'hello world' 
+            sys.exit(0)
+        collector = DataCollectingProcessProtocol()
+        print 'hello'
+        p = twisted_fork.ForkedProcess(reactor, callback, collector)
+        def check_status(proto):
+            assert proto.stdout == 'hello world\n'
+            assert proto.exit_code == 0
+        collector.deferred.addCallback(check_status)
+        return collector.deferred
+
+    @deferred(2)
     def test_stdout_exit_error(self):
         def callback():
             sys.stdout.write('hello world')
@@ -74,3 +89,18 @@ class ForkedProcessTests(unittest.TestCase):
             assert proto.exit_code == 5
         collector.deferred.addCallback(check_status)
         return collector.deferred
+
+    @deferred(2)
+    def test_stderr_exit_error(self):
+        def callback():
+            sys.stderr.write('hello world')
+            sys.exit(5)
+        collector = DataCollectingProcessProtocol()
+        print 'hello'
+        p = twisted_fork.ForkedProcess(reactor, callback, collector)
+        def check_status(proto):
+            assert proto.stderr == 'hello world'
+            assert proto.exit_code == 5
+        collector.deferred.addCallback(check_status)
+        return collector.deferred
+

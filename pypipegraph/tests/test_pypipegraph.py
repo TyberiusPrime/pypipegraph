@@ -50,7 +50,8 @@ class PPGPerTest(unittest.TestCase):
         except OSError:
             pass
         ppg.forget_job_status()
-        ppg.new_pipegraph()
+        rc = ppg.resource_coordinators.LocalTwisted()
+        ppg.new_pipegraph(rc)
 
 
 class SimpleTests(unittest.TestCase):
@@ -224,6 +225,7 @@ class FileGeneratingJobTests(PPGPerTest):
             print 'do_write was called'
             write(of, data_to_write)
         job = ppg.FileGeneratingJob(of, do_write)
+        job.ignore_code_changes()
         ppg.run_pipegraph()
         self.assertFalse(job.failed)
         self.assertTrue(os.path.exists(of))
@@ -1684,6 +1686,15 @@ class TestingTheUnexpectedTests(PPGPerTest):
 class NotYetImplementedTests(unittest.TestCase):
     pass
 
+    def test_chained_dataloading_jobs(self):
+        raise NotImplementedError()
+
+    def test_failing_dataloading_jobs(self):
+        raise NotImplementedError()
+
+
+    def test_spawn_slave_failure(self):
+        pass
 
 
 

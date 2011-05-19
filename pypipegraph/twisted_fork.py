@@ -27,12 +27,13 @@ class ForkedProcess(process.Process):
         if settingUID:
             raise ValueError("settingUID not supported")
         #now, this is in the forked child already, and inside the try: except block of _BaseProcess._fork 
-        #so... go for it
+        #make sure we get the pipes right...
         sys.stdout = os.fdopen(1, 'w')
-        sys.stderr = os.fdopen(1, 'w')
+        sys.stderr = os.fdopen(2, 'w')
         sys.stdout.flush()
         sys.stderr.flush()
         gc.enable()
+        #so... go for it
         try:
             callback()
         except SystemExit, e:
