@@ -246,6 +246,11 @@ class LocalTwisted:
         else:
             raise exceptions.CommunicationFailure("Slave %s could not load jobgraph. Exception: %s" % (slave_id, response['exception']))
 
+    def end_when_slaves_down(self, slave_id):
+        self.slaves_ready_count -= 1
+        if self.slaves_ready_count == 0:
+            reactor.stop()
+
     def slave_connection_failed(self, slave_id):
         raise exceptions.CommunicationFailure('Could not connect to slave %s' % slave_id)
 
@@ -287,7 +292,9 @@ class LocalTwisted:
         else:
             self.cores_available += job.cores_needed
         if not more_jobs: #this means that all jobs are done and there are no longer any more running, so we can return  now...
-            reactor.stop()
+            for slave_id in self.slaves:
+                self.slaves[slave_id].shut_down().addCallbacks(lambda res: self.end_when_slaves_down(slave_id), 
+                        lambda failure: self.end_when_slaves_down(slave_id))
         else:
             self.pipegraph.start_jobs()
 
@@ -297,7 +304,7 @@ class AMP_Return_Protocol(amp.AMP):
 
     def job_ended(self, arg_tuple_pickle):
         self.slave.job_returned(arg_tuple_pickle)
-        return {}
+        return {'ok': True}
     messages.JobEnded.responder(job_ended)
 
     def __call__(self):
@@ -327,6 +334,10 @@ class LocalTwistedSlave:
                 self.rc.slave_connection_failed
                 )
         pass
+    
+    def terminate_process(self, org):
+        logger.info("Shutting down process of %s" % self.slave_id)
+        self.process.communicate()
 
     def connected(self, proto):
         self.amp = proto
@@ -339,7 +350,6 @@ class LocalTwistedSlave:
 
     def transmit_pipegraph(self, pipegraph):
         data = cloudpickle.dumps(pipegraph.jobs, 0)
-        print data
         cPickle.loads(data)
         return self.amp.callRemote(messages.TransmitPipegraph, jobs=data)
 
@@ -365,4 +375,9 @@ class LocalTwistedSlave:
                     False)
         return inner
 
+    def shut_down(self):
+        logger.info("Sending shut_down to %s" % self.slave_id)
+        return self.amp.callRemote(messages.ShutDown).addCallbacks(
+                lambda result: self.terminate_process(result),
+                lambda failure: self.terminate_process(failure))
 
