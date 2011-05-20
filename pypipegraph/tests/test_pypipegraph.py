@@ -234,6 +234,22 @@ class FileGeneratingJobTests(PPGPerTest):
         op.close()
         self.assertEqual(data, data_to_write)
 
+    def test_simple_filegeneration_with_function_dependency(self):
+        of = "out/a"
+        data_to_write = "hello"
+        def do_write():
+            print 'do_write was called'
+            write(of, data_to_write)
+        job = ppg.FileGeneratingJob(of, do_write)
+        #job.ignore_code_changes() this would be the magic line to remove the function dependency
+        ppg.run_pipegraph()
+        self.assertFalse(job.failed)
+        self.assertTrue(os.path.exists(of))
+        op = open(of, 'rb')
+        data = op.read()
+        op.close()
+        self.assertEqual(data, data_to_write)
+
     def test_filejob_raises_if_no_data_is_written(self):
         of = "out/a"
         data_to_write = "hello"
