@@ -1,7 +1,6 @@
 import ppg_exceptions
-import logging
-logger = logging.getLogger('ppg.job')
-logger.setLevel(logging.INFO)
+import util
+logger = util.start_logging('job')
 import re
 import cStringIO
 import os
@@ -66,6 +65,7 @@ class Job(object):
         return (self.job_id, )
 
     def __init__(self, job_id):
+        logger.info("init for %s" % job_id)
         self.job_id = job_id
         self.cores_needed = 1
         self.memory_needed = -1
@@ -275,6 +275,7 @@ class FileChecksumInvariant(Job):
 class FileGeneratingJob(Job):
 
     def __init__(self, output_filename, function, rename_broken = False):
+        logger.info("FG init for %s" % output_filename)
         Job.__init__(self, output_filename)
         self.callback = function
         self.rename_broken = rename_broken
