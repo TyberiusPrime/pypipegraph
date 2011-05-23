@@ -1,9 +1,9 @@
 import unittest
-import logging
 import time
 import sys
 sys.path.append('../../')
 import pypipegraph as ppg
+logger = ppg.util.start_logging('test')
 import os
 import shutil
 import subprocess
@@ -17,7 +17,6 @@ def read(filename):
 
 def write(filename, string):
     """open file for writing, dump string, close file"""
-    logging.info("Writting %s: %s" % (filename, string))
     op = open(filename, 'wb')
     op.write(string)
     op.close()
@@ -40,18 +39,19 @@ class PPGPerTest(unittest.TestCase):
     """For those testcases that need a new pipeline each time..."""
     def setUp(self):
         try:
-            logging.info("rmtre out")
+            logger.info("rmtre out")
             shutil.rmtree('out')
         except:
             pass
         try:
             os.mkdir('out')
-            logging.info('mkdir out')
+            logger.info('mkdir out')
         except OSError:
             pass
         ppg.forget_job_status()
         rc = ppg.resource_coordinators.LocalTwisted()
         ppg.new_pipegraph(rc)
+        logger.info("Starting new test\n" + "-" * 50 + "\n\n\n")
 
 
 class SimpleTests(unittest.TestCase):
@@ -1207,7 +1207,7 @@ class JobGeneratingJobTests(PPGPerTest):
         ppg.run_pipegraph()
         self.assertEqual(read('out/B'), 'B')
 
-        ppg.new_pipegraph()
+        ppg.new_pipegraph(rc)
         def gen2():
             jobB = ppg.FileGeneratingJob('out/B', lambda : write('out/B', 'C'))
             jobB.ignore_code_changes()

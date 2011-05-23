@@ -1,7 +1,7 @@
 import logging
 import time
-logger = logging.getLogger('ppg.RC')
-logger.setLevel(logging.INFO)
+import util
+logger = util.start_logging('RC')
 import os
 import traceback
 import multiprocessing
@@ -256,11 +256,13 @@ class LocalTwisted:
 
 
     def job_ended(self, slave_id, was_ok, job_id_done, stdout, stderr,exception, trace, new_jobs):
-        logger.info("Job returned: %s, was_ok: %s" % (job_id_done, was_ok))
+        logger.info("Job returned: %s, was_ok: %s, new_jobs %s" % (job_id_done, was_ok, new_jobs))
         job = self.pipegraph.jobs[job_id_done]
         job.was_done_on.add(slave_id)
         job.stdout = stdout
         job.stderr = stderr
+        logger.info('stdout %s'% stdout)
+        logger.info('stderr %s'% stderr)
         job.exception = exception
         job.trace = trace
         job.failed = not was_ok
@@ -359,6 +361,7 @@ class LocalTwistedSlave:
                 self.job_failed_to_start(job.job_id))
 
     def job_returned(self, encoded_argument):
+        logger.info("job_returned")
         args = cPickle.loads(encoded_argument)
         self.rc.job_ended(self.slave_id, *args)
 

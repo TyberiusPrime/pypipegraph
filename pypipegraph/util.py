@@ -1,9 +1,22 @@
 import os
 import stat
+import logging
+import logging.handlers
 
 global_pipegraph = None
+is_remote = False
 job_uniquifier = {} #to singletonize jobs on job_id
 func_hashes = {} #to calculate invarionts on functions in a slightly more efficent manner
+
+def start_logging(module):
+    key = 'rem' if is_remote else 'ppg'
+    name = "%s.%s" % (key, module)
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+    handler = logging.handlers.SocketHandler('127.0.0.1', 5005)
+    logger.addHandler(handler)
+    return logger
+
 
 def output_file_exists(filename):
     """Check if a file exists and its size is > 0"""

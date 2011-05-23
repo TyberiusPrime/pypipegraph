@@ -4,9 +4,7 @@ import resource_coordinators
 import cPickle
 import ppg_exceptions
 import util
-import logging
-logger = logging.getLogger('ppg.graph')
-logger.setLevel(logging.INFO)
+logger = util.start_logging('graph')
 
 invariant_status_filename= '.pypipegraph_status'
 
