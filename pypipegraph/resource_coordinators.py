@@ -290,6 +290,7 @@ class LocalTwisted:
                 job.exception = exceptions.JobContractError("%s created jobs, but was not a job with modifies_jobgraph() returning True" % job)
                 job.failed = True
             else:
+                logger.info("now unpickling new jbos")
                 new_jobs = cPickle.loads(new_jobs)
                 logger.info("We retrieved %i new jobs from %s"  % (len(new_jobs), job))
                 self.pipegraph.new_jobs_generated_during_runtime(new_jobs)
@@ -335,13 +336,14 @@ class LocalTwistedSlaveProcess(ProcessProtocol):
 
 
     def outReceived(self, data):
+        print 'received stdout from slave', data
         if not self.called_back:
             self.called_back = True
             self.connectionMade_callback()
         print data
 
     def errReceived(self, data):
-        print data
+        print 'received sttderr from slave', data
 
     def processExited(self,status):
         logger.info("Slave process ended, exit code %s" % status.value.exitCode)

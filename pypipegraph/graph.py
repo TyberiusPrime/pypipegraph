@@ -384,7 +384,12 @@ class Pipegraph(object):
         self.check_all_jobs_can_be_executed()
            
 
-
+    def tranfer_new_jobs(self):
+        """push jobs from self.new_jobs into self.jobs.
+        This is called in a remote slave that just created a bunch of jobs and send them of to the master,
+        so that they're still fresh"""
+        for job_id in self.new_jobs:
+            self.jobs[job_id] = self.new_jobs[job_id]
 
 
 
