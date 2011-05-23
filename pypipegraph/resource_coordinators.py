@@ -16,8 +16,11 @@ import subprocess
 
 import messages
 from twisted.internet import reactor
-from twisted.internet.protocol import ClientCreator
+from twisted.internet.protocol import ClientCreator, ProcessProtocol
 from twisted.protocols import amp
+
+class DummyResourceCoordinator:
+    """For the calculating slaves. so it throws exceptions..."""
 
 class LocalSystem:
     """A ResourceCoordinator that uses the current machine,
@@ -45,6 +48,7 @@ class LocalSystem:
                 }
 
     def enter_loop(self):
+        self.spawn_slaves()
         self.que = multiprocessing.Queue()
         logger.info("Starting first batch of jobs")
         self.pipegraph.start_jobs()
@@ -244,7 +248,8 @@ class LocalTwisted:
                 logger.info("Now calling start_jobs")
                 self.pipegraph.start_jobs()
         else:
-            raise exceptions.CommunicationFailure("Slave %s could not load jobgraph. Exception: %s" % (slave_id, response['exception']))
+            reactor.stop()
+            raise ppg_exceptions.CommunicationFailure("Slave %s could not load jobgraph. Exception: %s" % (slave_id, response['exception']))
 
     def end_when_slaves_down(self, slave_id):
         self.slaves_ready_count -= 1
@@ -252,7 +257,7 @@ class LocalTwisted:
             reactor.stop()
 
     def slave_connection_failed(self, slave_id):
-        raise exceptions.CommunicationFailure('Could not connect to slave %s' % slave_id)
+        raise ppg_exceptions.CommunicationFailure('Could not connect to slave %s' % slave_id)
 
 
     def job_ended(self, slave_id, was_ok, job_id_done, stdout, stderr,exception, trace, new_jobs):
@@ -314,6 +319,41 @@ class AMP_Return_Protocol(amp.AMP):
 
 
 
+class LocalTwistedSlaveProcess(ProcessProtocol):
+
+    def __init__(self, connectionMade_callback, error_callback):
+        self.connectionMade_callback = connectionMade_callback
+        self.error_callback = error_callback
+        self.called_back = False
+        self.ended = False
+
+    def connectionMade(self):
+        logger.info("LocalTwistedSlaveProcess started in pid %s" % self.transport.pid )
+        self.transport.closeStdin()
+        #self.slave.connected()
+
+
+    def outReceived(self, data):
+        if not self.called_back:
+            self.called_back = True
+            self.connectionMade_callback()
+        print data
+
+    def errReceived(self, data):
+        print data
+
+    def processEnded(self,status):
+        exit_code = status.value.exitCode
+        if exit_code != 0:
+            self.error_callback
+        self.ended = True
+
+    def reactor_is_shutting_down(self):
+        if not self.ended:
+            self.transport.loseConnection()
+
+        return None
+
 
 class LocalTwistedSlave:
 
@@ -325,21 +365,30 @@ class LocalTwistedSlave:
 
 
     def start_subprocess(self):
-        cmd = ['python', os.path.join(os.path.dirname(__file__), 'util', 'twisted_slave.py')]
-        self.process = subprocess.Popen(cmd, cwd=os.getcwd())#, stdout=subprocess.PIPE)
-        time.sleep(1)
+        cmd = ['python', os.path.abspath(os.path.join(os.path.dirname(__file__), 'util', 'twisted_slave.py'))]
+        def do_connect():
+            logger.info("Connecting to 500001")
+            ClientCreator(reactor, AMP_Return_Protocol(self)).connectTCP('127.0.0.1', 50001).addCallbacks(
+                    self.connected,
+                    self.rc.slave_connection_failed
+                    )
+        try:
+            protocol = LocalTwistedSlaveProcess(do_connect, self.rc.slave_connection_failed)
+            self.process = reactor.spawnProcess(protocol, cmd[0],
+                    args = cmd, env=os.environ)
+        except:
+            reactor.stop()
+            raise
+        reactor.addSystemEventTrigger('before','shutdown', protocol.reactor_is_shutting_down)
+        #self.process = subprocess.Popen(cmd, cwd=os.getcwd())#, stdout=subprocess.PIPE)
+        #time.sleep(1)
         #port = self.process.stdout.read()
         #logger.info("Connecting to %s" % port)
-        logger.info("Connecting to 500001")
-        ClientCreator(reactor, AMP_Return_Protocol(self)).connectTCP('127.0.0.1', 50001).addCallbacks(
-                self.connected,
-                self.rc.slave_connection_failed
-                )
         pass
     
     def terminate_process(self, org):
         logger.info("Shutting down process of %s" % self.slave_id)
-        self.process.communicate()
+        self.process.kill()
 
     def connected(self, proto):
         self.amp = proto
@@ -351,8 +400,13 @@ class LocalTwistedSlave:
         self.rc.start_when_ready({'ok': False, 'exception': 'Unknown'}, self.slave_id)
 
     def transmit_pipegraph(self, pipegraph):
-        data = cloudpickle.dumps(pipegraph.jobs, 0)
-        cPickle.loads(data)
+        data = cloudpickle.dumps(pipegraph.jobs, 2)#must be at least version two for the correct new-style class pickling
+        #try: #TODO: remove this unnecessary check
+            #cPickle.loads(data)
+        #except:
+            #print 'error in reloading pipegraph'
+            #reactor.stop()
+            #raise
         return self.amp.callRemote(messages.TransmitPipegraph, jobs=data)
 
     def spawn(self, job):
