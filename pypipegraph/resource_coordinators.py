@@ -257,8 +257,9 @@ class LocalTwisted:
             reactor.stop()
 
     def slave_connection_failed(self, slave_id):
-        raise ppg_exceptions.CommunicationFailure('Could not connect to slave %s' % slave_id)
-
+        logger.info("Slave %s connection failed" % slave_id)
+        reactor.callLater(0, lambda : reactor.stop())
+        
 
     def job_ended(self, slave_id, was_ok, job_id_done, stdout, stderr,exception, trace, new_jobs):
         logger.info("Job returned: %s, was_ok: %s, new_jobs %s" % (job_id_done, was_ok, new_jobs))
@@ -342,11 +343,17 @@ class LocalTwistedSlaveProcess(ProcessProtocol):
     def errReceived(self, data):
         print data
 
-    def processEnded(self,status):
+    def processExited(self,status):
+        logger.info("Slave process ended, exit code %s" % status.value.exitCode)
         exit_code = status.value.exitCode
         if exit_code != 0:
-            self.error_callback
+            self.error_callback()
         self.ended = True
+
+    def processEnded(self, status):
+        exit_code = status.value.exitCode
+        if exit_code != 0:
+            raise ppg_exceptions.CommunicationFailure('Could not connect to slave, check logging to see which one') 
 
     def reactor_is_shutting_down(self):
         if not self.ended:
@@ -365,7 +372,8 @@ class LocalTwistedSlave:
 
 
     def start_subprocess(self):
-        cmd = ['python', os.path.abspath(os.path.join(os.path.dirname(__file__), 'util', 'twisted_slave.py'))]
+        self.magic_key = "%s" % time.time()
+        cmd = ['python', os.path.abspath(os.path.join(os.path.dirname(__file__), 'util', 'twisted_slave.py')), self.magic_key]
         def do_connect():
             logger.info("Connecting to 500001")
             ClientCreator(reactor, AMP_Return_Protocol(self)).connectTCP('127.0.0.1', 50001).addCallbacks(
@@ -373,7 +381,7 @@ class LocalTwistedSlave:
                     self.rc.slave_connection_failed
                     )
         try:
-            protocol = LocalTwistedSlaveProcess(do_connect, self.rc.slave_connection_failed)
+            protocol = LocalTwistedSlaveProcess(do_connect, lambda : self.rc.slave_connection_failed(self.slave_id))
             self.process = reactor.spawnProcess(protocol, cmd[0],
                     args = cmd, env=os.environ)
         except:
@@ -391,8 +399,31 @@ class LocalTwistedSlave:
         self.process.kill()
 
     def connected(self, proto):
+        logger.info("Transport established")
         self.amp = proto
-        self.transmit_pipegraph(self.rc.pipegraph).addCallbacks(
+        self.amp.callRemote(messages.MagicKey).addCallbacks(
+                self.magic_key_check, 
+                self.magic_key_command_failed)
+
+    def magic_key_command_failed(self, failure):
+        logger.info("Magic key command failed: %s" % failure)
+        self.amp.callRemote(messages.ShutDown).addCallbacks(
+                self.rc.slave_connection_failed,
+                self.rc.slave_connection_failed,
+                )
+
+    def magic_key_check(self, result):
+        logger.info("Received magic key: %s" % result)
+        if not 'key' in result:
+            self.transmit_pipegraph_failed()
+        if result['key'] != self.magic_key:
+            logger.info("wrong magic key, sending shutdown")
+            self.amp.callRemote(messages.ShutDown).addCallbacks(
+                    self.transmit_pipegraph_failed, 
+                    self.transmit_pipegraph_failed)
+            self.transmit_pipegraph_failed()
+        else:
+            self.transmit_pipegraph(self.rc.pipegraph).addCallbacks(
                 lambda result: self.rc.start_when_ready(result, self.slave_id), 
                 self.transmit_pipegraph_failed)
 
