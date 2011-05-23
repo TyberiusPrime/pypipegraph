@@ -22,4 +22,10 @@ class JobEnded(amp.Command):
             ]
     response = [('ok', amp.Boolean())]
 
+class MagicKey(amp.Command): 
+    """A command to verify we have the right client"""
+    arguments = []
+    response = [('key', amp.String())]
+            
+
 
