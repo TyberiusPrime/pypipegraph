@@ -51,6 +51,7 @@ class Job(object):
             raise ppg_exceptions.JobContractError("Job_id must be a string")
         if not job_id in util.job_uniquifier:
             util.job_uniquifier[job_id] = object.__new__(cls)
+            util.job_uniquifier[job_id].job_id = job_id #doing it later will fail because hash apperantly might be called before init has run?
         else:
             if util.job_uniquifier[job_id].__class__ != cls:
                 raise ppg_exceptions.JobContractError("Same job id, different job classes for %s" % job_id)
@@ -165,6 +166,9 @@ class Job(object):
         return other is self
 
     def __hash__(self):
+        if not hasattr(self, 'job_id'):
+            print 'missing job id'
+            print dir(self)
         return hash(self.job_id)
     
     def __add__(self, other_job):
@@ -320,9 +324,12 @@ class FileGeneratingJob(Job):
 
 class MultiFileGeneratingJob(FileGeneratingJob):
 
-    def __new__(cls, filenames, function, rename_broken = False):
+    def __new__(cls, filenames, *args, **kwargs):
         job_id = ":".join(sorted(str(x) for x in filenames))
         return Job.__new__(cls, job_id)
+
+    def __getnewargs__(self):  #so that unpickling works
+        return (self.filenames,)
 
     def __init__(self, filenames, function, rename_broken = False):
         job_id = ":".join(sorted(str(x) for x in filenames))
