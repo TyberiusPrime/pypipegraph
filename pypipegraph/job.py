@@ -90,8 +90,9 @@ class Job(object):
 
         for job in job_joblist_or_list_of_jobs:
             if self in job.prerequisites:
-                raise exceptions.CycleError("Cycle adding %s to %s" % (self.job_id, job.job_id))
-        self.prerequisites.add(job)
+                raise ppg_exceptions.CycleError("Cycle adding %s to %s" % (self.job_id, job.job_id))
+        for job in job_joblist_or_list_of_jobs:
+            self.prerequisites.add(job)
         return self
 
     def ignore_code_changes(self):
@@ -320,7 +321,7 @@ class FileGeneratingJob(Job):
                 pass
             raise e
         if not util.output_file_exists(self.job_id):
-            raise exceptions.JobContractError("%s did not create its file" % (self.job_id,))
+            raise ppg_exceptions.JobContractError("%s did not create its file" % (self.job_id,))
 
 
 class MultiFileGeneratingJob(FileGeneratingJob):
@@ -500,7 +501,7 @@ class DependencyInjectionJob(_GraphModifyingJob):
                 if nw in job.prerequisites:
                     logger.info("Checking %s against %s - %s" % (nw, job, job in self.dependants))
                     if not job in self.dependants:
-                        raise ppg_exceptions.JobContractError("DependencyInjectionJob %s tried to inject %s into %s, but %s was not dependand on the DependencyInjectionJob" % (self, nw, job, job))
+                        raise ppg_exceptions.JobContractError("DependencyInjectionJob %s tried to inject %s into %s, but %s was not dependand on the DependencyInjectionJob. It was dependeand on %s though" % (self, nw, job, job, nw.prerequisites))
                     nw.dependants.add(job)
         #I need to check: All new jobs are now prereqs of my dependands
         #I also need to check that none of the jobs that ain't dependand on me have been injected

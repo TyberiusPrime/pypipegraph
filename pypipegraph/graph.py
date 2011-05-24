@@ -231,6 +231,7 @@ class Pipegraph(object):
         #the rc loop externalizes the start_jobs / job_executed, start more jobs
         self.running_jobs = set()
         if self.possible_execution_order: #no jobs, no spawning...
+            self.rc.pipegraph = self
             self.rc.enter_loop() #doesn't return until all jobs have been done.
         logger.info("Control returned from ResourceCoordinator")
 

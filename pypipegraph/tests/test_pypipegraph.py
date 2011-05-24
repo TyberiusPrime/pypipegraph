@@ -8,7 +8,8 @@ import os
 import shutil
 import subprocess
 
-rc = ppg.resource_coordinators.LocalTwisted()
+#rc = ppg.resource_coordinators.LocalTwisted()
+rc = ppg.resource_coordinators.LocalSystem()
 
 def read(filename): 
     """simply read a file"""
@@ -261,6 +262,7 @@ class FileGeneratingJobTests(PPGPerTest):
             ppg.run_pipegraph()
         self.assertRaises(ppg.RuntimeError, inner)
         self.assertTrue(job.failed)
+        print job.exception
         self.assertTrue(isinstance(job.exception, ppg.JobContractError))
         self.assertFalse(os.path.exists(of))
 
@@ -896,7 +898,7 @@ class InvariantTests(PPGPerTest):
         ftfn = 'out/ftdep'
         write(ftfn,'hello')
         import stat
-        logging.info('file time after creating %s'% os.stat(ftfn)[stat.ST_MTIME])
+        #logging.info('file time after creating %s'% os.stat(ftfn)[stat.ST_MTIME])
 
         write(of,'hello')
 
@@ -913,7 +915,7 @@ class InvariantTests(PPGPerTest):
         self.assertEqual(read(of), 'shu') #job does not get rerun...
 
         time.sleep(1) #so linux actually advances the file time in the next line
-        logging.info("NOW REWRITE")
+        #logging.info("NOW REWRITE")
         write(ftfn,'hello') #same content, different time
 
         ppg.new_pipegraph(rc)
@@ -1082,19 +1084,19 @@ class DependencyInjectionJobTests(PPGPerTest):
         o = Dummy()
         of = 'out/A'
         def do_write():
-            logging.info("Accessing dummy (o) %i in pid %s" % (id(o), os.getpid()))
+            #logging.info("Accessing dummy (o) %i in pid %s" % (id(o), os.getpid()))
             write(of, o.A + o.B)
         job = ppg.FileGeneratingJob(of, do_write)
         def generate_deps():
             def load_a():
-                logging.info('executing load A')
+                #logging.info('executing load A')
                 return "A"
             def load_b():
-                logging.info('executing load B')
+                #logging.info('executing load B')
                 return "B"
-            logging.info("Creating dl on %i in pid %s" % (id(o), os.getpid()))
+            #logging.info("Creating dl on %i in pid %s" % (id(o), os.getpid()))
             dlA = ppg.AttributeLoadingJob('dlA', o, 'A', load_a)
-            logging.info("created dlA")
+            #logging.info("created dlA")
             dlB = ppg.AttributeLoadingJob('dlB', o, 'B', load_b)
             job.depends_on(dlA)
             job.depends_on(dlB)
@@ -1690,7 +1692,7 @@ class TestingTheUnexpectedTests(PPGPerTest):
     def test_job_killing_python(self):
         def dies():
             import sys
-            logging.info("Now terminating child python")
+            #logging.info("Now terminating child python")
             sys.exit(5)
         fg = ppg.FileGeneratingJob('out/A', dies)
         try:
@@ -1700,7 +1702,7 @@ class TestingTheUnexpectedTests(PPGPerTest):
         except ppg.RuntimeError:
             pass
         self.assertFalse(os.path.exists('out/A'))
-        self.assertTrue(isinstance(fg.exception, ppg.exceptions.JobDied))
+        self.assertTrue(isinstance(fg.exception, ppg.ppg_exceptions.JobDied))
         self.assertEqual(fg.exception.exit_code, 5)
 
 
