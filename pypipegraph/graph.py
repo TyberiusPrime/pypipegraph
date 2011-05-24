@@ -50,7 +50,7 @@ class Pipegraph(object):
         self.rc.pipegraph = None
 
     def add_job(self, job):
-        logger.info("Adding job %s" % job)
+        #logger.info("Adding job %s" % job)
         if not self.running:
             if self.was_run:
                 raise ValueError("This pipegraph was already run. You need to create a new one for more jobs")
@@ -62,7 +62,8 @@ class Pipegraph(object):
                 logger.info("Adding job to new_jobs %s %s" % (job, id(self.new_jobs)))
                 self.new_jobs[job.job_id] = job
             else:
-                logger.info("Already knew the job %s, not keeping it as new" % job)
+                pass
+                #logger.info("Already knew the job %s, not keeping it as new" % job)
 
 
     def run(self):
@@ -377,6 +378,7 @@ class Pipegraph(object):
                 logger.info("Adding %s to possible_execution_order"%  job)
                 self.possible_execution_order.append(job)
             elif not job.runs_in_slave(): 
+                logger.info("ignoring invariont "%  job)
                 job.was_run = True #invarites get marked as ran..
             else:
                 logger.info("Not doing anything with %s, was done"%  job)

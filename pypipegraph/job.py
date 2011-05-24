@@ -46,7 +46,7 @@ class JobList(object):
 class Job(object):
 
     def __new__(cls, job_id, *args, **kwargs):
-        logger.info("New for %s %s" % (cls, job_id))
+        #logger.info("New for %s %s" % (cls, job_id))
         if not isinstance(job_id, str):
             raise ppg_exceptions.JobContractError("Job_id must be a string")
         if not job_id in util.job_uniquifier:
@@ -66,27 +66,29 @@ class Job(object):
         return (self.job_id, )
 
     def __init__(self, job_id):
-        logger.info("init for %s" % job_id)
-        self.job_id = job_id
-        self.cores_needed = 1
-        self.memory_needed = -1
-        self.dependants = set()
-        self.prerequisites = set()
-        self.failed = None
-        self.error_reason = "no error"
-        self.stdout = None
-        self.stderr = None
-        self.exception = None
-        self.was_run = False
-        self.was_done_on = set() #on which slave(s) was this job run?
-        self.was_loaded = False
-        self.was_invalidated = False
-        logger.info("adding self %s to %s" % (job_id, id(util.global_pipegraph)))
+        #logger.info("init for %s" % job_id)
+        if not hasattr(self, 'dependants'): #test any of the following
+            #else: this job was inited before, and __new__ returned an existing instance 
+            self.job_id = job_id
+            self.cores_needed = 1
+            self.memory_needed = -1
+            self.dependants = set()
+            self.prerequisites = set()
+            self.failed = None
+            self.error_reason = "no error"
+            self.stdout = None
+            self.stderr = None
+            self.exception = None
+            self.was_run = False
+            self.was_done_on = set() #on which slave(s) was this job run?
+            self.was_loaded = False
+            self.was_invalidated = False
+        #logger.info("adding self %s to %s" % (job_id, id(util.global_pipegraph)))
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
 
     def depends_on(self, job_joblist_or_list_of_jobs):
-        if isinstance(job_joblist_or_list_of_jobs, Job):
-            job_joblist_or_list_of_jobs = [job_joblist_or_list_of_jobs]
+        #if isinstance(job_joblist_or_list_of_jobs, Job):
+            #job_joblist_or_list_of_jobs = [job_joblist_or_list_of_jobs]
 
         for job in job_joblist_or_list_of_jobs:
             if self in job.prerequisites:
@@ -94,6 +96,16 @@ class Job(object):
         for job in job_joblist_or_list_of_jobs:
             self.prerequisites.add(job)
         return self
+    
+    def is_in_dependency_chain(self, other_job):
+        """check wether the other job is in this job's dependency chain"""
+        if other_job in self.prerequisites:
+            return True
+        else:
+            for preq in self.prerequisites:
+                if preq.is_in_dependency_chain(other_job):
+                    return True
+        return False
 
     def ignore_code_changes(self):
         raise ValueError("This job does not support ignore_code_changes")
@@ -427,6 +439,8 @@ class AttributeLoadingJob(DataLoadingJob):
     def __init__(self, job_id, object, attribute_name, callback):
         self.object = object
         self.attribute_name = attribute_name
+        if not hasattr(callback, '__call__'):
+            raise ValueError("Callback for %s was not callable (missed __call__ attribute)" % job_id)
         DataLoadingJob.__init__(self, job_id, callback)
 
     def ignore_code_changes(self):
@@ -493,8 +507,10 @@ class DependencyInjectionJob(_GraphModifyingJob):
     def run(self):
         #this is different form JobGeneratingJob.run in it's checking of the contract
         util.global_pipegraph.new_jobs = {}
-        logger.info("new_jobs id %s"  %id(util.global_pipegraph.new_jobs))
+        logger.info("DependencyInjectionJob.dependants = %s %s" % (", ".join(str(x) for x in self.dependants), id(self.dependants)))
         self.callback()
+        logger.info("DependencyInjectionJob.dependants after callback = %s %s" % (", ".join(str(x) for x in self.dependants), id(self.dependants)))
+        logger.info("new_jobs count: %i, id %s"  % ( len(util.global_pipegraph.new_jobs), id(util.global_pipegraph.new_jobs)))
         #we now need to fill new_jobs.dependants
         for job in util.global_pipegraph.jobs.values():
             for nw in util.global_pipegraph.new_jobs.values():
@@ -508,7 +524,7 @@ class DependencyInjectionJob(_GraphModifyingJob):
         for job in util.global_pipegraph.jobs.values():
             if job in self.dependants:
                 for new_job in util.global_pipegraph.new_jobs.values():
-                    if not new_job in job.prerequisites:
+                    if not new_job in job.prerequisites and not job.is_in_dependency_chain(new_job): 
                         raise ppg_exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was not added to the prerequisites of %s" % (self.job_id, new_job.job_id, job.job_id))
             else:
                 for new_job in util.global_pipegraph.new_jobs.values():
@@ -645,6 +661,8 @@ class CachedJob(AttributeLoadingJob):
         return Job.__new__(cls, job_id + '_load')
     
     def __init__(self, cache_filename, target_object, target_attribute, calculating_function):
+        if not hasattr(calculating_function, '__call__'):
+            raise ValueError("calculating_function for %s was not callable (missed __call__ attribute)" % cache_filename)
         def do_load():
             op = open(cache_filename, 'rb')
             data = cPickle.load(op)
