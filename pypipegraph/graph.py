@@ -169,9 +169,9 @@ class Pipegraph(object):
             old = self.invariant_status[job.job_id]
             try:
                 inv = job.get_invariant(old)
-                logger.info("%s invariant was %s, is now %s" % (job, old,inv))
+                #logger.info("%s invariant was %s, is now %s" % (job, old,inv))
             except util.NothingChanged, e:
-                logger.info("Invariant difference, but NothingChanged")
+                #logger.info("Invariant difference, but NothingChanged")
                 inv = e.new_value
                 old = inv #so no change...
             if inv != old:

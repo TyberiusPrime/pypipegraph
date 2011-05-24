@@ -1568,6 +1568,22 @@ class CachedJobTests(PPGPerTest):
             x = ppg.CachedJob('out/mycalc', calc, o, 'a')
         self.assertRaises(ValueError, inner)
 
+    def test_calc_depends_on_added_dependencies(self):
+        o = Dummy()
+        load_attr = ppg.AttributeLoadingJob('load_attr', o, 'o', lambda: 55)
+        def calc():
+            return o.o
+        def out():
+            write('out/A', str(o.o2))
+        cached = ppg.CachedJob('out/cached_job', o , 'o2', calc)
+        fg = ppg.FileGeneratingJob('out/A', out)
+        fg.depends_on(cached)
+        cached.depends_on(load_attr)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/A'), '55')
+
+
+
 class TestResourceCoordinator:
     def __init__(self, list_of_slaves):
         """List of slaves entries are tuples of (name, number of cores, megabytes of memory)"""

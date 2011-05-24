@@ -138,22 +138,22 @@ class Job(object):
             dep.invalidated()
 
     def can_run_now(self):
-        logger.info("can_run_now %s" % self)
+        #logger.info("can_run_now %s" % self)
         for preq in self.prerequisites:
             if preq.is_done():
                 if preq.was_invalidated and not preq.was_run and not preq.is_loadable(): 
                     #was_run is necessary, a filegen job might have already created the file (and written a bit to it), but that does not mean that it's done enough to start the next one. Was_run means it has returned.
                     #On the other hand, it might have been a job that didn't need to run, then was_invalidated should be false.
                     #or it was a loadable job anyhow, then it doesn't matter.
-                    logger.info("case 1 - false %s" % preq)
+                    #logger.info("case 1 - false %s" % preq)
                     return False #false means no way
                 else:
-                    logger.info("case 2 - delay") #but we still need to try the other preqs if it was ok
+                    #logger.info("case 2 - delay") #but we still need to try the other preqs if it was ok
                     pass
             else:
-                logger.info("case 3 - false because of %s" % preq)
+                #logger.info("case 3 - false because of %s" % preq)
                 return False
-        logger.info("case 4 - true")
+        #logger.info("case 4 - true")
         return True
 
     def run(self):
@@ -420,6 +420,7 @@ class DataLoadingJob(Job):
         return True
 
     def load(self):
+        logger.info("%s.load" % self)
         if self.was_loaded:
             return
         for preq in self.prerequisites: #load whatever is necessary...
@@ -453,6 +454,7 @@ class AttributeLoadingJob(DataLoadingJob):
     def load(self):
         logger.info("%s load" % self)
         if self.was_loaded:
+            logger.info('Was loaded')
             return
         for preq in self.prerequisites: #load whatever is necessary...
             if preq.is_loadable():
@@ -670,8 +672,12 @@ class CachedJob(AttributeLoadingJob):
             return data
         AttributeLoadingJob.__init__(self, cache_filename + '_load', target_object, target_attribute, do_load)
         lfg = _LazyFileGeneratingJob(cache_filename, calculating_function, self)
-        self.depends_on(lfg)
         self.lfg = lfg
+        Job.depends_on(self, lfg)
+
+    def depends_on(self, jobs):
+        self.lfg.depends_on(jobs)
+        Job.depends_on(self, jobs)
 
     def ignore_code_changes(self):
         self.lfg.ignore_code_changes()
