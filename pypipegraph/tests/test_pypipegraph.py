@@ -1147,6 +1147,53 @@ class DependencyInjectionJobTests(PPGPerTest):
         ppg.run_pipegraph()
         self.assertEqual(read("out/A"), 'B')
 
+    def test_injecting_cached_job(self):
+        dummy = Dummy()
+        of = 'out/A'
+        def do_write():
+            write(of, dummy.o)
+        preq = ppg.DataLoadingJob('out/C', lambda: None)
+        def get_job():
+            return ppg.FileGeneratingJob(of, do_write).depends_on(preq) #always the same job comes back from the singletonizing constructer
+        def generate_dep():
+            def write_B():
+                write("out/B", "B")
+                return 'B'
+            inner_job = ppg.CachedJob('out/B', dummy, 'o', write_B)
+            get_job().depends_on(inner_job)
+        job_gen = ppg.DependencyInjectionJob('gen_job', generate_dep)
+        get_job().depends_on(job_gen)
+        ppg.run_pipegraph()
+        self.assertEqual(read("out/A"), 'B')
+
+
+class DependencyInjectionJobTests_Complex(PPGPerTest):
+    #modeled after a real use case ;)
+
+    def calc(self):
+        def load():
+            self.o = 'hello' + self.a
+        load_job =  ppg.DataLoadingJob('daload', load).depends_on(self.generate_calc_jobs())
+        return load_job
+
+    def generate_calc_jobs(self):
+        def gen():
+            load_job = self.calc()
+            def in_calc():
+                return 'hello'
+            job = ppg.CachedJob('out/cached', self, 'a', in_calc)
+            load_job.depends_on(job)
+        gen = ppg.DependencyInjectionJob('_gen_jobs', gen)
+        return gen
+
+    def test(self):
+        of = ppg.FileGeneratingJob('out/A', lambda: write('out/A', self.o)).depends_on(self.calc())
+        ppg.run_pipegraph()
+        self.assertEqual(self.o, 'hellohello')
+        self.assertEqual(read('out/A'), 'hellohello')
+
+
+
 class JobGeneratingJobTests(PPGPerTest):
 
     def test_basic(self):
@@ -1513,6 +1560,14 @@ class CachedJobTests(PPGPerTest):
                 read(of),
                 ", ".join(str(x) for x in range(0, 200))) #The new stuff - you either have an explicit ignore_code_changes in our codebase, or we enforce consistency between code and result
 
+    def test_throws_on_non_function_func(self):
+        o = Dummy()
+        def calc():
+            return 55
+        def inner():
+            x = ppg.CachedJob('out/mycalc', calc, o, 'a')
+        self.assertRaises(ValueError, inner)
+
 class TestResourceCoordinator:
     def __init__(self, list_of_slaves):
         """List of slaves entries are tuples of (name, number of cores, megabytes of memory)"""
@@ -1718,7 +1773,11 @@ class NotYetImplementedTests(unittest.TestCase):
 
 
     def test_spawn_slave_failure(self):
-        pass
+        return NotImplementedError()
+
+    def testOnlyFuncsAreAccepted(self):
+        #done for cached...
+        return NotImplementedError()
 
 
 
