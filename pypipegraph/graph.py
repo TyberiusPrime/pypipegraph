@@ -57,7 +57,7 @@ class Pipegraph(object):
             self.jobs[job.job_id] = job
         else:
             if self.new_jobs is False:
-                raise ValueError("Trying to add new jobs to running pipeline without having new_jobs set (ie. outside of a graph modifying job)")
+                raise ValueError("Trying to add new jobs to running pipeline without having new_jobs set (ie. outside of a graph modifying job) - tried to add %s" %  job)
             if not job.job_id in self.jobs:
                 logger.info("Adding job to new_jobs %s %s" % (job, id(self.new_jobs)))
                 self.new_jobs[job.job_id] = job
@@ -218,7 +218,7 @@ class Pipegraph(object):
         maximal_cores = max([x['cores'] for x in resources.values()])
 
         for job in self.possible_execution_order:
-            logger.info("checking job %s,  %s %s vs %s %s " % (job, job.cores_needed, job.memory_needed, maximal_cores, maximal_memory))
+            #logger.info("checking job %s,  %s %s vs %s %s " % (job, job.cores_needed, job.memory_needed, maximal_cores, maximal_memory))
             if job.cores_needed > maximal_cores or job.memory_needed > maximal_memory:
                 logger.info("Pruning job %s,  needed to many resources" % job)
                 self.prune_job(job)
@@ -259,14 +259,14 @@ class Pipegraph(object):
                 if resources[slave]['cores'] > 0 and resources[slave]['memory'] > 0:
                     return True
             return False
-        to_remove = []
         error_count = len(self.jobs) * 2
         runnable_jobs = [job for job in self.possible_execution_order if job.can_run_now()]
         if self.possible_execution_order and not runnable_jobs and not self.running_jobs:
             raise ppg_exceptions.RuntimeException(
             """We had more jobs that needed to be done, none of them could be run right now and none were running. Sounds like a dependency graph bug to me""")
         while resources_available(resources) and runnable_jobs:
-            logger.info("resources were available")
+            logger.info("resources were available %s " % resources)
+            to_remove = []
             for slave in resources:
                 if resources[slave]['cores'] > 0 and resources[slave]['memory'] > 0:
                     next_job = 0
@@ -278,10 +278,10 @@ class Pipegraph(object):
                             #Todo: Keep track of which dataloadingjobs have already been performed on each node
                             #and prioritize by that...
                             if job.modifies_jobgraph():
+                                to_remove.append(job) #remove just once...
                                 for slave in self.slaves:
                                     self.slaves[slave].spawn(job)
                                     self.running_jobs.add(job)
-                                    to_remove.append(job)
                                     resources[slave]['cores'] = 0 #since the job modifying blocks the Slave-Process (runs in it), no point in spawning further ones till it has returned.
                             else:
                                 if (job.cores_needed == -1 and resources[slave]['cores'] == resources[slave['total cores']]
@@ -292,7 +292,7 @@ class Pipegraph(object):
                                         resources[slave]['cores'] = 0
                                         #don't worry about memory...
                                         continue
-                                elif (job.cores_needed < resources[slave]['cores'] 
+                                elif (job.cores_needed <= resources[slave]['cores'] 
                                     and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
                                     self.slaves[slave].spawn(job)
                                     self.running_jobs.add(job)
@@ -305,17 +305,19 @@ class Pipegraph(object):
                                         continue
                                 else:
                                     #this job needed to much resources, or was not runnable
-                                    logger.info("Job needed too many resources %s" % job)
+                                    #logger.info("Job needed too many resources %s" % job)
                                     runnable_jobs.remove(job) #can't run right now, maybe later...
                         next_job += 1
+                logger.info('Resources after spawning %s' % resources)
                 for job in to_remove:
                     logger.info("removing job %s" % job)
                     self.possible_execution_order.remove(job) #certain we could do better than with a list...
+                    logger.info("removing job from runnable %s" % job)
                     runnable_jobs.remove(job)
             error_count -= 1
             if error_count == 0:
                 raise ValueError("There was a loop error that should never 've been reached in start_jobs")
-        logger.info("can't start any more jobs. either no more there, or resources all utilized")
+        logger.info("can't start any more jobs. either no more there, or resources all utilized. There are currently %i jobs remaining" % len(self.possible_execution_order))
 
              
     def prune_job(self, job):
@@ -384,7 +386,7 @@ class Pipegraph(object):
                 logger.info("Not doing anything with %s, was done"%  job)
         #for slave in self.slaves.values():
             #slave.transmit_new_jobs(new_jobs)
-        self.check_all_jobs_can_be_executed()
+        self.check_all_jobs_can_be_executed() #for this, the job must be in possible_execution_order
            
 
     def tranfer_new_jobs(self):

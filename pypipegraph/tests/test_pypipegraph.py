@@ -214,6 +214,11 @@ class JobTests(unittest.TestCase):
         jobA = ppg.FileGeneratingJob('out/',lambda : None)
         self.assertTrue(hasattr(jobA, '__hash__'))
 
+    def test_depends_on_returns_self(self):
+        ppg.new_pipegraph()
+        jobA = ppg.FileGeneratingJob('out/A',lambda : write('out/A', 'shu'))
+        jobB = ppg.FileGeneratingJob('out/B' ,lambda : write('out/B', 'shu'))
+        self.assertTrue(jobA.depends_on(jobB) is jobA)
 
 
 
@@ -1166,6 +1171,29 @@ class DependencyInjectionJobTests(PPGPerTest):
         ppg.run_pipegraph()
         self.assertEqual(read("out/A"), 'B')
 
+    def test_invariant_injection_of_created_jobs(self):
+        of = 'out/A'
+        def do_write():
+            write(of, read("out/B"))
+        job = ppg.FileGeneratingJob(of, do_write)
+        def generate_dep():
+            def write_B():
+                write("out/B", "B")
+            inner_job = ppg.FileGeneratingJob('out/B', write_B)
+            job.depends_on(inner_job)
+        job_gen = ppg.DependencyInjectionJob('gen_job', generate_dep)
+        job.depends_on(job_gen)
+        ppg.run_pipegraph()
+        self.assertEqual(read("out/A"), 'B')
+        re_inner_job = ppg.util.global_pipegraph.jobs['out/B']
+        found = False
+        for dep in re_inner_job.prerequisites:
+            if isinstance(dep, ppg.job.FunctionInvariant):
+                found = True
+        self.assertTrue(found)
+
+
+
 
 class DependencyInjectionJobTests_Complex(PPGPerTest):
     #modeled after a real use case ;)
@@ -1206,6 +1234,38 @@ class JobGeneratingJobTests(PPGPerTest):
         self.assertTrue(read('out/A'), 'A')
         self.assertTrue(read('out/B'), 'B')
         self.assertTrue(read('out/C'), 'C')
+
+    def test_basic_injecting_auto_invariants(self):
+        def gen():
+            jobA = ppg.FileGeneratingJob('out/A', lambda : write('out/A', 'A'))
+            jobB = ppg.FileGeneratingJob('out/B', lambda : write('out/B', 'B'))
+            jobC = ppg.FileGeneratingJob('out/C', lambda : write('out/C', 'C'))
+        genjob = ppg.JobGeneratingJob('genjob', gen)
+        ppg.run_pipegraph()
+        self.assertTrue(read('out/A'), 'A')
+        self.assertTrue(read('out/B'), 'B')
+        self.assertTrue(read('out/C'), 'C')
+        re_inner_job = ppg.util.global_pipegraph.jobs['out/A']
+        found = False
+        for dep in re_inner_job.prerequisites:
+            if isinstance(dep, ppg.job.FunctionInvariant):
+                found = True
+        self.assertTrue(found)
+
+    def test_raises_if_needs_more_cores_than_we_have(self):
+        def gen():
+            jobA = ppg.FileGeneratingJob('out/A', lambda : write('out/A', 'A'))
+            jobA.cores_needed = 20000
+        genjob = ppg.JobGeneratingJob('genjob', gen)
+        try:
+            ppg.run_pipegraph()
+            raise ValueError("should not be reached")
+        except ppg.RuntimeError:
+            pass
+        self.assertFalse(os.path.exists('out/A')) #since the gen job crashed
+        jobGenerated = ppg.util.global_pipegraph.jobs['out/A']
+        self.assertTrue(jobGenerated.failed)
+        self.assertEqual(jobGenerated.error_reason, "Needed to much memory/cores")
 
     def test_raises_if_needs_more_cores_than_we_have(self):
         def gen():
@@ -1581,6 +1641,13 @@ class CachedJobTests(PPGPerTest):
         cached.depends_on(load_attr)
         ppg.run_pipegraph()
         self.assertEqual(read('out/A'), '55')
+
+    def test_depends_on_returns_self(self):
+        ppg.new_pipegraph()
+        o = Dummy()
+        jobA = ppg.CachedJob('out/A',o, 'shu', lambda : write('out/A', 'shu'))
+        jobB = ppg.FileGeneratingJob('out/B' ,lambda : write('out/B', 'shu'))
+        self.assertTrue(jobA.depends_on(jobB) is jobA)
 
 
 
