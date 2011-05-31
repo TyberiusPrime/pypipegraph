@@ -1847,6 +1847,9 @@ class TestingTheUnexpectedTests(PPGPerTest):
 
 class NotYetImplementedTests(unittest.TestCase):
     pass
+    
+    def test_function_invariant_and_generator_expressions(self):
+        raise NotYetImplementedTests()
 
     def test_chained_dataloading_jobs(self):
         raise NotImplementedError()

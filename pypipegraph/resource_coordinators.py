@@ -151,7 +151,7 @@ class LocalSlave:
             exception = e
             try:
                 exception = cPickle.dumps(exception)
-            except cPickle.PicklingError: #some exceptions can't be pickled, so we send a string instead
+            except Exception, e: #some exceptions can't be pickled, so we send a string instead
                 exception = str(exception)
         stdout = stdout.getvalue()
         stderr = stderr.getvalue()

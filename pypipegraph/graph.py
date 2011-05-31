@@ -4,6 +4,7 @@ import resource_coordinators
 import cPickle
 import ppg_exceptions
 import util
+import sys
 logger = util.start_logging('graph')
 
 invariant_status_filename= '.pypipegraph_status'
@@ -93,9 +94,17 @@ class Pipegraph(object):
         self.destroy_job_connections()
 
         #and propagate if there was an exception
+        any_failed = False
         for job in self.jobs.values():
             if job.failed:
-                raise ppg_exceptions.RuntimeError()
+                if not any_failed:
+                    print >>sys.stderr, '\n------Pipegraph error-----'
+                any_failed = True
+                if job.error_reason != 'Indirect':
+                    self.print_failed_job(job)
+        if any_failed:
+            print >>sys.stderr, '\n------Pipegraph output end-----'
+            raise ppg_exceptions.RuntimeError()
 
     def inject_auto_invariants(self):
         """Go through each job and ask it to create the invariants it might need.
@@ -176,6 +185,10 @@ class Pipegraph(object):
                 old = inv #so no change...
             if inv != old:
                 logger.info("Invariant change for %s" % job)
+                if type(old) is str and type(inv) is str:
+                    import difflib
+                    for line in difflib.unified_diff(old.split("\n"), inv.split("\n"), n=5):
+                        logger.info(line)
                 job.invalidated()
                 self.invariant_status[job.job_id] = inv # for now, it is the dependant job's job to clean up so they get reinvalidated if the executing is terminated before they are reubild (ie. filegenjobs delete their outputfiles)
 
@@ -397,6 +410,18 @@ class Pipegraph(object):
             self.jobs[job_id] = self.new_jobs[job_id]
 
 
+
+
+    def print_failed_job(self, job):
+        print >> sys.stderr, '-' * 75
+        print >> sys.stderr, '%s failed. Reason:' % (job, )
+        if job.exception:
+            print >>sys.stderr,  '\tThrew an exception %s' % (job.exception,)
+            print >>sys.stderr,  '\tTraceback: %s' % (job.trace,)
+
+        print >>sys.stderr, '\t stdout was %s' % (job.stdout,)
+        print >>sys.stderr, '\t stderr was %s' % (job.stderr,)
+        print >>sys.stderr, ''
 
     def dump_html_status(self):
         if not os.path.exists('logs'):
