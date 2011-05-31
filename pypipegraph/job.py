@@ -198,7 +198,7 @@ class Job(object):
     def __str__(self):
         return "%s (job_id=%s,id=%s)" % (self.__class__.__name__, self.job_id, id(self))
 
-lambdare = re.compile('<code	object	<lambda>	at	0x[a-f0-9]+[^>]+')
+inner_code_object_re = re.compile('<code	object	<[^>]+>	at	0x[a-f0-9]+[^>]+')
 class FunctionInvariant(Job):
     def __init__(self, job_id, function):
         Job.__init__(self, job_id)
@@ -209,10 +209,11 @@ class FunctionInvariant(Job):
 
     def get_invariant(self, old):
         if not id(self.function.func_code) in util.func_hashes:
-            util.func_hashes[id(self.function.func_code)] = self.dis_str(self.function.func_code)
+            util.func_hashes[id(self.function.func_code)] = self.dis_code(self.function.__code__)
         return util.func_hashes[id(self.function.func_code)] 
 
-    def dis_str(self, code): #TODO: replace with bytecode based smarter variant
+
+    def dis_code(self, code): #TODO: replace with bytecode based smarter variant
         """'dissassemble' python code.
         
         Strips lambdas (they change address every execution otherwise)"""
@@ -230,7 +231,11 @@ class FunctionInvariant(Job):
             row = row.split()
             res.append("\t".join(row[1:]))
         res = "\n".join(res)
-        res = lambdare.sub('lambda', res)
+        res = inner_code_object_re.sub('lambda', res)
+        for ii, constant in enumerate(code.co_consts):
+            if hasattr(constant, 'co_code'):
+                res += 'inner no %i' % ii
+                res += self.dis_code(constant)
         return res
 
 class ParameterInvariant(Job):
@@ -588,7 +593,7 @@ def PlotJob(output_filename, calc_function, plot_function): #a convienence wrapp
     def run_calc():
         df = calc_function()
         if not isinstance(df, pydataframe.DataFrame):
-            raise exceptions.JobContractError("%s.calc_function did not return a DataFrame, was %s " % (output_filename, df.__class__))
+            raise ppg_exceptions.JobContractError("%s.calc_function did not return a DataFrame, was %s " % (output_filename, df.__class__))
         try:
             os.makedirs(os.path.dirname(cache_filename))
         except OSError:
@@ -602,7 +607,7 @@ def PlotJob(output_filename, calc_function, plot_function): #a convienence wrapp
         of.close()
         plot = plot_function(df)
         if not isinstance(plot, pyggplot.Plot):
-            raise exceptions.JobContractError("%s.plot_function did not return a pyggplot.Plot " % (output_filename))
+            raise ppg_exceptions.JobContractError("%s.plot_function did not return a pyggplot.Plot " % (output_filename))
         plot.render(output_filename)
 
     cache_job = FileGeneratingJob(cache_filename, run_calc)
