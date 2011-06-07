@@ -520,25 +520,30 @@ class DependencyInjectionJob(_GraphModifyingJob):
         logger.info("new_jobs count: %i, id %s"  % ( len(util.global_pipegraph.new_jobs), id(util.global_pipegraph.new_jobs)))
         for new_job in util.global_pipegraph.new_jobs.values():
             new_job.inject_auto_invariants()
+        #these are really mean performance succers...
         #we now need to fill new_jobs.dependants
-        for job in util.global_pipegraph.jobs.values():
-            for nw in util.global_pipegraph.new_jobs.values():
-                if nw in job.prerequisites:
-                    logger.info("Checking %s against %s - %s" % (nw, job, job in self.dependants))
-                    if not job in self.dependants:
-                        raise ppg_exceptions.JobContractError("DependencyInjectionJob %s tried to inject %s into %s, but %s was not dependand on the DependencyInjectionJob. It was dependeand on %s though" % (self, nw, job, job, nw.prerequisites))
-                    nw.dependants.add(job)
+        logger.info("Now checking first step for dependency injection violations") 
+        if False:
+            for job in util.global_pipegraph.jobs.values():
+                for nw in util.global_pipegraph.new_jobs.values():
+                    if nw in job.prerequisites:
+                        logger.info("Checking %s against %s - %s" % (nw, job, job in self.dependants))
+                        if not job in self.dependants:
+                            raise ppg_exceptions.JobContractError("DependencyInjectionJob %s tried to inject %s into %s, but %s was not dependand on the DependencyInjectionJob. It was dependand on %s though" % (self, nw, job, job, nw.prerequisites))
+                        nw.dependants.add(job)
         #I need to check: All new jobs are now prereqs of my dependands
         #I also need to check that none of the jobs that ain't dependand on me have been injected
-        for job in util.global_pipegraph.jobs.values():
-            if job in self.dependants:
-                for new_job in util.global_pipegraph.new_jobs.values():
-                    if not new_job in job.prerequisites and not job.is_in_dependency_chain(new_job): 
-                        raise ppg_exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was not added to the prerequisites of %s" % (self.job_id, new_job.job_id, job.job_id))
-            else:
-                for new_job in util.global_pipegraph.new_jobs.values():
-                    if new_job in job.prerequisites or job in new_job.dependants: #no connect_graph building so far...
-                        raise ppg_exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was added to the prerequisites of %s, but %s was not dependant on the DependencyInjectionJob" % (self.job_id, new_job.job_id, job.job_id))
+        logger.info("Checking for dependency injection violations")
+        if False:
+            for job in util.global_pipegraph.jobs.values():
+                if job in self.dependants:
+                    for new_job in util.global_pipegraph.new_jobs.values():
+                        if not new_job in job.prerequisites and not job.is_in_dependency_chain(new_job): 
+                            raise ppg_exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was not added to the prerequisites of %s" % (self.job_id, new_job.job_id, job.job_id))
+                else:
+                    for new_job in util.global_pipegraph.new_jobs.values():
+                        if new_job in job.prerequisites or job in new_job.dependants: #no connect_graph building so far...
+                            raise ppg_exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was added to the prerequisites of %s, but %s was not dependant on the DependencyInjectionJob" % (self.job_id, new_job.job_id, job.job_id))
 
         res = util.global_pipegraph.new_jobs
         logger.info('returning %i new jobs' % len(res))
@@ -576,6 +581,7 @@ class JobGeneratingJob(_GraphModifyingJob):
         res = util.global_pipegraph.new_jobs
         util.global_pipegraph.tranfer_new_jobs()
         util.global_pipegraph.new_jobs = False
+        logger.info("Returning from %s" % self)
         return res
 
 def PlotJob(output_filename, calc_function, plot_function): #a convienence wrapper for a quick plotting
