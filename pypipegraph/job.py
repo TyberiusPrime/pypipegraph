@@ -668,7 +668,7 @@ class _LazyFileGeneratingJob(Job):
         cPickle.dump(data, op, cPickle.HIGHEST_PROTOCOL)
         op.close()
 
-class CachedJob(AttributeLoadingJob):
+class CachedAttributeLoadingJob(AttributeLoadingJob):
     
     def __new__(cls, job_id, *args, **kwargs):
         return Job.__new__(cls, job_id + '_load')
@@ -692,6 +692,7 @@ class CachedJob(AttributeLoadingJob):
 
     def ignore_code_changes(self):
         self.lfg.ignore_code_changes()
+        Job.ignore_code_changes(self)
 
     def __del__(self):
         self.lfg = None
@@ -700,7 +701,40 @@ class CachedJob(AttributeLoadingJob):
         self.lfg.invalidated()
         Job.invalidated(self)
 
+class CachedDataLoadingJob(DataLoadingJob):
     
+    def __new__(cls, job_id, *args, **kwargs):
+        return Job.__new__(cls, job_id + '_load')
+    
+    def __init__(self, cache_filename, calculating_function, loading_function):
+        if not hasattr(calculating_function, '__call__'):
+            raise ValueError("calculating_function for %s was not callable (missed __call__ attribute)" % cache_filename)
+
+        def do_load():
+            op = open(cache_filename, 'rb')
+            data = cPickle.load(op)
+            op.close()
+            loading_function(data)
+        DataLoadingJob.__init__(self, cache_filename + '_load', do_load) #todo: adjust functioninvariant injection
+        lfg = _LazyFileGeneratingJob(cache_filename, calculating_function, self)
+        self.lfg = lfg
+        Job.depends_on(self, lfg)
+
+    def depends_on(self, jobs):
+        self.lfg.depends_on(jobs)
+        return Job.depends_on(self, jobs)
+
+    def ignore_code_changes(self):
+        self.lfg.ignore_code_changes()
+        Job.ignore_code_changes(self)
+
+    def __del__(self):
+        self.lfg = None
+
+    def invalidated(self):
+        self.lfg.invalidated()
+        Job.invalidated(self)
+ 
 
     #TODOs
 

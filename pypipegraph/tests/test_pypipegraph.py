@@ -1218,7 +1218,7 @@ class DependencyInjectionJobTests(PPGPerTest):
             def write_B():
                 write("out/B", "B")
                 return 'B'
-            inner_job = ppg.CachedJob('out/B', dummy, 'o', write_B)
+            inner_job = ppg.CachedAttributeLoadingJob('out/B', dummy, 'o', write_B)
             get_job().depends_on(inner_job)
         job_gen = ppg.DependencyInjectionJob('gen_job', generate_dep)
         get_job().depends_on(job_gen)
@@ -1263,7 +1263,7 @@ class DependencyInjectionJobTests_Complex(PPGPerTest):
             load_job = self.calc()
             def in_calc():
                 return 'hello'
-            job = ppg.CachedJob('out/cached', self, 'a', in_calc)
+            job = ppg.CachedAttributeLoadingJob('out/cached', self, 'a', in_calc)
             load_job.depends_on(job)
         gen = ppg.DependencyInjectionJob('_gen_jobs', gen)
         return gen
@@ -1593,13 +1593,13 @@ class PlotJobTests(PPGPerTest):
             pass 
         self.assertTrue(isinstance(job.exception, ppg.JobContractError))
 
-class CachedJobTests(PPGPerTest):
+class CachedAttributeJobTests(PPGPerTest):
  
     def test_simple(self):
         o = Dummy()
         def calc():
             return ", ".join(str(x) for x in range(0, 100))
-        job = ppg.CachedJob('out/mycalc', o, 'a', calc)
+        job = ppg.CachedAttributeLoadingJob('out/mycalc', o, 'a', calc)
         of = 'out/A'
         def do_write():
             write(of, o.a)
@@ -1613,7 +1613,7 @@ class CachedJobTests(PPGPerTest):
         o = Dummy()
         def calc():
             return ", ".join(str(x) for x in range(0, 100))
-        job = ppg.CachedJob('out/mycalc', o, 'a', calc)
+        job = ppg.CachedAttributeLoadingJob('out/mycalc', o, 'a', calc)
         ppg.run_pipegraph()
         self.assertFalse(os.path.exists('out/mycalc'))
 
@@ -1621,7 +1621,7 @@ class CachedJobTests(PPGPerTest):
         o = Dummy()
         def calc():
             return ", ".join(str(x) for x in range(0, 100))
-        job = ppg.CachedJob('out/mycalc', o, 'a', calc)
+        job = ppg.CachedAttributeLoadingJob('out/mycalc', o, 'a', calc)
         of = 'out/A'
         def do_write():
             write(of, o.a)
@@ -1634,7 +1634,7 @@ class CachedJobTests(PPGPerTest):
         ppg.new_pipegraph(rc)
         def calc2():
             return ", ".join(str(x) for x in range(0, 200))
-        job = ppg.CachedJob('out/mycalc', o, 'a', calc2)
+        job = ppg.CachedAttributeLoadingJob('out/mycalc', o, 'a', calc2)
         jobB = ppg.FileGeneratingJob(of, do_write).depends_on(job)
         ppg.run_pipegraph()
         self.assertEqual(
@@ -1645,7 +1645,7 @@ class CachedJobTests(PPGPerTest):
         o = Dummy()
         def calc():
             return ", ".join(str(x) for x in range(0, 100))
-        job = ppg.CachedJob('out/mycalc', o, 'a', calc)
+        job = ppg.CachedAttributeLoadingJob('out/mycalc', o, 'a', calc)
         of = 'out/A'
         def do_write():
             write(of, o.a)
@@ -1658,7 +1658,7 @@ class CachedJobTests(PPGPerTest):
         ppg.new_pipegraph(rc)
         def calc2():
             return ", ".join(str(x) for x in range(0, 200))
-        job = ppg.CachedJob('out/mycalc', o, 'a', calc2)
+        job = ppg.CachedAttributeLoadingJob('out/mycalc', o, 'a', calc2)
         job.ignore_code_changes()
         jobB = ppg.FileGeneratingJob(of, do_write).depends_on(job)
         ppg.run_pipegraph()
@@ -1667,7 +1667,7 @@ class CachedJobTests(PPGPerTest):
                 ", ".join(str(x) for x in range(0, 100)))
 
         ppg.new_pipegraph(rc)
-        job = ppg.CachedJob('out/mycalc', o, 'a', calc2)
+        job = ppg.CachedAttributeLoadingJob('out/mycalc', o, 'a', calc2)
         jobB = ppg.FileGeneratingJob(of, do_write).depends_on(job)
         ppg.run_pipegraph()
         self.assertEqual(
@@ -1679,7 +1679,7 @@ class CachedJobTests(PPGPerTest):
         def calc():
             return 55
         def inner():
-            x = ppg.CachedJob('out/mycalc', calc, o, 'a')
+            x = ppg.CachedAttributeLoadingJob('out/mycalc', calc, o, 'a')
         self.assertRaises(ValueError, inner)
 
     def test_calc_depends_on_added_dependencies(self):
@@ -1689,7 +1689,7 @@ class CachedJobTests(PPGPerTest):
             return o.o
         def out():
             write('out/A', str(o.o2))
-        cached = ppg.CachedJob('out/cached_job', o , 'o2', calc)
+        cached = ppg.CachedAttributeLoadingJob('out/cached_job', o , 'o2', calc)
         fg = ppg.FileGeneratingJob('out/A', out)
         fg.depends_on(cached)
         cached.depends_on(load_attr)
@@ -1699,9 +1699,27 @@ class CachedJobTests(PPGPerTest):
     def test_depends_on_returns_self(self):
         ppg.new_pipegraph()
         o = Dummy()
-        jobA = ppg.CachedJob('out/A',o, 'shu', lambda : write('out/A', 'shu'))
+        jobA = ppg.CachedAttributeLoadingJob('out/A',o, 'shu', lambda : write('out/A', 'shu'))
         jobB = ppg.FileGeneratingJob('out/B' ,lambda : write('out/B', 'shu'))
         self.assertTrue(jobA.depends_on(jobB) is jobA)
+
+class CachedDataLoadingJobTests(PPGPerTest):
+
+    def test_simple(self):
+        o = Dummy()
+        def calc():
+            return ", ".join(str(x) for x in range(0, 100))
+        def store(value):
+            o.a = value
+        job = ppg.CachedDataLoadingJobTests('out/mycalc', calc, store)
+        of = 'out/A'
+        def do_write():
+            write(of, o.a)
+        jobB = ppg.FileGeneratingJob(of, do_write).depends_on(job)
+        ppg.run_pipegraph()
+        self.assertEqual(
+                read(of),
+                ", ".join(str(x) for x in range(0, 100)))
 
 
 
@@ -1910,6 +1928,7 @@ class NotYetImplementedTests(unittest.TestCase):
         raise NotImplementedError()
 
     def test_failing_dataloading_jobs(self):
+        #with the local resource coordinator, these should not kill the pipeline!
         raise NotImplementedError()
 
     def test_spawn_slave_failure(self):

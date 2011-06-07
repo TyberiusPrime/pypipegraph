@@ -8,9 +8,10 @@ from job import (
         FileGeneratingJob, MultiFileGeneratingJob, 
         DataLoadingJob, AttributeLoadingJob, 
         TempFileGeneratingJob, 
-        CachedJob, PlotJob,
+        CachedAttributeLoadingJob, CachedDataLoadingJob,
+        PlotJob,
         FunctionInvariant, ParameterInvariant, FileTimeInvariant, FileChecksumInvariant,
-        JobGeneratingJob, DependencyInjectionJob
+        JobGeneratingJob, DependencyInjectionJob, 
         )
 
 
@@ -22,7 +23,8 @@ all = [
         FileGeneratingJob, MultiFileGeneratingJob, 
         DataLoadingJob, AttributeLoadingJob, 
         TempFileGeneratingJob, 
-        CachedJob, PlotJob,
+        CachedAttributeLoadingJob, CachedDataLoadingJob,
+        PlotJob,
         FunctionInvariant, ParameterInvariant, FileTimeInvariant, FileChecksumInvariant,
         JobGeneratingJob, DependencyInjectionJob,
 
