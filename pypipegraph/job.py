@@ -523,7 +523,7 @@ class DependencyInjectionJob(_GraphModifyingJob):
         #these are really mean performance succers...
         #we now need to fill new_jobs.dependants
         logger.info("Now checking first step for dependency injection violations") 
-        if False:
+        if True:
             for job in util.global_pipegraph.jobs.values():
                 for nw in util.global_pipegraph.new_jobs.values():
                     if nw in job.prerequisites:
@@ -534,7 +534,7 @@ class DependencyInjectionJob(_GraphModifyingJob):
         #I need to check: All new jobs are now prereqs of my dependands
         #I also need to check that none of the jobs that ain't dependand on me have been injected
         logger.info("Checking for dependency injection violations")
-        if False:
+        if True:
             for job in util.global_pipegraph.jobs.values():
                 if job in self.dependants:
                     for new_job in util.global_pipegraph.new_jobs.values():
@@ -698,7 +698,7 @@ class CachedAttributeLoadingJob(AttributeLoadingJob):
 
     def ignore_code_changes(self):
         self.lfg.ignore_code_changes()
-        Job.ignore_code_changes(self)
+        self.do_ignore_code_changes = True
 
     def __del__(self):
         self.lfg = None
@@ -732,7 +732,7 @@ class CachedDataLoadingJob(DataLoadingJob):
 
     def ignore_code_changes(self):
         self.lfg.ignore_code_changes()
-        Job.ignore_code_changes(self)
+        self.do_ignore_code_changes = True
 
     def __del__(self):
         self.lfg = None

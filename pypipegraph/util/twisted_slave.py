@@ -63,13 +63,15 @@ class DataCollectingProcessProtocol(ProcessProtocol):
             global_pipegraph.jobs[job_id].failed = False
             #if job_id != self.job_id:
                 #raise ValueError("Job_id was not identical!")
+            exception = "" #nothing happend...
+            trace = ""
         else:
             global_pipegraph.jobs[job_id].failed = True
             was_ok = False
             stderr = self.stderr + " Process failed"
-        exception = ""
-        trace = ""
-        new_jobs = ""
+            exception = "Exit code was not 0"
+            trace = ''
+        new_jobs = "" #new jobs only can be made in modifies_jobgraph() jobs that run locally in the slave
         logger.info("Sending back result")
         check_prerequisites_for_cleanup(global_pipegraph.jobs[job_id])
         self.slave.send_result(cPickle.dumps((was_ok, job_id, stdout, stderr, exception, trace, new_jobs)))
@@ -138,7 +140,7 @@ def _run_job(job, is_local): #so this runs in the forked code...
             logger.info("Returing %i new jobs" % len(temp))
             new_jobs = prepare_jobs_for_transfer(temp)
         elif temp:
-            raise exceptions.JobContractError("Job returned a value (which should be new jobs generated here) without having modifies_jobgraph() returning True")
+            raise pypipegraph.ppg_exceptions.JobContractError("Job returned a value (which should be new jobs generated here) without having modifies_jobgraph() returning True")
     except Exception, e:
         trace = traceback.format_exc()
         was_ok = False

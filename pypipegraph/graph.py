@@ -15,10 +15,10 @@ def run_pipegraph():
     util.global_pipegraph.run()
 
 
-def new_pipegraph(resource_coordinator = None):
+def new_pipegraph(resource_coordinator = None, quiet=False):
     if resource_coordinator is None:
         resource_coordinator = resource_coordinators.LocalSystem()
-    util.global_pipegraph = Pipegraph(resource_coordinator)
+    util.global_pipegraph = Pipegraph(resource_coordinator, quiet = quiet)
     util.job_uniquifier = {}
     util.func_hashes = {}
     logger.info("\n\n")
@@ -39,13 +39,14 @@ def get_running_job_count():
 
 class Pipegraph(object):
 
-    def __init__(self, resource_coordinator):
+    def __init__(self, resource_coordinator, quiet = False):
         self.rc = resource_coordinator
         self.rc.pipegraph = self
         self.jobs = {}
         self.running = False
         self.was_run = False
         self.new_jobs = False
+        self.quiet = quiet
 
     def __del__(self):
         self.rc.pipegraph = None
@@ -85,25 +86,29 @@ class Pipegraph(object):
 
         #make us some computational engines and put them to work.
         logger.info("now executing")
-        self.spawn_slaves()
-        self.execute_jobs()
+        try:
+            self.spawn_slaves()
+            self.execute_jobs()
 
-        #clean up
-        self.dump_html_status()
-        self.dump_invariant_status()
-        self.destroy_job_connections()
+        finally:
+            #clean up
+            self.dump_html_status()
+            self.dump_invariant_status()
+            self.destroy_job_connections()
+
 
         #and propagate if there was an exception
         any_failed = False
         for job in self.jobs.values():
             if job.failed:
-                if not any_failed:
+                if not any_failed and not self.quiet:
                     print >>sys.stderr, '\n------Pipegraph error-----'
                 any_failed = True
-                if job.error_reason != 'Indirect':
+                if job.error_reason != 'Indirect' and not self.quiet:
                     self.print_failed_job(job)
         if any_failed:
-            print >>sys.stderr, '\n------Pipegraph output end-----'
+            if not self.quiet:
+                print >>sys.stderr, '\n------Pipegraph output end-----'
             raise ppg_exceptions.RuntimeError()
 
     def inject_auto_invariants(self):
