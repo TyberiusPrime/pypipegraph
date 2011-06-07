@@ -97,13 +97,19 @@ class Job(object):
             self.prerequisites.add(job)
         return self
     
-    def is_in_dependency_chain(self, other_job):
-        """check wether the other job is in this job's dependency chain"""
+    def is_in_dependency_chain(self, other_job, max_depth):
+        """check wether the other job is in this job's dependency chain.
+        We check at most @max_depth levels, starting with this job (ie.
+        max_depth = 2 means this job and it's children).
+        Use a -1 for 'unlimited' (up to abs(sys.minint) ;))
+        """
+        if max_depth == 0:
+            return False
         if other_job in self.prerequisites:
             return True
         else:
             for preq in self.prerequisites:
-                if preq.is_in_dependency_chain(other_job):
+                if preq.is_in_dependency_chain(other_job, max_depth - 1):
                     return True
         return False
 
@@ -532,18 +538,23 @@ class DependencyInjectionJob(_GraphModifyingJob):
                             raise ppg_exceptions.JobContractError("DependencyInjectionJob %s tried to inject %s into %s, but %s was not dependand on the DependencyInjectionJob. It was dependand on %s though" % (self, nw, job, job, nw.prerequisites))
                         nw.dependants.add(job)
         #I need to check: All new jobs are now prereqs of my dependands
+
         #I also need to check that none of the jobs that ain't dependand on me have been injected
         logger.info("Checking for dependency injection violations")
+        new_job_set = set(util.global_pipegraph.new_jobs.values())
         if True:
             for job in util.global_pipegraph.jobs.values():
                 if job in self.dependants:
                     for new_job in util.global_pipegraph.new_jobs.values():
-                        if not new_job in job.prerequisites and not job.is_in_dependency_chain(new_job): 
+                        if not job.is_in_dependency_chain(new_job,2): #that's for the auto injected invariants, which should be one level below this job...
                             raise ppg_exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was not added to the prerequisites of %s" % (self.job_id, new_job.job_id, job.job_id))
                 else:
-                    for new_job in util.global_pipegraph.new_jobs.values():
-                        if new_job in job.prerequisites or job in new_job.dependants: #no connect_graph building so far...
-                            raise ppg_exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was added to the prerequisites of %s, but %s was not dependant on the DependencyInjectionJob" % (self.job_id, new_job.job_id, job.job_id))
+                    preq_intersection = job.prerequisites.intersection(new_job_set)
+                    if preq_intersection:
+                            raise ppg_exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was added to the prerequisites of %s, but was not dependant on the DependencyInjectionJob" % (self.job_id, preq_intersection, job.job_id))
+                    dep_intersection = job.prerequisites.intersection(new_job_set)
+                    if dep_intersection:
+                            raise ppg_exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was added to the dependants of %s, but was not dependant on the DependencyInjectionJob" % (self.job_id, dep_intersection, job.job_id))
 
         res = util.global_pipegraph.new_jobs
         logger.info('returning %i new jobs' % len(res))

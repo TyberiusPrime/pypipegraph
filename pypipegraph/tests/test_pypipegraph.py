@@ -1138,6 +1138,7 @@ class DependencyInjectionJobTests(PPGPerTest):
         #dependency data (and new job name).
         #that way, we can still execute on any slave, and all the pointers should be
         #right.
+        ppg.new_pipegraph(rc_gen())
 
         o = Dummy()
         of = 'out/A'
