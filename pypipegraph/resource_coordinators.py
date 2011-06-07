@@ -107,6 +107,7 @@ class LocalSystem:
                 self.slave.check_for_dead_jobs()
                 pass
         self.slave.check_for_dead_jobs()
+        self.que.close()
 
 class LocalSlave:
 
@@ -119,21 +120,72 @@ class LocalSlave:
     def spawn(self, job):
         logger.info("Slave: Spawning %s" % job.job_id)
         logger.info("Slave: preqs are %s" % [preq.job_id for preq in job.prerequisites])
+        preq_failed = False
         for preq in job.prerequisites:
             if preq.is_loadable():
                 logger.info("Slave: Loading %s" % preq)
-                preq.load()
-        #if job.cores_needed == -1:
-            #self.rc.cores_available = 0
-        #else:
-            #self.rc.cores_available -= job.cores_needed
-        if job.modifies_jobgraph():
-            logger.info("Slave: Running %s in slave" % job)
-            self.run_a_job(job)
+                if not self.load_job(preq):
+                    preq_failed = True
+                    break
+        if preq_failed:
+            self.rc.que.put(
+                    (
+                        self.slave_id,
+                        False, #failed?
+                        job.job_id, #id...
+                        '', #output
+                        '', #output
+                        'Prerequsite failed', 
+                        '', 
+                        False,
+                    ))
         else:
-            p = multiprocessing.Process(target=self.run_a_job, args=[job,])
-            p.start()
-            self.process_to_job[p] = job
+            if job.modifies_jobgraph():
+                logger.info("Slave: Running %s in slave" % job)
+                self.run_a_job(job)
+            else:
+                p = multiprocessing.Process(target=self.run_a_job, args=[job,])
+                p.start()
+                self.process_to_job[p] = job
+
+    def load_job(self, job): #this executes a load job returns false if an error occured 
+        stdout = cStringIO.StringIO()
+        stderr = cStringIO.StringIO()
+        old_stdout = sys.stdout 
+        old_stderr = sys.stderr
+        sys.stdout = stdout
+        sys.stderr = stderr
+        trace = ''
+        new_jobs = False
+        try:
+            job.load()
+            was_ok = True
+            exception = None
+        except Exception, e:
+            trace = traceback.format_exc()
+            was_ok = False
+            exception = e
+            try:
+                exception = cPickle.dumps(exception)
+            except Exception, e: #some exceptions can't be pickled, so we send a string instead
+                exception = str(exception)
+        stdout = stdout.getvalue()
+        stderr = stderr.getvalue()
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+        if not was_ok:
+            self.rc.que.put(
+                    (
+                        self.slave_id,
+                        was_ok, #failed?
+                        job.job_id, #id...
+                        stdout, #output
+                        stderr, #output
+                        exception, 
+                        trace, 
+                        new_jobs,
+                    ))
+        return was_ok
 
     def run_a_job(self, job): #this runs in the spawned processes, except for job.modifies_jobgraph()==True jobs
         stdout = cStringIO.StringIO()
@@ -186,8 +238,6 @@ class LocalSlave:
         #unpackanging is don in new_jobs_generated_during_runtime
         self.rc.pipegraph.new_jobs_generated_during_runtime(job_dict)
         return [] # The LocalSlave does not need to serialize back the jobs, it already is running in the space of the MCP
-
-            
 
     def check_for_dead_jobs(self):
         remove = []
