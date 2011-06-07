@@ -8,8 +8,8 @@ import os
 import shutil
 import subprocess
 
-#rc = ppg.resource_coordinators.LocalTwisted()
-rc = ppg.resource_coordinators.LocalSystem()
+#rc_gen = lambda : ppg.resource_coordinators.LocalTwisted()
+rc_gen = lambda: ppg.resource_coordinators.LocalSystem()
 
 def read(filename): 
     """simply read a file"""
@@ -52,8 +52,11 @@ class PPGPerTest(unittest.TestCase):
         except OSError:
             pass
         ppg.forget_job_status()
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         logger.info("Starting new test\n" + "-" * 50 + "\n\n\n")
+
+    def tearDown(self):
+        pass
 
 
 class SimpleTests(unittest.TestCase):
@@ -67,12 +70,12 @@ class SimpleTests(unittest.TestCase):
     def test_job_creation_after_pipegraph_run_raises(self):
         def inner():
             job = ppg.FileGeneratingJob("A", lambda : None)
-        ppg.new_pipegraph()
+        ppg.new_pipegraph(quiet=True)
         ppg.run_pipegraph()
         self.assertRaises(ValueError, inner)
 
     def test_run_may_be_called_only_once(self):
-        ppg.new_pipegraph()
+        ppg.new_pipegraph(quiet=True)
         ppg.run_pipegraph()
         def inner():
             ppg.run_pipegraph()
@@ -87,7 +90,7 @@ class CycleTests(unittest.TestCase):
         except OSError:
             pass
         ppg.forget_job_status()
-        ppg.new_pipegraph()
+        ppg.new_pipegraph(quiet=True)
 
     def tearDown(self):
         try:
@@ -97,7 +100,7 @@ class CycleTests(unittest.TestCase):
 
     def test_simple_cycle(self):
         def inner():
-            ppg.new_pipegraph()
+            ppg.new_pipegraph(quiet=True)
             jobA = ppg.FileGeneratingJob("A", lambda :write("A","A"))
             jobB = ppg.FileGeneratingJob("A", lambda :write("B","A"))
             jobA.depends_on(jobB)
@@ -106,7 +109,7 @@ class CycleTests(unittest.TestCase):
         self.assertRaises(ppg.CycleError, inner)
 
     def test_indirect_cicle(self):
-        ppg.new_pipegraph()
+        ppg.new_pipegraph(quiet=True)
         jobA = ppg.FileGeneratingJob("A", lambda :write("A","A"))
         jobB = ppg.FileGeneratingJob("B", lambda :write("B","A"))
         jobC = ppg.FileGeneratingJob("C", lambda :write("C","A"))
@@ -131,7 +134,7 @@ class JobTests(unittest.TestCase):
 
     def test_assert_singletonicity_of_jobs(self):
         ppg.forget_job_status()
-        ppg.new_pipegraph()
+        ppg.new_pipegraph(quiet=True)
         of = "out/a"
         data_to_write = "hello"
         def do_write():
@@ -142,7 +145,7 @@ class JobTests(unittest.TestCase):
 
     def test_redifining_a_jobid_with_different_class_raises(self):
         ppg.forget_job_status()
-        ppg.new_pipegraph()
+        ppg.new_pipegraph(quiet=True)
         of = "out/a"
         data_to_write = "hello"
         def do_write():
@@ -161,7 +164,7 @@ class JobTests(unittest.TestCase):
             def do_write():
                 write(of, 'do_write done')
             return of, do_write
-        ppg.new_pipegraph()
+        ppg.new_pipegraph(quiet=True)
         jobA = ppg.FileGeneratingJob(*write_func('out/a'))
         jobB = ppg.FileGeneratingJob(*write_func('out/b'))
         jobC = ppg.FileGeneratingJob(*write_func('out/c'))
@@ -201,7 +204,7 @@ class JobTests(unittest.TestCase):
             def do_write():
                 write(of, 'do_write done')
             return of, do_write
-        ppg.new_pipegraph()
+        ppg.new_pipegraph(quiet=True)
         jobA = ppg.FileGeneratingJob(*write_func('out/a'))
         jobA1 = ppg.FileGeneratingJob(*write_func('out/a'))
         jobB = ppg.FileGeneratingJob(*write_func('out/b'))
@@ -210,22 +213,17 @@ class JobTests(unittest.TestCase):
         self.assertFalse(jobA == jobB)
 
     def test_has_hash(self):
-        ppg.new_pipegraph()
+        ppg.new_pipegraph(quiet=True)
         jobA = ppg.FileGeneratingJob('out/',lambda : None)
         self.assertTrue(hasattr(jobA, '__hash__'))
 
-    def test_depends_on_returns_self(self):
-        ppg.new_pipegraph()
-        jobA = ppg.FileGeneratingJob('out/A',lambda : write('out/A', 'shu'))
-        jobB = ppg.FileGeneratingJob('out/B' ,lambda : write('out/B', 'shu'))
-        self.assertTrue(jobA.depends_on(jobB) is jobA)
 
 
 
 
 class FileGeneratingJobTests(PPGPerTest):
 
-    def test_simple_filegeneration(self):
+    def test_basic(self):
         of = "out/a"
         data_to_write = "hello"
         def do_write():
@@ -240,6 +238,7 @@ class FileGeneratingJobTests(PPGPerTest):
         data = op.read()
         op.close()
         self.assertEqual(data, data_to_write)
+        self.assertEqual(job.was_run, True)
 
     def test_simple_filegeneration_with_function_dependency(self):
         of = "out/a"
@@ -267,7 +266,7 @@ class FileGeneratingJobTests(PPGPerTest):
             ppg.run_pipegraph()
         self.assertRaises(ppg.RuntimeError, inner)
         self.assertTrue(job.failed)
-        print job.exception
+        #print 'exception is', repr(job.exception)
         self.assertTrue(isinstance(job.exception, ppg.JobContractError))
         self.assertFalse(os.path.exists(of))
 
@@ -383,7 +382,7 @@ class FileGeneratingJobTests(PPGPerTest):
         self.assertTrue(os.path.exists(of))
         self.assertTrue(os.path.exists(sentinel))
 
-        ppg.new_pipegraph()
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         job = ppg.FileGeneratingJob(of, do_write)
         dep = ppg.ParameterInvariant('my_params', (2,)) #same name ,changed params, job needs to rerun, but explodes...
         job.depends_on(dep) #on average, half the mistakes are in the tests...
@@ -405,7 +404,7 @@ class MultiFileGeneratingJobTests(PPGPerTest):
         except OSError:
             pass
         ppg.forget_job_status()
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
 
     def tearDown(self):
         #shutil.rmtree('out')
@@ -420,14 +419,14 @@ class MultiFileGeneratingJobTests(PPGPerTest):
         ppg.run_pipegraph()
         for f in of:
             self.assertEqual(read(f),'shu')
-        ppg.new_pipegraph()
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         job = ppg.MultiFileGeneratingJob(of, do_write)
         ppg.run_pipegraph()
         for f in of:
             self.assertEqual(read(f),'shu') #ie. job has net been rerun...
         #but if I now delete one...
         os.unlink(of[0])
-        ppg.new_pipegraph()
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         job = ppg.MultiFileGeneratingJob(of, do_write)
         ppg.run_pipegraph()
         self.assertEqual(read(of[0]), 'shu')
@@ -478,7 +477,7 @@ class MultiFileGeneratingJobTests(PPGPerTest):
         ppg.run_pipegraph()
         for f in of:
             self.assertTrue(os.path.exists(f))
-        ppg.new_pipegraph()
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         job = ppg.MultiFileGeneratingJob(of, do_write).depends_on(
             ppg.ParameterInvariant('myparam', (2,))
             )
@@ -721,7 +720,7 @@ class TempFileGeneratingJobTest(PPGPerTest):
         self.assertFalse(os.path.exists(ofA))
         self.assertTrue(os.path.exists(temp_file))
 
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen())
         def write_A_ok():
             write(ofA, read(temp_file))
         temp_job = ppg.TempFileGeneratingJob(temp_file, write_temp)
@@ -780,7 +779,7 @@ class InvariantTests(PPGPerTest):
         except OSError:
             pass
         ppg.forget_job_status()
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
 
     def tearDown(self):
         shutil.rmtree('out')
@@ -805,13 +804,13 @@ class InvariantTests(PPGPerTest):
         job = ppg.FileGeneratingJob(of, do_write)
         ppg.run_pipegraph()
         self.assertEqual(read(of), 'shu')
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         job = ppg.FileGeneratingJob(of, do_write)
         ppg.run_pipegraph()
         self.assertEqual(read(of), 'shu') #has not been run again...
         def do_write2():
             append(of, 'sha')
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         job = ppg.FileGeneratingJob(of, do_write2)
         ppg.run_pipegraph()
         self.assertEqual(read(of), 'sha') #has been run again ;).
@@ -824,12 +823,12 @@ class InvariantTests(PPGPerTest):
         ppg.run_pipegraph()
 
         self.assertEqual(read(of), 'shu')
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         job = ppg.FileGeneratingJob(of, do_write)
         ppg.run_pipegraph()
         self.assertEqual(read(of), 'shu') #has not been run again, for no change
 
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         def do_write2():
             append(of, 'sha')
         job = ppg.FileGeneratingJob(of, do_write2)
@@ -837,7 +836,7 @@ class InvariantTests(PPGPerTest):
         ppg.run_pipegraph()
         self.assertEqual(read(of), 'shu') #has not been run again, since we ignored the changes
 
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         job = ppg.FileGeneratingJob(of, do_write2)
         ppg.run_pipegraph()
         self.assertEqual(read(of), 'sha') #But the new code had not been stored, not ignoring => redoing.
@@ -852,13 +851,13 @@ class InvariantTests(PPGPerTest):
         job.depends_on(param_dep)
         ppg.run_pipegraph()
         self.assertEqual(read(of), 'shu')
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         job = ppg.FileGeneratingJob(of, do_write)
         param_dep = ppg.ParameterInvariant('myparam', (1,2,3))
         job.depends_on(param_dep)
         ppg.run_pipegraph()
         self.assertEqual(read(of), 'shu') #has not been run again...
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         job = ppg.FileGeneratingJob(of, do_write)
         param_dep = ppg.ParameterInvariant('myparam', (1,2,3, 4))
         job.depends_on(param_dep)
@@ -878,7 +877,7 @@ class InvariantTests(PPGPerTest):
         job.depends_on(dep)
         ppg.run_pipegraph()
         self.assertEqual(read(of), 'shu') #job get's run though there is a file, because the FileTimeInvariant was not stored before...
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         job = ppg.FileGeneratingJob(of, do_write)
         dep = ppg.FileTimeInvariant(ftfn)
         job.depends_on(dep)
@@ -888,7 +887,7 @@ class InvariantTests(PPGPerTest):
         time.sleep(1) #so linux actually advances the file time in the next line
         write(ftfn,'hello') #same content, different time
 
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         job = ppg.FileGeneratingJob(of, do_write)
         dep = ppg.FileTimeInvariant(ftfn)
         job.depends_on(dep)
@@ -912,7 +911,7 @@ class InvariantTests(PPGPerTest):
         job.depends_on(dep)
         ppg.run_pipegraph()
         self.assertEqual(read(of), 'shu') #job get's run though there is a file, because the FileTimeInvariant was not stored before...
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         job = ppg.FileGeneratingJob(of, do_write)
         dep = ppg.FileChecksumInvariant(ftfn)
         job.depends_on(dep)
@@ -923,7 +922,7 @@ class InvariantTests(PPGPerTest):
         #logging.info("NOW REWRITE")
         write(ftfn,'hello') #same content, different time
 
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         job = ppg.FileGeneratingJob(of, do_write)
         dep = ppg.FileChecksumInvariant(ftfn)
         job.depends_on(dep)
@@ -933,7 +932,7 @@ class InvariantTests(PPGPerTest):
         #time.sleep(1) #we don't care about the time, size should be enough...
         write(ftfn,'hello world') #different time
 
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         job = ppg.FileGeneratingJob(of, do_write)
         dep = ppg.FileChecksumInvariant(ftfn)
         job.depends_on(dep)
@@ -1041,7 +1040,7 @@ class DependencyTests(PPGPerTest):
         self.assertTrue(os.path.exists(ofA)) #which was before the error
         self.assertFalse(os.path.exists(ofB)) #which was on the error
         self.assertFalse(os.path.exists(ofC)) #which was after the error
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         jobA = ppg.FileGeneratingJob(ofA, write_a)
         jobC = ppg.FileGeneratingJob(ofC, write_c)
         def write_b_ok():
@@ -1109,7 +1108,7 @@ class DependencyTests(PPGPerTest):
         self.assertTrue(read('out/B'), 'B')
         self.assertTrue(read('out/C'), 'C')
 
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         jobA = get_job('A')
         jobB = get_job('B')
         jobC = get_job('C')
@@ -1206,76 +1205,6 @@ class DependencyInjectionJobTests(PPGPerTest):
         ppg.run_pipegraph()
         self.assertEqual(read("out/A"), 'B')
 
-    def test_injecting_cached_job(self):
-        dummy = Dummy()
-        of = 'out/A'
-        def do_write():
-            write(of, dummy.o)
-        preq = ppg.DataLoadingJob('out/C', lambda: None)
-        def get_job():
-            return ppg.FileGeneratingJob(of, do_write).depends_on(preq) #always the same job comes back from the singletonizing constructer
-        def generate_dep():
-            def write_B():
-                write("out/B", "B")
-                return 'B'
-            inner_job = ppg.CachedAttributeLoadingJob('out/B', dummy, 'o', write_B)
-            get_job().depends_on(inner_job)
-        job_gen = ppg.DependencyInjectionJob('gen_job', generate_dep)
-        get_job().depends_on(job_gen)
-        ppg.run_pipegraph()
-        self.assertEqual(read("out/A"), 'B')
-
-    def test_invariant_injection_of_created_jobs(self):
-        of = 'out/A'
-        def do_write():
-            write(of, read("out/B"))
-        job = ppg.FileGeneratingJob(of, do_write)
-        def generate_dep():
-            def write_B():
-                write("out/B", "B")
-            inner_job = ppg.FileGeneratingJob('out/B', write_B)
-            job.depends_on(inner_job)
-        job_gen = ppg.DependencyInjectionJob('gen_job', generate_dep)
-        job.depends_on(job_gen)
-        ppg.run_pipegraph()
-        self.assertEqual(read("out/A"), 'B')
-        re_inner_job = ppg.util.global_pipegraph.jobs['out/B']
-        found = False
-        for dep in re_inner_job.prerequisites:
-            if isinstance(dep, ppg.job.FunctionInvariant):
-                found = True
-        self.assertTrue(found)
-
-
-
-
-class DependencyInjectionJobTests_Complex(PPGPerTest):
-    #modeled after a real use case ;)
-
-    def calc(self):
-        def load():
-            self.o = 'hello' + self.a
-        load_job =  ppg.DataLoadingJob('daload', load).depends_on(self.generate_calc_jobs())
-        return load_job
-
-    def generate_calc_jobs(self):
-        def gen():
-            load_job = self.calc()
-            def in_calc():
-                return 'hello'
-            job = ppg.CachedAttributeLoadingJob('out/cached', self, 'a', in_calc)
-            load_job.depends_on(job)
-        gen = ppg.DependencyInjectionJob('_gen_jobs', gen)
-        return gen
-
-    def test(self):
-        of = ppg.FileGeneratingJob('out/A', lambda: write('out/A', self.o)).depends_on(self.calc())
-        ppg.run_pipegraph()
-        self.assertEqual(self.o, 'hellohello')
-        self.assertEqual(read('out/A'), 'hellohello')
-
-
-
 class JobGeneratingJobTests(PPGPerTest):
 
     def test_basic(self):
@@ -1288,38 +1217,6 @@ class JobGeneratingJobTests(PPGPerTest):
         self.assertTrue(read('out/A'), 'A')
         self.assertTrue(read('out/B'), 'B')
         self.assertTrue(read('out/C'), 'C')
-
-    def test_basic_injecting_auto_invariants(self):
-        def gen():
-            jobA = ppg.FileGeneratingJob('out/A', lambda : write('out/A', 'A'))
-            jobB = ppg.FileGeneratingJob('out/B', lambda : write('out/B', 'B'))
-            jobC = ppg.FileGeneratingJob('out/C', lambda : write('out/C', 'C'))
-        genjob = ppg.JobGeneratingJob('genjob', gen)
-        ppg.run_pipegraph()
-        self.assertTrue(read('out/A'), 'A')
-        self.assertTrue(read('out/B'), 'B')
-        self.assertTrue(read('out/C'), 'C')
-        re_inner_job = ppg.util.global_pipegraph.jobs['out/A']
-        found = False
-        for dep in re_inner_job.prerequisites:
-            if isinstance(dep, ppg.job.FunctionInvariant):
-                found = True
-        self.assertTrue(found)
-
-    def test_raises_if_needs_more_cores_than_we_have(self):
-        def gen():
-            jobA = ppg.FileGeneratingJob('out/A', lambda : write('out/A', 'A'))
-            jobA.cores_needed = 20000
-        genjob = ppg.JobGeneratingJob('genjob', gen)
-        try:
-            ppg.run_pipegraph()
-            raise ValueError("should not be reached")
-        except ppg.RuntimeError:
-            pass
-        self.assertFalse(os.path.exists('out/A')) #since the gen job crashed
-        jobGenerated = ppg.util.global_pipegraph.jobs['out/A']
-        self.assertTrue(jobGenerated.failed)
-        self.assertEqual(jobGenerated.error_reason, "Needed to much memory/cores")
 
     def test_raises_if_needs_more_cores_than_we_have(self):
         def gen():
@@ -1376,7 +1273,7 @@ class JobGeneratingJobTests(PPGPerTest):
         ppg.run_pipegraph()
         self.assertEqual(read('out/B'), 'B')
 
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         def gen2():
             jobB = ppg.FileGeneratingJob('out/B', lambda : write('out/B', 'C'))
             jobB.ignore_code_changes()
@@ -1386,7 +1283,7 @@ class JobGeneratingJobTests(PPGPerTest):
         ppg.run_pipegraph()
         self.assertEqual(read('out/B'), 'B') #no rerun
 
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         def gen3():
             jobB = ppg.FileGeneratingJob('out/B', lambda : write('out/B', 'C'))
             jobB.ignore_code_changes()
@@ -1425,7 +1322,7 @@ class JobGeneratingJobTests(PPGPerTest):
             self.assertEqual(read('out/B'), 'B')
             self.assertEqual(read('out/C'), 'C')
         a()
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         b()
 
     def test_generated_job_depending_on_each_other(self):
@@ -1522,7 +1419,7 @@ class PlotJobTests(PPGPerTest):
         self.assertEqual(read('out/calc'),'A')
         self.assertEqual(read('out/plot'),'B')
 
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         def plot2(df):
             append('out/plot', 'B')
             return pyggplot.Plot(df).add_scatter('Y','X')
@@ -1549,7 +1446,7 @@ class PlotJobTests(PPGPerTest):
         self.assertEqual(read('out/calc'),'A')
         self.assertEqual(read('out/plot'),'B')
 
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         def calc2():
             append('out/calc', 'A')
             x = 5
@@ -1631,7 +1528,7 @@ class CachedAttributeJobTests(PPGPerTest):
                 read(of),
                 ", ".join(str(x) for x in range(0, 100)))
 
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         def calc2():
             return ", ".join(str(x) for x in range(0, 200))
         job = ppg.CachedAttributeLoadingJob('out/mycalc', o, 'a', calc2)
@@ -1655,7 +1552,7 @@ class CachedAttributeJobTests(PPGPerTest):
                 read(of),
                 ", ".join(str(x) for x in range(0, 100)))
 
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         def calc2():
             return ", ".join(str(x) for x in range(0, 200))
         job = ppg.CachedAttributeLoadingJob('out/mycalc', o, 'a', calc2)
@@ -1666,7 +1563,7 @@ class CachedAttributeJobTests(PPGPerTest):
                 read(of),
                 ", ".join(str(x) for x in range(0, 100)))
 
-        ppg.new_pipegraph(rc)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         job = ppg.CachedAttributeLoadingJob('out/mycalc', o, 'a', calc2)
         jobB = ppg.FileGeneratingJob(of, do_write).depends_on(job)
         ppg.run_pipegraph()
@@ -1697,7 +1594,7 @@ class CachedAttributeJobTests(PPGPerTest):
         self.assertEqual(read('out/A'), '55')
 
     def test_depends_on_returns_self(self):
-        ppg.new_pipegraph()
+        ppg.new_pipegraph(rc_gen(), quiet=True)
         o = Dummy()
         jobA = ppg.CachedAttributeLoadingJob('out/A',o, 'shu', lambda : write('out/A', 'shu'))
         jobB = ppg.FileGeneratingJob('out/B' ,lambda : write('out/B', 'shu'))
@@ -1711,7 +1608,7 @@ class CachedDataLoadingJobTests(PPGPerTest):
             return ", ".join(str(x) for x in range(0, 100))
         def store(value):
             o.a = value
-        job = ppg.CachedDataLoadingJobTests('out/mycalc', calc, store)
+        job = ppg.CachedDataLoadingJob('out/mycalc', calc, store)
         of = 'out/A'
         def do_write():
             write(of, o.a)
@@ -1720,7 +1617,6 @@ class CachedDataLoadingJobTests(PPGPerTest):
         self.assertEqual(
                 read(of),
                 ", ".join(str(x) for x in range(0, 100)))
-
 
 
 class TestResourceCoordinator:
@@ -1914,35 +1810,54 @@ class TestingTheUnexpectedTests(PPGPerTest):
         except ppg.RuntimeError:
             pass
         self.assertFalse(os.path.exists('out/A'))
-        self.assertTrue(isinstance(fg.exception, ppg.ppg_exceptions.JobDied))
+        self.assertTrue(isinstance(fg.exception, ppg.JobDiedException))
         self.assertEqual(fg.exception.exit_code, 5)
 
 
 
 class NotYetImplementedTests(unittest.TestCase):
-    
-    def test_function_invariant_and_generator_expressions(self):
-        raise NotImplementedError()
 
+    def test_large_job_descriptions(self):
+        #break the 65k barrier on the AMP values...
+        raise NotImplementedError()
+    
     def test_chained_dataloading_jobs(self):
         raise NotImplementedError()
 
     def test_failing_dataloading_jobs(self):
-        #with the local resource coordinator, these should not kill the pipeline!
         raise NotImplementedError()
 
     def test_spawn_slave_failure(self):
-        return NotImplementedError()
+        raise NotImplementedError()
 
-    def testOnlyFuncsAreAccepted(self):
-        #done for cached...
-        return NotImplementedError()
+    def test_html_dumping_on_failure(self):
+        raise NotImplementedError()
+
+    def test_invariant_dumping_on_failure(self):
+        """When is it ok to update them?"""
+        raise NotImplementedError()
 
 
+    def test_prev_dataloading_jobs_not_done_if_there_is_a_non_dataloading_job_inbetween_that_is_done(self):
+        # so, A = DataLoadingJob, B = FileGeneratingJob, C = DataLoadingJob, D = FileGeneratingJob
+        # D.depends_on(C)
+        # C.depends_on(B)
+        # B.depends_on(A)
+        # B is done.
+        # D is not
+        # since a would be loaded, and then cleaned up right away (because B is Done)
+        # it should never be loaded
+        raise NotImplementedError()
 
+    def test_plot_job_dependencies_are_added_to_both_inner_jobs(self):
+        raise NotImplementedError()
+
+    def test_non_function_passed_raises_JobContractError_exception_in_all_jobs(self):
+        raise NotImplementedError()
 
 
 
 
 if __name__ == '__main__':
     unittest.main()
+    print' left unittest.main()'

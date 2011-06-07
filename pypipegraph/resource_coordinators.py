@@ -202,13 +202,12 @@ class LocalSlave:
                             job.job_id, 
                             'no stdout available', 
                             'no stderr available', 
-                            cPickle.dumps(ppg_exceptions.JobDied(proc.exitcode)),
+                            cPickle.dumps(ppg_exceptions.JobDiedException(proc.exitcode)),
                             '',
                             False #no new jobs
                             ))
         for proc in remove:
             del self.process_to_job[proc]
-
 
 
 
@@ -240,10 +239,40 @@ class LocalTwisted:
                     'memory': self.memory_available}
                 }
 
+    def enter_twisted(self, pipe):
+        #this happens in a spawned process...
+        reactor.run()
+        print 'exception in spawned', repr(self.pipegraph.jobs['out/a'].exception)
+        pipe.send((cloudpickle.dumps(self.pipegraph.jobs), cPickle.dumps(self.pipegraph.invariant_status)))
+
     def enter_loop(self):
         self.slaves_ready_count = 0
         logger.info("starting reactor")
-        reactor.run()
+        if not util.reactor_was_started:
+            util.reactor_was_started = True
+        parent_conn, child_conn = multiprocessing.Pipe()
+        p = multiprocessing.Process(None, self.enter_twisted, args=(child_conn,))
+        p.start()
+        jobs_str, invariant_str = parent_conn.recv()
+        p.join()
+        cPickle.loads(jobs_str) # which should automatically fill in the existing jobs...
+        self.pipegraph.invariant_status = cPickle.loads(invariant_str)
+        #p.start()
+        #p.join()
+        #if p.exitcode != 0:
+            #raise ppg_exceptions.RuntimeError()
+        #reactor.run() 
+        #now, the problem here is that you simply can't restart twisted reactors
+        #in ordinary coding, this is hardly a problem, though it is a hazzle to being
+        #able to start another pipeline.
+        #it does get fairly troublesome in testing.
+        #the idea of course would be to fork before calling reactor.run,
+        #and not returning until the forked child returns.
+        #problem with this is of course how to propegate the exceptions
+        #let' multiprocessing do the worring...
+
+
+
 
 
     def start_when_ready(self, response, slave_id): #this get's called when a slave has connected and transmitted the pipegraph...

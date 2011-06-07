@@ -1,5 +1,5 @@
 from graph import run_pipegraph, new_pipegraph, forget_job_status, get_running_job_count , destroy_global_pipegraph
-from ppg_exceptions import RuntimeError, CycleError, JobContractError, PyPipelineGraphError
+from ppg_exceptions import RuntimeError, CycleError, JobContractError, PyPipelineGraphError, JobDiedException
 import twisted_fork
 import util
 import cloudpickle
@@ -18,7 +18,7 @@ from job import (
 
 all = [
         run_pipegraph, new_pipegraph, forget_job_status, get_running_job_count, destroy_global_pipegraph,
-         RuntimeError, CycleError, JobContractError, PyPipelineGraphError,
+         RuntimeError, CycleError, JobContractError, PyPipelineGraphError, JobDiedException,
 
         FileGeneratingJob, MultiFileGeneratingJob, 
         DataLoadingJob, AttributeLoadingJob, 
