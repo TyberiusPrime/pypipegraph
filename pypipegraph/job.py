@@ -48,7 +48,7 @@ class Job(object):
     def __new__(cls, job_id, *args, **kwargs):
         #logger.info("New for %s %s" % (cls, job_id))
         if not isinstance(job_id, str):
-            raise ppg_exceptions.JobContractError("Job_id must be a string")
+            raise ValueError("Job_id must be a string")
         if not job_id in util.job_uniquifier:
             util.job_uniquifier[job_id] = object.__new__(cls)
             util.job_uniquifier[job_id].job_id = job_id #doing it later will fail because hash apperantly might be called before init has run?
@@ -207,6 +207,8 @@ class Job(object):
 inner_code_object_re = re.compile('<code	object	<[^>]+>	at	0x[a-f0-9]+[^>]+')
 class FunctionInvariant(Job):
     def __init__(self, job_id, function):
+        if not hasattr(function, '__call__'):
+            raise ValueError("function was not a callable")
         Job.__init__(self, job_id)
         self.function = function
 
@@ -305,6 +307,8 @@ class FileGeneratingJob(Job):
 
     def __init__(self, output_filename, function, rename_broken = False):
         logger.info("FG init for %s" % output_filename)
+        if not hasattr(function, '__call__'):
+            raise ValueError("function was not a callable")
         Job.__init__(self, output_filename)
         self.callback = function
         self.rename_broken = rename_broken
@@ -357,7 +361,15 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         return (self.filenames,)
 
     def __init__(self, filenames, function, rename_broken = False):
-        job_id = ":".join(sorted(str(x) for x in filenames))
+        if not hasattr(function, '__call__'):
+            raise ValueError("function was not a callable")
+        if not hasattr(filenames, '__iter__'):
+            raise ValueError("filenames was not iterable")
+        sorted_filenames = list(sorted(x for x in filenames))
+        for x in sorted_filenames:
+            if not isinstance(x, str) and not isinstance(x, unicode):
+                raise ValueError("Not all filenames passed to MultiFileGeneratingJob were str or unicode objects")
+        job_id = ":".join(sorted_filenames)
         Job.__init__(self, job_id)
         self.filenames = filenames
         self.callback = function
@@ -416,6 +428,9 @@ class TempFileGeneratingJob(FileGeneratingJob):
 
 class DataLoadingJob(Job):
     def __init__(self, job_id, callback):
+        if not hasattr(callback, '__call__'):
+            raise ValueError("callback was not a callable")
+
         Job.__init__(self, job_id)
         self.callback = callback
         self.do_ignore_code_changes = False
@@ -449,6 +464,10 @@ class DataLoadingJob(Job):
 class AttributeLoadingJob(DataLoadingJob):
 
     def __init__(self, job_id, object, attribute_name, callback):
+        if not hasattr(callback, '__call__'):
+            raise ValueError("callback was not a callable")
+        if not isinstance(attribute_name, str):
+            raise ValueError("attribute_name was not a string")
         self.object = object
         self.attribute_name = attribute_name
         if not hasattr(callback, '__call__'):
@@ -506,6 +525,8 @@ class _GraphModifyingJob(Job):
 
 class DependencyInjectionJob(_GraphModifyingJob):
     def __init__(self, job_id, callback):
+        if not hasattr(callback, '__call__'):
+            raise ValueError("callback was not a callable")
         Job.__init__(self, job_id)
         self.callback = callback
         self.do_ignore_code_changes = False
@@ -565,6 +586,8 @@ class DependencyInjectionJob(_GraphModifyingJob):
 
 class JobGeneratingJob(_GraphModifyingJob):
     def __init__(self, job_id, callback):
+        if not hasattr(callback, '__call__'):
+            raise ValueError("callback was not a callable")
         Job.__init__(self, job_id)
         self.callback = callback
         self.do_ignore_code_changes = False
@@ -596,12 +619,12 @@ class JobGeneratingJob(_GraphModifyingJob):
         return res
 
 def PlotJob(output_filename, calc_function, plot_function): #a convienence wrapper for a quick plotting
-    """Calculate some data for plotting, cache it in cache/outputfilename, and plot from there.
+    """Calculate some data for plotting, cache it in cache/output_filename , and plot from there.
     creates two jobs, a plot_job (FileGeneratingJob) and a cache_job (FileGeneratingJob), 
     returns plot_job, with plot_jbo.cache_job = cache_job
     """
-
-    
+    if not isinstance(output_filename , str) or isinstance(output_filename , unicode):
+        raise ValueError("output_filename was not a string or unicode")
     if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):
         raise ValueError("Don't know how to create this file %s, must end on .png or .pdf" % output_filename)
     import pydataframe
@@ -641,6 +664,8 @@ class _LazyFileGeneratingJob(Job):
     data_loading_job is dependend on somewhere"""
 
     def __init__(self, job_id, calc_function, dl_job):
+        if not hasattr(calc_function, '__call__'):
+            raise ValueError("calc_function was not a callable")
         Job.__init__(self, job_id)
         self.cache_filename = job_id
         self.callback = calc_function
@@ -688,11 +713,18 @@ class _LazyFileGeneratingJob(Job):
 class CachedAttributeLoadingJob(AttributeLoadingJob):
     
     def __new__(cls, job_id, *args, **kwargs):
+        if not isinstance(job_id, str) and not isinstance(job_id, unicode):
+            raise ValueError("cache_filename/job_id was not a str/unicode jobect")
+
         return Job.__new__(cls, job_id + '_load')
     
     def __init__(self, cache_filename, target_object, target_attribute, calculating_function):
+        if not isinstance(cache_filename, str) and not isinstance(cache_filename, unicode):
+            raise ValueError("cache_filename/job_id was not a str/unicode jobect")
         if not hasattr(calculating_function, '__call__'):
-            raise ValueError("calculating_function for %s was not callable (missed __call__ attribute)" % cache_filename)
+            raise ValueError("calculating_function was not a callable")
+        if not isinstance(target_attribute, str):
+            raise ValueError("attribute_name was not a string")
         def do_load():
             op = open(cache_filename, 'rb')
             data = cPickle.load(op)
@@ -721,11 +753,17 @@ class CachedAttributeLoadingJob(AttributeLoadingJob):
 class CachedDataLoadingJob(DataLoadingJob):
     
     def __new__(cls, job_id, *args, **kwargs):
-        return Job.__new__(cls, job_id + '_load')
+        if not isinstance(job_id, str) and not isinstance(job_id, unicode):
+            raise ValueError("cache_filename/job_id was not a str/unicode jobect")
+        return Job.__new__(cls, job_id + '_load') #plus load, so that the cached data goes into the cache_filename passed to the constructor...
     
     def __init__(self, cache_filename, calculating_function, loading_function):
+        if not isinstance(cache_filename, str) and not isinstance(cache_filename, unicode):
+            raise ValueError("cache_filename/job_id was not a str/unicode jobect")
         if not hasattr(calculating_function, '__call__'):
-            raise ValueError("calculating_function for %s was not callable (missed __call__ attribute)" % cache_filename)
+            raise ValueError("calculating_function was not a callable")
+        if not hasattr(loading_function, '__call__'):
+            raise ValueError("loading_function was not a callable")
 
         def do_load():
             op = open(cache_filename, 'rb')

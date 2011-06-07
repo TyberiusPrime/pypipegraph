@@ -197,7 +197,7 @@ class JobTests(unittest.TestCase):
     def test_raises_on_non_str_job_id(self):
         def inner():
             job = ppg.FileGeneratingJob(1234, lambda : None)
-        self.assertRaises( ppg.JobContractError, inner)
+        self.assertRaises( ValueError, inner)
 
     def test_equality_is_identity(self):
         def write_func(of):
@@ -393,6 +393,16 @@ class FileGeneratingJobTests(PPGPerTest):
             pass
         self.assertFalse(os.path.exists(of))
 
+    def test_passing_non_function(self):
+        def inner():
+            job = ppg.FileGeneratingJob('out/a', 'shu')
+        self.assertRaises(ValueError, inner)
+
+    def test_passing_non_string_as_jobid(self):
+        def inner():
+            job = ppg.FileGeneratingJob(5, lambda: 1)
+        self.assertRaises(ValueError, inner)
+
 class MultiFileGeneratingJobTests(PPGPerTest):
     def setUp(self):
         try:
@@ -488,11 +498,19 @@ class MultiFileGeneratingJobTests(PPGPerTest):
             pass
         for f in of:
             self.assertFalse(os.path.exists(f))
+    
+    def test_passing_not_a_list_of_str(self):
+        def inner():
+            job = ppg.MultiFileGeneratingJob('out/a', lambda: 1)
+        self.assertRaises(ValueError, inner)
+
+    def test_passing_non_function(self):
+        def inner():
+            job = ppg.MultiFileGeneratingJob(['out/a'], 'shu')
+        self.assertRaises(ValueError, inner)
 
 test_modifies_shared_global = []
 class DataLoadingJobTests(PPGPerTest):
-
-
 
     def test_modifies_slave(self):
         #global shared
@@ -600,6 +618,16 @@ class DataLoadingJobTests(PPGPerTest):
         self.assertTrue(os.path.exists(of)) #so the data loading job was run
         self.assertEqual(read('out/b'), 'hello') #and so was the jobgen and filegen job.
 
+    def test_passing_non_function(self):
+        def inner():
+            job = ppg.DataLoadingJob('out/a', 'shu')
+        self.assertRaises(ValueError, inner)
+
+    def test_passing_non_string_as_jobid(self):
+        def inner():
+            job = ppg.DataLoadingJob(5, lambda: 1)
+        self.assertRaises(ValueError, inner)
+
 class Dummy(object):
     pass
 
@@ -684,6 +712,24 @@ class AttributeJobTests(PPGPerTest):
         self.assertEqual(read(of), 'shu')
         self.assertEqual(read(of3), 'shu')
         self.assertFalse(os.path.exists(of2))
+
+    def test_passing_non_string_as_attribute(self):
+        o = Dummy()
+        def inner():
+            job = ppg.AttributeLoadingJob('out/a', o, 5, 55)
+        self.assertRaises(ValueError, inner)
+
+    def test_passing_non_function(self):
+        o = Dummy()
+        def inner():
+            job = ppg.AttributeLoadingJob('out/a', o, 'a', 55)
+        self.assertRaises(ValueError, inner)
+
+    def test_passing_non_string_as_jobid(self):
+        o = Dummy()
+        def inner():
+            job = ppg.AttributeLoadingJob(5, o, 'a', lambda: 55)
+        self.assertRaises(ValueError, inner)
 
 class TempFileGeneratingJobTest(PPGPerTest):
 
@@ -770,6 +816,15 @@ class TempFileGeneratingJobTest(PPGPerTest):
         self.assertTrue(os.path.exists(temp_file + '.broken'))
         self.assertFalse(os.path.exists(ofA))
 
+    def test_passing_non_function(self):
+        def inner():
+            job = ppg.TempFileGeneratingJob('out/a', 'shu')
+        self.assertRaises(ValueError, inner)
+
+    def test_passing_non_string_as_jobid(self):
+        def inner():
+            job = ppg.TempFileGeneratingJob(5, lambda: 1)
+        self.assertRaises(ValueError, inner)
 
 class InvariantTests(PPGPerTest):
 
@@ -993,6 +1048,16 @@ class FunctionInvariantTests(PPGPerTest):
         self.assertNotEqual(av, cv)
 
 
+    def test_passing_non_function(self):
+        def inner():
+            job = ppg.FunctionInvariant('out/a', 'shu')
+        self.assertRaises(ValueError, inner)
+
+    def test_passing_non_string_as_jobid(self):
+        def inner():
+            job = ppg.FunctionInvariant(5, lambda: 1)
+        self.assertRaises(ValueError, inner)
+
 class DependencyTests(PPGPerTest):
 
 
@@ -1206,6 +1271,17 @@ class DependencyInjectionJobTests(PPGPerTest):
         ppg.run_pipegraph()
         self.assertEqual(read("out/A"), 'B')
 
+    def test_passing_non_function(self):
+        def inner():
+            job = ppg.DependencyInjectionJob('out/a', 'shu')
+        self.assertRaises(ValueError, inner)
+
+    def test_passing_non_string_as_jobid(self):
+        def inner():
+            job = ppg.DependencyInjectionJob(5, lambda: 1)
+        self.assertRaises(ValueError, inner)
+
+
 class JobGeneratingJobTests(PPGPerTest):
 
     def test_basic(self):
@@ -1357,6 +1433,15 @@ class JobGeneratingJobTests(PPGPerTest):
         ppg.run_pipegraph()
         self.assertEqual(read('out/A'), '123')
 
+    def test_passing_non_function(self):
+        def inner():
+            job = ppg.JobGeneratingJob('out/a', 'shu')
+        self.assertRaises(ValueError, inner)
+
+    def test_passing_non_string_as_jobid(self):
+        def inner():
+            job = ppg.JobGeneratingJob(5, lambda: 1)
+        self.assertRaises(ValueError, inner)
 
 
 import exptools # i really don't like this, but it seems to be the only way to test this
@@ -1491,6 +1576,21 @@ class PlotJobTests(PPGPerTest):
             pass 
         self.assertTrue(isinstance(job.exception, ppg.JobContractError))
 
+    def test_passing_non_function_for_calc(self):
+        def inner():
+            job = ppg.PlotJob('out/a', 'shu', lambda df: 1)
+        self.assertRaises(ValueError, inner)
+
+    def test_passing_non_function_for_plot(self):
+        def inner():
+            job = ppg.PlotJob('out/a', lambda: 55, 'shu')
+        self.assertRaises(ValueError, inner)
+
+    def test_passing_non_string_as_jobid(self):
+        def inner():
+            job = ppg.PlotJob(5, lambda: 1, lambda df: 34)
+        self.assertRaises(ValueError, inner)
+
 class CachedAttributeJobTests(PPGPerTest):
  
     def test_simple(self):
@@ -1601,6 +1701,19 @@ class CachedAttributeJobTests(PPGPerTest):
         jobB = ppg.FileGeneratingJob('out/B' ,lambda : write('out/B', 'shu'))
         self.assertTrue(jobA.depends_on(jobB) is jobA)
 
+    def test_passing_non_function(self):
+        o = Dummy()
+        def inner():
+            job = ppg.CachedAttributeLoadingJob('out/a', o, 'a', 55)
+        self.assertRaises(ValueError, inner)
+
+    def test_passing_non_string_as_jobid(self):
+        o = Dummy()
+        def inner():
+            job = ppg.CachedAttributeLoadingJob(5, o, 'a', lambda: 55)
+        self.assertRaises(ValueError, inner)
+
+
 class CachedDataLoadingJobTests(PPGPerTest):
 
     def test_simple(self):
@@ -1618,6 +1731,21 @@ class CachedDataLoadingJobTests(PPGPerTest):
         self.assertEqual(
                 read(of),
                 ", ".join(str(x) for x in range(0, 100)))
+
+    def test_passing_non_function_to_calc(self):
+        def inner():
+            job = ppg.CachedDataLoadingJob('out/a', 'shu', lambda value: 55)
+        self.assertRaises(ValueError, inner)
+
+    def test_passing_non_function_to_store(self):
+        def inner():
+            job = ppg.CachedDataLoadingJob('out/a', lambda value: 55, 'shu')
+        self.assertRaises(ValueError, inner)
+
+    def test_passing_non_string_as_jobid(self):
+        def inner():
+            job = ppg.CachedDataLoadingJob(5, lambda: 1, lambda value: 55)
+        self.assertRaises(ValueError, inner)
 
 
 class TestResourceCoordinator:
@@ -1851,9 +1979,6 @@ class NotYetImplementedTests(unittest.TestCase):
         raise NotImplementedError()
 
     def test_plot_job_dependencies_are_added_to_both_inner_jobs(self):
-        raise NotImplementedError()
-
-    def test_non_function_passed_raises_JobContractError_exception_in_all_jobs(self):
         raise NotImplementedError()
 
 
