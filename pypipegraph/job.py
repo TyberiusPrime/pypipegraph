@@ -198,6 +198,9 @@ class Job(object):
     def __str__(self):
         return "%s (job_id=%s,id=%s)" % (self.__class__.__name__, self.job_id, id(self))
 
+    def __repr__(self):
+        return str(self)
+
 inner_code_object_re = re.compile('<code	object	<[^>]+>	at	0x[a-f0-9]+[^>]+')
 class FunctionInvariant(Job):
     def __init__(self, job_id, function):
@@ -309,10 +312,11 @@ class FileGeneratingJob(Job):
 
     def inject_auto_invariants(self):
         if not self.do_ignore_code_changes:
-            logger.info("Injecting outa invariants %s" % self)
+            #logger.info("Injecting outa invariants %s" % self)
             self.depends_on(FunctionInvariant(self.job_id + '_func', self.callback))
         else:
-            logger.info("not Injecting outa invariants %s" % self)
+            pass
+            #logger.info("not Injecting outa invariants %s" % self)
 
     def is_done(self):
         return util.output_file_exists(self.job_id)
