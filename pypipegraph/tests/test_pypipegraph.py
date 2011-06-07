@@ -628,6 +628,28 @@ class DataLoadingJobTests(PPGPerTest):
             job = ppg.DataLoadingJob(5, lambda: 1)
         self.assertRaises(ValueError, inner)
 
+    def test_failing_dataloading_jobs(self):
+        o = Dummy()
+        of = 'out/A'
+        def write():
+            write(of, o.a)
+        def load():
+            o.a = 'shu'
+            raise ValueError()
+        job_fg = ppg.FileGeneratingJob(of, write)
+        job_dl = ppg.DataLoadingJob('doload', load)
+        job_fg.depends_on(job_dl)
+        try:
+            ppg.run_pipegraph()
+            raise ValueError("should not be reached")
+        except ppg.RuntimeError:
+            pass
+        self.assertFalse(os.path.exists(of))
+        self.assertTrue(job_dl.failed)
+        self.assertTrue(job_fg.failed)
+        self.assertTrue(isinstance(job_dl.exception, ValueError))
+
+
 class Dummy(object):
     pass
 
@@ -2064,8 +2086,6 @@ class NotYetImplementedTests(unittest.TestCase):
     def test_chained_dataloading_jobs(self):
         raise NotImplementedError()
 
-    def test_failing_dataloading_jobs(self):
-        raise NotImplementedError()
 
     def test_spawn_slave_failure(self):
         raise NotImplementedError()

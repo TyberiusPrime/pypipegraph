@@ -369,7 +369,8 @@ class Pipegraph(object):
         else:
             job.was_run = True
             job.check_prerequisites_for_cleanup()
-        self.running_jobs.remove(job)
+        if not job.is_loadable(): #dataloading jobs are not 'seperatly' executed, but still, they may be signaled as failed by a slave.
+            self.running_jobs.remove(job)
         #self.signal_job_done()
         return bool(self.running_jobs) or bool(self.possible_execution_order)
 
