@@ -34,6 +34,7 @@ class LocalSystem:
         self.slave = LocalSlave(self)
         self.cores_available = max_cores_to_use
         self.memory_available = 50 * 1024 * 1024 * 1024 #50 gigs ;), todo, update to actual memory + swap...
+        self.total_memory_available = self.memory_available
         self.timeout = 15
 
     def spawn_slaves(self):
@@ -42,10 +43,14 @@ class LocalSystem:
                 }
 
     def get_resources(self):
-        return {
-                'LocalSlave': {'cores': self.cores_available,
-                    'memory': self.memory_available}
+        res = {
+                'LocalSlave': { #this is always the maximum available - the graph is handling the bookeeping of running jobs
+                    'cores': self.cores_available,
+                    'memory': self.memory_available,
+                    }
                 }
+        logger.info('get_resources, result %s - %s' % (id(res), res))
+        return res
 
     def enter_loop(self):
         self.spawn_slaves()
@@ -87,16 +92,18 @@ class LocalSystem:
                         self.pipegraph.new_jobs_generated_during_runtime(new_jobs)
 
                 more_jobs = self.pipegraph.job_executed(job)
-                if job.cores_needed == -1:
-                    self.cores_available = self.max_cores_to_use
-                else:
-                    self.cores_available += job.cores_needed
+                #if job.cores_needed == -1:
+                    #self.cores_available = self.max_cores_to_use
+                #else:
+                    #self.cores_available += job.cores_needed
                 if not more_jobs: #this means that all jobs are done and there are no longer any more running...
                     break
                 self.pipegraph.start_jobs()
                  
             except Queue.Empty, IOError: #either timeout, or the que failed
                 logger.info("Timout")
+                for job in self.pipegraph.running_jobs:
+                    logger.info('running %s' % (job,))
                 self.slave.check_for_dead_jobs()
                 pass
         self.slave.check_for_dead_jobs()
@@ -116,10 +123,10 @@ class LocalSlave:
             if preq.is_loadable():
                 logger.info("Slave: Loading %s" % preq)
                 preq.load()
-        if job.cores_needed == -1:
-            self.rc.cores_available = 0
-        else:
-            self.rc.cores_available -= job.cores_needed
+        #if job.cores_needed == -1:
+            #self.rc.cores_available = 0
+        #else:
+            #self.rc.cores_available -= job.cores_needed
         if job.modifies_jobgraph():
             logger.info("Slave: Running %s in slave" % job)
             self.run_a_job(job)

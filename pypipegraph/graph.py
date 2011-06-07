@@ -229,11 +229,13 @@ class Pipegraph(object):
         resources = self.rc.get_resources() # a dict of slave name > {cores: y, memory: x}
         maximal_memory = max([x['memory'] for x in resources.values()])
         maximal_cores = max([x['cores'] for x in resources.values()])
+        if maximal_cores == 0:
+            raise ValueError("No cores available?!")
 
         for job in self.possible_execution_order:
             #logger.info("checking job %s,  %s %s vs %s %s " % (job, job.cores_needed, job.memory_needed, maximal_cores, maximal_memory))
             if job.cores_needed > maximal_cores or job.memory_needed > maximal_memory:
-                logger.info("Pruning job %s,  needed to many resources" % job)
+                logger.info("Pruning job %s, needed to many resources cores needed: %s, memory needed: %s vs %s" % (job, job.cores_needed, job.memory_needed, resources))
                 self.prune_job(job)
                 job.error_reason = "Needed to much memory/cores"
                 job.failed = True
@@ -256,16 +258,18 @@ class Pipegraph(object):
         for slave in resources:
             resources[slave]['memory/core'] = resources[slave]['memory'] / resources[slave]['cores']
             resources[slave]['total cores'] = resources[slave]['cores']
-        for slave in self.jobs_by_slave:
-            for job in self.jobs_by_slave[slave]:
-                if job.cores_needed == -1:
-                    resources[slave][0] = 0
-                else:
-                    resources[slave][0] -= 1 
-                if job.memory_needed == -1:
-                    resources[slave]['memory'] -= resources[slave]['memory/core']
-                else:
-                    resources[slave]['memory'] -= job.memory_needed
+        #substract the running jobs
+        for job in self.running_jobs:
+            slave = job.slave_name
+            if job.cores_needed == -1:
+                resources[slave]['cores'] = 0
+            else:
+                resources[slave]['cores'] -= 1 
+            if job.memory_needed == -1:
+                resources[slave]['memory'] -= resources[slave]['memory/core']
+            else:
+                resources[slave]['memory'] -= job.memory_needed
+
         logger.info("Resources: %s" % resources)
         def resources_available(resources):
             for slave in resources:
@@ -277,6 +281,7 @@ class Pipegraph(object):
         if self.possible_execution_order and not runnable_jobs and not self.running_jobs:
             raise ppg_exceptions.RuntimeException(
             """We had more jobs that needed to be done, none of them could be run right now and none were running. Sounds like a dependency graph bug to me""")
+
         while resources_available(resources) and runnable_jobs:
             logger.info("resources were available %s " % resources)
             to_remove = []
@@ -293,12 +298,14 @@ class Pipegraph(object):
                             if job.modifies_jobgraph():
                                 to_remove.append(job) #remove just once...
                                 for slave in self.slaves:
+                                    job.slave_name = slave
                                     self.slaves[slave].spawn(job)
                                     self.running_jobs.add(job)
                                     resources[slave]['cores'] = 0 #since the job modifying blocks the Slave-Process (runs in it), no point in spawning further ones till it has returned.
                             else:
                                 if (job.cores_needed == -1 and resources[slave]['cores'] == resources[slave['total cores']]
                                     and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
+                                        job.slave_name = slave
                                         self.slaves[slave].spawn(job)
                                         self.running_jobs.add(job)
                                         to_remove.append(job)
@@ -307,6 +314,7 @@ class Pipegraph(object):
                                         continue
                                 elif (job.cores_needed <= resources[slave]['cores'] 
                                     and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
+                                    job.slave_name = slave
                                     self.slaves[slave].spawn(job)
                                     self.running_jobs.add(job)
                                     to_remove.append(job)
@@ -330,7 +338,7 @@ class Pipegraph(object):
             error_count -= 1
             if error_count == 0:
                 raise ValueError("There was a loop error that should never 've been reached in start_jobs")
-        logger.info("can't start any more jobs. either no more there, or resources all utilized. There are currently %i jobs remaining" % len(self.possible_execution_order))
+        logger.info("can't start any more jobs. either there are no more, or resources all utilized. There are currently %i jobs remaining" % len(self.possible_execution_order))
 
              
     def prune_job(self, job):
