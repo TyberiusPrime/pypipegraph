@@ -618,45 +618,58 @@ class JobGeneratingJob(_GraphModifyingJob):
         logger.info("Returning from %s" % self)
         return res
 
-def PlotJob(output_filename, calc_function, plot_function): #a convienence wrapper for a quick plotting
+class PlotJob(FileGeneratingJob): 
     """Calculate some data for plotting, cache it in cache/output_filename , and plot from there.
-    creates two jobs, a plot_job (FileGeneratingJob) and a cache_job (FileGeneratingJob), 
-    returns plot_job, with plot_jbo.cache_job = cache_job
+    creates two jobs, a plot_job (this one) and a cache_job (FileGeneratingJob, in self.cache_job), 
     """
-    if not isinstance(output_filename , str) or isinstance(output_filename , unicode):
-        raise ValueError("output_filename was not a string or unicode")
-    if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):
-        raise ValueError("Don't know how to create this file %s, must end on .png or .pdf" % output_filename)
-    import pydataframe
-    import pyggplot
-    cache_filename = os.path.join('cache', output_filename)
-    def run_calc():
-        df = calc_function()
-        if not isinstance(df, pydataframe.DataFrame):
-            raise ppg_exceptions.JobContractError("%s.calc_function did not return a DataFrame, was %s " % (output_filename, df.__class__))
-        try:
-            os.makedirs(os.path.dirname(cache_filename))
-        except OSError:
-            pass
-        of = open(cache_filename, 'wb')
-        cPickle.dump(df, of, cPickle.HIGHEST_PROTOCOL)
-        of.close()
-    def run_plot():
-        of = open(cache_filename, 'rb')
-        df = cPickle.load(of)
-        of.close()
-        plot = plot_function(df)
-        if not isinstance(plot, pyggplot.Plot):
-            raise ppg_exceptions.JobContractError("%s.plot_function did not return a pyggplot.Plot " % (output_filename))
-        plot.render(output_filename)
+    def __init__(self, output_filename, calc_function, plot_function):
+        if not isinstance(output_filename , str) or isinstance(output_filename , unicode):
+            raise ValueError("output_filename was not a string or unicode")
+        if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):
+            raise ValueError("Don't know how to create this file %s, must end on .png or .pdf" % output_filename)
 
-    cache_job = FileGeneratingJob(cache_filename, run_calc)
-    cache_job.depends_on(FunctionInvariant(output_filename + '.calcfunc', calc_function))
-    plot_job = FileGeneratingJob(output_filename, run_plot)
-    plot_job.depends_on(FunctionInvariant(output_filename + '.plotfunc', plot_function))
-    plot_job.depends_on(cache_job)
-    plot_job.cache_job = cache_job
-    return plot_job
+
+        self.calc_function = calc_function
+        self.plot_function = plot_function
+
+        import pydataframe
+        import pyggplot
+        cache_filename = os.path.join('cache', output_filename)
+        def run_calc():
+            df = calc_function()
+            if not isinstance(df, pydataframe.DataFrame):
+                raise ppg_exceptions.JobContractError("%s.calc_function did not return a DataFrame, was %s " % (output_filename, df.__class__))
+            try:
+                os.makedirs(os.path.dirname(cache_filename))
+            except OSError:
+                pass
+            of = open(cache_filename, 'wb')
+            cPickle.dump(df, of, cPickle.HIGHEST_PROTOCOL)
+            of.close()
+        def run_plot():
+            of = open(cache_filename, 'rb')
+            df = cPickle.load(of)
+            of.close()
+            plot = plot_function(df)
+            if not isinstance(plot, pyggplot.Plot):
+                raise ppg_exceptions.JobContractError("%s.plot_function did not return a pyggplot.Plot " % (output_filename))
+            plot.render(output_filename)
+        FileGeneratingJob.__init__(self, output_filename, run_plot)
+
+        cache_job = FileGeneratingJob(cache_filename, run_calc)
+        self.depends_on(cache_job)
+        self.cache_job = cache_job
+
+    def depends_on(self, other_job):
+        FileGeneratingJob.depends_on(self, other_job)
+        if hasattr(self, 'cache_job'): #activate this after we have added the invariants...
+            self.cache_job.depends_on(other_job)
+
+    def inject_auto_invariants(self):
+        if not self.do_ignore_code_changes:
+            self.cache_job.depends_on(FunctionInvariant(self.job_id + '.calcfunc', self.calc_function))
+            FileGeneratingJob.depends_on(self, FunctionInvariant(self.job_id + '.plotfunc', self.plot_function))
+
 
 
 class _LazyFileGeneratingJob(Job):
