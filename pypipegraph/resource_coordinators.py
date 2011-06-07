@@ -58,10 +58,12 @@ class LocalSystem:
         logger.info("Starting first batch of jobs")
         self.pipegraph.start_jobs()
         while True:
+            self.slave.check_for_dead_jobs() #whether time out or or job was done, let's check this...
             try:
                 logger.info("Listening to que")
                 slave_id, was_ok, job_id_done, stdout, stderr,exception, trace, new_jobs = self.que.get(block=True, timeout=self.timeout) #was there a job done?
                 logger.info("Job returned: %s, was_ok: %s" % (job_id_done, was_ok))
+                logger.info("Remaining in que (approx): %i" % self.que.qsize())
                 job = self.pipegraph.jobs[job_id_done]
                 job.was_done_on.add(slave_id)
                 job.stdout = stdout
@@ -104,9 +106,7 @@ class LocalSystem:
                 logger.info("Timout")
                 for job in self.pipegraph.running_jobs:
                     logger.info('running %s' % (job,))
-                self.slave.check_for_dead_jobs()
                 pass
-        self.slave.check_for_dead_jobs()
 
 class LocalSlave:
 
@@ -118,7 +118,7 @@ class LocalSlave:
 
     def spawn(self, job):
         logger.info("Slave: Spawning %s" % job.job_id)
-        logger.info("Slave: preqs are %s" % [preq.job_id for preq in job.prerequisites])
+        #logger.info("Slave: preqs are %s" % [preq.job_id for preq in job.prerequisites])
         for preq in job.prerequisites:
             if preq.is_loadable():
                 logger.info("Slave: Loading %s" % preq)
@@ -130,12 +130,18 @@ class LocalSlave:
         if job.modifies_jobgraph():
             logger.info("Slave: Running %s in slave" % job)
             self.run_a_job(job)
+            logger.info("Slave: returned from %s in slave, data was put" % job)
         else:
-            p = multiprocessing.Process(target=self.run_a_job, args=[job,])
+            logger.info("Slave: Forking for %s" % job.job_id)
+            p = multiprocessing.Process(target=self.run_a_job, args=[job, False])
+            job.run_info = "pid = %s" % (p.pid, )
             p.start()
             self.process_to_job[p] = job
+            logger.info("Slave, returning to start_jobs")
 
-    def run_a_job(self, job): #this runs in the spawned processes, except for job.modifies_jobgraph()==True jobs
+    def run_a_job(self, job, is_local=True): #this runs in the spawned processes, except for job.modifies_jobgraph()==True jobs
+        #logger = util.start_logging('SlaveRun')
+        #logger.info("Entering run_a_job on %s in %s" % (job, os.getpid()))
         stdout = cStringIO.StringIO()
         stderr = cStringIO.StringIO()
         old_stdout = sys.stdout 
@@ -164,6 +170,7 @@ class LocalSlave:
         stderr = stderr.getvalue()
         sys.stdout = old_stdout
         sys.stderr = old_stderr
+        #logger.info("Now putting job data into que: %s - %s" % (job, os.getpid()))
         self.rc.que.put(
                 (
                     self.slave_id,
@@ -175,6 +182,10 @@ class LocalSlave:
                     trace, 
                     new_jobs,
                 ))
+        if not is_local:
+            self.rc.que.close()
+            self.rc.que.join_thread()
+
 
     def prepare_jobs_for_transfer(self, job_dict):
         """When traveling back, jobs-dependencies are wrapped as strings - this should 
@@ -193,8 +204,9 @@ class LocalSlave:
         remove = []
         for proc in self.process_to_job:
             if not proc.is_alive():
+                logger.info("Process ended %s" % proc)
                 remove.append(proc)
-                if proc.exitcode != 0:
+                if proc.exitcode != 0: #0 means everything ok, we should have an answer via the que from the job itself...
                     job = self.process_to_job[proc]
                     self.rc.que.put((
                             self.slave_id, 
