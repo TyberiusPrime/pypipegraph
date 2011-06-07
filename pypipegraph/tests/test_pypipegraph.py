@@ -1515,6 +1515,33 @@ class PlotJobTests(PPGPerTest):
         self.assertEqual(read('out/calc'),'A')
         self.assertEqual(read('out/plot'),'BB')
 
+    def test_no_rerun_if_ignore_code_changes_and_plot_changes(self):
+        import pydataframe
+        import pyggplot
+        def calc():
+            append('out/calc', 'A')
+            return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
+        def plot(df):
+            append('out/plot', 'B')
+            return pyggplot.Plot(df).add_scatter('X','Y')
+        of = 'out/test.png'
+        job = ppg.PlotJob(of, calc, plot)
+        ppg.run_pipegraph()
+        self.assertTrue(magic(of).find('PNG image') != -1)
+        self.assertEqual(read('out/calc'),'A')
+        self.assertEqual(read('out/plot'),'B')
+
+        ppg.new_pipegraph(rc_gen(), quiet=True)
+        def plot2(df):
+            append('out/plot', 'B')
+            return pyggplot.Plot(df).add_scatter('Y','X')
+        job = ppg.PlotJob(of, calc, plot2)
+        job.ignore_code_changes()
+        ppg.run_pipegraph()
+        self.assertTrue(magic(of).find('PNG image') != -1)
+        self.assertEqual(read('out/calc'),'A')
+        self.assertEqual(read('out/plot'),'B')
+
 
     def test_reruns_both_if_calc_changed(self):
         import pydataframe
@@ -1542,6 +1569,49 @@ class PlotJobTests(PPGPerTest):
         self.assertTrue(magic(of).find('PNG image') != -1)
         self.assertEqual(read('out/calc'),'AA')
         self.assertEqual(read('out/plot'),'BB')
+
+    def test_no_rerun_if_calc_change_but_ignore_codechanges(self):
+        import pydataframe
+        import pyggplot
+        def calc():
+            append('out/calc', 'A')
+            return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
+        def plot(df):
+            append('out/plot', 'B')
+            return pyggplot.Plot(df).add_scatter('X','Y')
+        of = 'out/test.png'
+        job = ppg.PlotJob(of, calc, plot)
+        ppg.run_pipegraph()
+        self.assertTrue(magic(of).find('PNG image') != -1)
+        self.assertEqual(read('out/calc'),'A')
+        self.assertEqual(read('out/plot'),'B')
+
+        ppg.new_pipegraph(rc_gen(), quiet=True)
+        def calc2():
+            append('out/calc', 'A')
+            x = 5
+            return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
+        job = ppg.PlotJob(of, calc2, plot)
+        job.ignore_code_changes()
+        ppg.run_pipegraph()
+        self.assertTrue(magic(of).find('PNG image') != -1)
+        self.assertEqual(read('out/calc'),'A')
+
+        self.assertEqual(read('out/plot'),'B')
+    def test_plot_job_dependencies_are_added_to_both_inner_jobs(self):
+        import pydataframe
+        import pyggplot
+
+        def calc():
+            return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
+        def plot(df):
+            return pyggplot.Plot(df).add_scatter('X','Y')
+        of = 'out/test.png'
+        job = ppg.PlotJob(of, calc, plot)
+        dep = ppg.FileGeneratingJob('out/A', lambda : write('out/A', 'A'))
+        job.depends_on(dep)
+        self.assertTrue(dep in job.prerequisites)
+        self.assertTrue(dep in job.cache_job.prerequisites)
 
     def test_raises_if_calc_returns_non_df(self):
         #import pydataframe
@@ -1606,6 +1676,21 @@ class CachedAttributeJobTests(PPGPerTest):
         self.assertEqual(
                 read(of),
                 ", ".join(str(x) for x in range(0, 100)))
+
+    def test_preqrequisites_end_up_on_both(self):
+        o = Dummy()
+        def calc():
+            return ", ".join(str(x) for x in range(0, 100))
+        job = ppg.CachedAttributeLoadingJob('out/mycalc', o, 'a', calc)
+        of = 'out/A'
+        def do_write():
+            write(of, o.a)
+        jobB = ppg.FileGeneratingJob(of, do_write).depends_on(job)
+        job_preq= ppg.FileGeneratingJob('out/B', do_write)
+        job.depends_on(job_preq)
+        self.assertTrue(job_preq in job.prerequisites)
+        self.assertTrue(job_preq in job.lfg.prerequisites)
+
 
     def test_no_dependand_no_calc(self):
         o = Dummy()
@@ -1731,6 +1816,32 @@ class CachedDataLoadingJobTests(PPGPerTest):
         self.assertEqual(
                 read(of),
                 ", ".join(str(x) for x in range(0, 100)))
+
+    def test_no_dependand_no_calc(self):
+        o = Dummy()
+        def calc():
+            return ", ".join(str(x) for x in range(0, 100))
+        def store(value):
+            o.a = value
+        job = ppg.CachedDataLoadingJob('out/mycalc', calc, store)
+        ppg.run_pipegraph()
+        self.assertFalse(os.path.exists('out/mycalc'))
+
+    def test_preqrequisites_end_up_on_both(self):
+        o = Dummy()
+        def calc():
+            return ", ".join(str(x) for x in range(0, 100))
+        def store(value):
+            o.a = value
+        job = ppg.CachedDataLoadingJob('out/mycalc', calc, store)
+        of = 'out/A'
+        def do_write():
+            write(of, o.a)
+        jobB = ppg.FileGeneratingJob(of, do_write).depends_on(job)
+        job_preq= ppg.FileGeneratingJob('out/B', do_write)
+        job.depends_on(job_preq)
+        self.assertTrue(job_preq in job.prerequisites)
+        self.assertTrue(job_preq in job.lfg.prerequisites)
 
     def test_passing_non_function_to_calc(self):
         def inner():
@@ -1978,8 +2089,6 @@ class NotYetImplementedTests(unittest.TestCase):
         # it should never be loaded
         raise NotImplementedError()
 
-    def test_plot_job_dependencies_are_added_to_both_inner_jobs(self):
-        raise NotImplementedError()
 
 
 
