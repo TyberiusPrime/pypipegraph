@@ -307,7 +307,6 @@ class FileChecksumInvariant(Job):
 class FileGeneratingJob(Job):
 
     def __init__(self, output_filename, function, rename_broken = False):
-        logger.info("FG init for %s" % output_filename)
         Job.__init__(self, output_filename)
         self.callback = function
         self.rename_broken = rename_broken
