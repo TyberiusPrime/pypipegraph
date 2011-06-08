@@ -60,7 +60,7 @@ class Pipegraph(object):
             if self.new_jobs is False:
                 raise ValueError("Trying to add new jobs to running pipeline without having new_jobs set (ie. outside of a graph modifying job) - tried to add %s" %  job)
             if not job.job_id in self.jobs:
-                logger.info("Adding job to new_jobs %s %s" % (job, id(self.new_jobs)))
+            #    logger.info("Adding job to new_jobs %s %s" % (job, id(self.new_jobs)))
                 self.new_jobs[job.job_id] = job
             else:
                 pass
@@ -395,7 +395,7 @@ class Pipegraph(object):
                     #the case that it is injected as a dependency for a job that might have already been done
                     #is being taken care of in the JobGeneratingJob and DependencyInjectionJob s
         for job in new_jobs.values():
-            logger.info('new job %s' % job)
+            #logger.info('new job %s' % job)
             check_preqs(job)
             self.jobs[job.job_id] = job
         for job in new_jobs.values():
