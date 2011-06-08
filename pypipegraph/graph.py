@@ -440,7 +440,7 @@ class Pipegraph(object):
     def dump_html_status(self):
         if not os.path.exists('logs'):
             os.mkdir('logs')
-        op = open("logs/pipeline_status.html",'wb')
+        op = open("logs/pipegraph_status.html",'wb')
         for job in self.jobs.values():
             if job.failed:
                 op.write("<p style='color:red'>")

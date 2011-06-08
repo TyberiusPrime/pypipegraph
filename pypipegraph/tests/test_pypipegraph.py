@@ -2075,6 +2075,12 @@ class TestingTheUnexpectedTests(PPGPerTest):
         self.assertTrue(isinstance(fg.exception, ppg.JobDiedException))
         self.assertEqual(fg.exception.exit_code, 5)
 
+class HTMLDumpTests(PPGPerTest):
+
+    def test_html_dumping_on_failure(self):
+        fg = ppg.FileGeneratingJob('out/A', lambda: write('out/A', 'A'))
+        ppg.run_pipegraph()
+        self.assertTrue(os.path.exists('logs/pipegraph_status.html'))
 
 
 class NotYetImplementedTests(unittest.TestCase):
@@ -2090,8 +2096,6 @@ class NotYetImplementedTests(unittest.TestCase):
     def test_spawn_slave_failure(self):
         raise NotImplementedError()
 
-    def test_html_dumping_on_failure(self):
-        raise NotImplementedError()
 
     def test_invariant_dumping_on_failure(self):
         """When is it ok to update them?"""
