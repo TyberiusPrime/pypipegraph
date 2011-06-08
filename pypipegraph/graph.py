@@ -61,7 +61,7 @@ class Pipegraph(object):
             if self.new_jobs is False:
                 raise ValueError("Trying to add new jobs to running pipeline without having new_jobs set (ie. outside of a graph modifying job) - tried to add %s" %  job)
             if not job.job_id in self.jobs:
-                logger.info("Adding job to new_jobs %s %s" % (job, id(self.new_jobs)))
+            #    logger.info("Adding job to new_jobs %s %s" % (job, id(self.new_jobs)))
                 self.new_jobs[job.job_id] = job
             else:
                 pass
@@ -121,7 +121,7 @@ class Pipegraph(object):
     def connect_graph(self):
         """Convert the dependency graph in jobs into a bidirectional graph"""
         for job in self.jobs.values():
-            logger.info("X %s %s %s " % (job , job.prerequisites, job.dependants))
+            #logger.info("X %s %s %s " % (job , job.prerequisites, job.dependants))
             for preq in job.prerequisites:
                 preq.dependants.add(job)
 
@@ -189,11 +189,12 @@ class Pipegraph(object):
                 inv = e.new_value
                 old = inv #so no change...
             if inv != old:
-                logger.info("Invariant change for %s" % job)
-                if type(old) is str and type(inv) is str:
-                    import difflib
-                    for line in difflib.unified_diff(old.split("\n"), inv.split("\n"), n=5):
-                        logger.info(line)
+                if False:
+                    logger.info("Invariant change for %s" % job)
+                    if type(old) is str and type(inv) is str:
+                        import difflib
+                        for line in difflib.unified_diff(old.split("\n"), inv.split("\n"), n=5):
+                            logger.info(line)
                 job.invalidated()
                 self.invariant_status[job.job_id] = inv # for now, it is the dependant job's job to clean up so they get reinvalidated if the executing is terminated before they are reubild (ie. filegenjobs delete their outputfiles)
 
@@ -266,7 +267,7 @@ class Pipegraph(object):
         #substract the running jobs
         for job in self.running_jobs:
             slave = job.slave_name
-            if job.cores_needed == -1:
+            if job.cores_needed == -1 or job.modifies_jobgraph(): #since that job blocks the slave..
                 resources[slave]['cores'] = 0
             else:
                 resources[slave]['cores'] -= 1 
@@ -275,14 +276,23 @@ class Pipegraph(object):
             else:
                 resources[slave]['memory'] -= job.memory_needed
 
-        logger.info("Resources: %s" % resources)
+        logger.info("Resources after substracting %i running jobs: %s" % (len(self.running_jobs), resources))
+        logger.info("Currently running jobs:")
+
         def resources_available(resources):
+            logger.info("resources available %s" % resources)
             for slave in resources:
                 if resources[slave]['cores'] > 0 and resources[slave]['memory'] > 0:
                     return True
             return False
         error_count = len(self.jobs) * 2
-        runnable_jobs = [job for job in self.possible_execution_order if job.can_run_now()]
+        maximal_startable_jobs = sum(x['cores'] for x in resources.values())
+        runnable_jobs = []
+        for job in self.possible_execution_order:
+            if job.can_run_now():
+                runnable_jobs.append(job)
+                if len(runnable_jobs) == maximal_startable_jobs:
+                    break
         if self.possible_execution_order and not runnable_jobs and not self.running_jobs:
             raise ppg_exceptions.RuntimeException(
             """We had more jobs that needed to be done, none of them could be run right now and none were running. Sounds like a dependency graph bug to me""")
@@ -297,49 +307,51 @@ class Pipegraph(object):
                     #while next_job < len(self.possible_execution_order): #todo: restrict to runnable_jobs
                     while next_job < len(runnable_jobs):
                         job = runnable_jobs[next_job]
-                        if job.can_run_now():
-                            #Todo: Keep track of which dataloadingjobs have already been performed on each node
-                            #and prioritize by that...
-                            if job.modifies_jobgraph():
-                                to_remove.append(job) #remove just once...
-                                for slave in self.slaves:
-                                    job.slave_name = slave
-                                    self.slaves[slave].spawn(job)
-                                    self.running_jobs.add(job)
-                                    resources[slave]['cores'] = 0 #since the job modifying blocks the Slave-Process (runs in it), no point in spawning further ones till it has returned.
-                            else:
-                                if (job.cores_needed == -1 and resources[slave]['cores'] == resources[slave['total cores']]
-                                    and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
-                                        job.slave_name = slave
-                                        self.slaves[slave].spawn(job)
-                                        self.running_jobs.add(job)
-                                        to_remove.append(job)
-                                        resources[slave]['cores'] = 0
-                                        #don't worry about memory...
-                                        continue
-                                elif (job.cores_needed <= resources[slave]['cores'] 
-                                    and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
+                        #if job.can_run_now():
+                        #Todo: Keep track of which dataloadingjobs have already been performed on each node
+                        #and prioritize by that...
+                        if job.modifies_jobgraph():
+                            to_remove.append(job) #remove just once...
+                            for slave in self.slaves:
+                                job.slave_name = slave
+                                self.running_jobs.add(job)
+                                self.slaves[slave].spawn(job)
+                                resources[slave]['cores'] = 0 #since the job modifying blocks the Slave-Process (runs in it), no point in spawning further ones till it has returned.
+                            break
+                        else:
+                            if (job.cores_needed == -1 and resources[slave]['cores'] == resources[slave['total cores']]
+                                and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
                                     job.slave_name = slave
                                     self.slaves[slave].spawn(job)
                                     self.running_jobs.add(job)
                                     to_remove.append(job)
-                                    resources[slave]['cores'] -= job.cores_needed
-                                    if job.memory_needed == -1:
-                                        resources[slave]['memory'] -= resources[slave]['memory/core']
-                                    else:
-                                        resources[slave]['memory'] -= job.memory_needed
-                                        continue
+                                    resources[slave]['cores'] = 0
+                                    #don't worry about memory...
+                                    break
+                            elif (job.cores_needed <= resources[slave]['cores'] 
+                                and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
+                                job.slave_name = slave
+                                self.slaves[slave].spawn(job)
+                                self.running_jobs.add(job)
+                                to_remove.append(job)
+                                resources[slave]['cores'] -= job.cores_needed
+                                if job.memory_needed == -1:
+                                    resources[slave]['memory'] -= resources[slave]['memory/core']
                                 else:
-                                    #this job needed to much resources, or was not runnable
-                                    #logger.info("Job needed too many resources %s" % job)
-                                    runnable_jobs.remove(job) #can't run right now, maybe later...
+                                    resources[slave]['memory'] -= job.memory_needed
+                                break
+                            else:
+                                #this job needed to much resources, or was not runnable
+                                #logger.info("Job needed too many resources %s" % job)
+                                runnable_jobs.remove(job) #can't run right now on this slave..., maybe later...
                         next_job += 1
-                logger.info('Resources after spawning %s' % resources)
-                for job in to_remove:
-                    logger.info("removing job %s" % job)
-                    self.possible_execution_order.remove(job) #certain we could do better than with a list...
-                    logger.info("removing job from runnable %s" % job)
-                    runnable_jobs.remove(job)
+                    logger.info('Resources after spawning %s' % resources)
+                    #we do this for every slave...
+                    for job in to_remove:
+                        logger.info("removing job %s" % job)
+                        self.possible_execution_order.remove(job) #certain we could do better than with a list...
+                        logger.info("removing job from runnable %s" % job)
+                        runnable_jobs.remove(job)
             error_count -= 1
             if error_count == 0:
                 raise ValueError("There was a loop error that should never 've been reached in start_jobs")
@@ -389,7 +401,7 @@ class Pipegraph(object):
                     #the case that it is injected as a dependency for a job that might have already been done
                     #is being taken care of in the JobGeneratingJob and DependencyInjectionJob s
         for job in new_jobs.values():
-            logger.info('new job %s' % job)
+            #logger.info('new job %s' % job)
             check_preqs(job)
             self.jobs[job.job_id] = job
         for job in new_jobs.values():
@@ -402,15 +414,17 @@ class Pipegraph(object):
         self.distribute_invariant_changes()
         for job in new_jobs.values():
             if job.is_loadable():
-                logger.info("Ignoring %s" % job)
+                #logger.info("Ignoring %s" % job)
+                pass
             elif not job.is_done():
-                logger.info("Adding %s to possible_execution_order"%  job)
+                #logger.info("Adding %s to possible_execution_order"%  job)
                 self.possible_execution_order.append(job)
             elif not job.runs_in_slave(): 
-                logger.info("ignoring invariont "%  job)
+                #logger.info("ignoring invariant - does not need to run "%  job)
                 job.was_run = True #invarites get marked as ran..
             else:
-                logger.info("Not doing anything with %s, was done"%  job)
+                #logger.info("Not doing anything with %s, was done"%  job)
+                pass
         #for slave in self.slaves.values():
             #slave.transmit_new_jobs(new_jobs)
         self.check_all_jobs_can_be_executed() #for this, the job must be in possible_execution_order
