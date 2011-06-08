@@ -204,6 +204,9 @@ class Job(object):
     def __str__(self):
         return "%s (job_id=%s,id=%s)" % (self.__class__.__name__, self.job_id, id(self))
 
+    def __repr__(self):
+        return str(self)
+
 inner_code_object_re = re.compile('<code	object	<[^>]+>	at	0x[a-f0-9]+[^>]+')
 class FunctionInvariant(Job):
     def __init__(self, job_id, function):
@@ -319,10 +322,11 @@ class FileGeneratingJob(Job):
 
     def inject_auto_invariants(self):
         if not self.do_ignore_code_changes:
-            logger.info("Injecting outa invariants %s" % self)
+            #logger.info("Injecting outa invariants %s" % self)
             self.depends_on(FunctionInvariant(self.job_id + '_func', self.callback))
         else:
-            logger.info("not Injecting outa invariants %s" % self)
+            pass
+            #logger.info("not Injecting outa invariants %s" % self)
 
     def is_done(self):
         return util.output_file_exists(self.job_id)
@@ -482,14 +486,14 @@ class AttributeLoadingJob(DataLoadingJob):
             self.depends_on(FunctionInvariant(self.job_id + '_func', self.callback))
 
     def load(self):
-        logger.info("%s load" % self)
+        #logger.info("%s load" % self)
         if self.was_loaded:
-            logger.info('Was loaded')
+        #    logger.info('Was loaded')
             return
         for preq in self.prerequisites: #load whatever is necessary...
             if preq.is_loadable():
                 preq.load()
-        logger.info("setting %s on id %i in pid %i" % (self.attribute_name, id(self.object), os.getpid()))
+        #logger.info("setting %s on id %i in pid %i" % (self.attribute_name, id(self.object), os.getpid()))
         setattr(self.object, self.attribute_name, self.callback())
         self.was_loaded = True
 
@@ -547,22 +551,23 @@ class DependencyInjectionJob(_GraphModifyingJob):
         logger.info("new_jobs count: %i, id %s"  % ( len(util.global_pipegraph.new_jobs), id(util.global_pipegraph.new_jobs)))
         for new_job in util.global_pipegraph.new_jobs.values():
             new_job.inject_auto_invariants()
-        #these are really mean performance succers...
         #we now need to fill new_jobs.dependants
+        #these implementations are much better than the old for loop based ones
+        #but still could use some improvements
+        #but at least for the first one, I don't see how to remove the remaining loops.
         logger.info("Now checking first step for dependency injection violations") 
+        new_job_set = set(util.global_pipegraph.new_jobs.values())
         if True:
             for job in util.global_pipegraph.jobs.values():
-                for nw in util.global_pipegraph.new_jobs.values():
-                    if nw in job.prerequisites:
-                        logger.info("Checking %s against %s - %s" % (nw, job, job in self.dependants))
-                        if not job in self.dependants:
-                            raise ppg_exceptions.JobContractError("DependencyInjectionJob %s tried to inject %s into %s, but %s was not dependand on the DependencyInjectionJob. It was dependand on %s though" % (self, nw, job, job, nw.prerequisites))
-                        nw.dependants.add(job)
+                for nw in new_job_set.intersection(job.prerequisites):
+                    #logger.info("Checking %s against %s - %s" % (nw, job, job in self.dependants))
+                    if not job in self.dependants:
+                        raise ppg_exceptions.JobContractError("DependencyInjectionJob %s tried to inject %s into %s, but %s was not dependand on the DependencyInjectionJob. It was dependand on %s though" % (self, nw, job, job, nw.prerequisites))
+                    nw.dependants.add(job)
         #I need to check: All new jobs are now prereqs of my dependands
 
         #I also need to check that none of the jobs that ain't dependand on me have been injected
         logger.info("Checking for dependency injection violations")
-        new_job_set = set(util.global_pipegraph.new_jobs.values())
         if True:
             for job in util.global_pipegraph.jobs.values():
                 if job in self.dependants:
@@ -608,10 +613,10 @@ class JobGeneratingJob(_GraphModifyingJob):
             new_job.inject_auto_invariants()
         #I need to check: All new jobs are now prereqs of my dependands
         #I also need to check that none of the jobs that ain't dependand on me have been injected
+        new_job_set = set(util.global_pipegraph.new_jobs.values())
         for job in util.global_pipegraph.jobs.values():
-            for new_job in util.global_pipegraph.new_jobs.values():
-                if new_job in job.prerequisites:
-                    raise ppg_exceptions.JobContractError("JobGeneratingJob %s created a job %s that was added to the prerequisites of %s, which is invalid. Use a DependencyInjectionJob instead, this one might only create 'leave' nodes" % (self.job_id, new_job.job_id, job.job_id))
+            if new_job_set.intersection(job.prerequisites):
+                    raise ppg_exceptions.JobContractError("JobGeneratingJob %s created a job that was added to the prerequisites of %s, which is invalid. Use a DependencyInjectionJob instead, this one might only create 'leave' nodes" % (self.job_id, job.job_id))
         res = util.global_pipegraph.new_jobs
         util.global_pipegraph.tranfer_new_jobs()
         util.global_pipegraph.new_jobs = False
