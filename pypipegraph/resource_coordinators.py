@@ -84,7 +84,7 @@ class LocalSystem:
                         logger.info("Trace: %s" % trace)
                     logger.info("stdout: %s" % stdout)
                     logger.info("stderr: %s" % stderr)
-                if new_jobs:
+                if not new_jobs is False:
                     if not job.modifies_jobgraph():
                         job.exception = ppg_exceptions.JobContractError("%s created jobs, but was not a job with modifies_jobgraph() returning True" % job)
                         job.failed = True
@@ -108,7 +108,8 @@ class LocalSystem:
                     logger.info('running %s' % (job,))
                 pass
         self.que.close()
-
+        self.que.join_thread() #wait for the que to close
+        logger.info("Leaving loop")
 class LocalSlave:
 
     def __init__(self, rc):
@@ -246,7 +247,7 @@ class LocalSlave:
             job.dependants = [dep.job_id for dep in job.dependants]
         #unpackanging is don in new_jobs_generated_during_runtime
         self.rc.pipegraph.new_jobs_generated_during_runtime(job_dict)
-        return [] # The LocalSlave does not need to serialize back the jobs, it already is running in the space of the MCP
+        return cPickle.dumps({}) # The LocalSlave does not need to serialize back the jobs, it already is running in the space of the MCP
 
     def check_for_dead_jobs(self):
         remove = []
@@ -381,7 +382,7 @@ class LocalTwisted:
                 logger.info("Trace: %s" % trace)
             logger.info("stdout: %s" % stdout)
             logger.info("stderr: %s" % stderr)
-        if new_jobs:
+        if new_jobs is not False:
             if not job.modifies_jobgraph():
                 job.exception = exceptions.JobContractError("%s created jobs, but was not a job with modifies_jobgraph() returning True" % job)
                 job.failed = True
@@ -389,7 +390,8 @@ class LocalTwisted:
                 logger.info("now unpickling new jbos")
                 new_jobs = cPickle.loads(new_jobs)
                 logger.info("We retrieved %i new jobs from %s"  % (len(new_jobs), job))
-                self.pipegraph.new_jobs_generated_during_runtime(new_jobs)
+                if new_jobs: #the local system sends back and empty list, because it has called new_jobs_generated_during_runtime itself (without serializing)
+                    self.pipegraph.new_jobs_generated_during_runtime(new_jobs)
 
         more_jobs = self.pipegraph.job_executed(job)
         if job.cores_needed == -1:

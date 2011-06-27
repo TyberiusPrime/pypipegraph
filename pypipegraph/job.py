@@ -309,7 +309,6 @@ class FileChecksumInvariant(Job):
 class FileGeneratingJob(Job):
 
     def __init__(self, output_filename, function, rename_broken = False):
-        logger.info("FG init for %s" % output_filename)
         if not hasattr(function, '__call__'):
             raise ValueError("function was not a callable")
         Job.__init__(self, output_filename)
