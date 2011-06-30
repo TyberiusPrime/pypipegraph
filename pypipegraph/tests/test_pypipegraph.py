@@ -2113,6 +2113,12 @@ class NotYetImplementedTests(unittest.TestCase):
         # it should never be loaded
         raise NotImplementedError()
 
+    def test_cacheD_jobs_get_depencies_only_on_the_lazy_filegenerator_not_on_the_loading_job(self):
+        raise NotImplementedError()
+
+    def test_generated_jobs_that_can_not_run_right_away_because_of_dataloading_do_not_crash(self):
+        raise NotImplementedError()
+
 
 
 

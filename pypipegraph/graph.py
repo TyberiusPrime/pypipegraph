@@ -60,6 +60,9 @@ class Pipegraph(object):
         else:
             if self.new_jobs is False:
                 raise ValueError("Trying to add new jobs to running pipeline without having new_jobs set (ie. outside of a graph modifying job) - tried to add %s" %  job)
+            elif self.new_jobs is None:
+                logger.info("Ignored: Trying to add new jobs to running pipeline without having new_jobs set (ie. outside of a graph modifying job) - tried to add %s" %  job)
+                return
             if not job.job_id in self.jobs:
             #    logger.info("Adding job to new_jobs %s %s" % (job, id(self.new_jobs)))
                 self.new_jobs[job.job_id] = job
@@ -288,12 +291,16 @@ class Pipegraph(object):
         error_count = len(self.jobs) * 2
         maximal_startable_jobs = sum(x['cores'] for x in resources.values())
         runnable_jobs = []
+        logger.info("maximal_startable_jobs: %i" % maximal_startable_jobs)
         for job in self.possible_execution_order:
             if job.can_run_now():
                 runnable_jobs.append(job)
                 if len(runnable_jobs) == maximal_startable_jobs:
                     break
         if self.possible_execution_order and not runnable_jobs and not self.running_jobs:
+            logger.info("Nothing running, nothing runnable, but work left to do")
+            for job in self.possible_execution_order:
+                logger.info("%s - %s" % (job, job.list_blocks()))
             raise ppg_exceptions.RuntimeException(
             """We had more jobs that needed to be done, none of them could be run right now and none were running. Sounds like a dependency graph bug to me""")
 
