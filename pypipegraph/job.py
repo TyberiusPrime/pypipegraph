@@ -157,10 +157,18 @@ class Job(object):
                     #logger.info("case 2 - delay") #but we still need to try the other preqs if it was ok
                     pass
             else:
-                #logger.info("case 3 - false because of %s" % preq)
                 return False
         #logger.info("case 4 - true")
         return True
+
+    def list_blocks(self):
+        res = []
+        for preq in self.prerequisites:
+            if not preq.is_done() and not preq.is_loadable():
+                res.append((preq,0))
+            elif preq.is_done() and  preq.was_invalidated and not preq.was_run and not preq.is_loadable(): 
+                res.append((preq, 1))
+        return res
 
     def run(self):
         pass
@@ -742,7 +750,8 @@ class CachedAttributeLoadingJob(AttributeLoadingJob):
             raise ValueError("calculating_function was not a callable")
         if not isinstance(target_attribute, str):
             raise ValueError("attribute_name was not a string")
-        def do_load():
+        abs_cache_filename = os.path.abspath(cache_filename)
+        def do_load(cache_filename = abs_cache_filename):
             op = open(cache_filename, 'rb')
             data = cPickle.load(op)
             op.close()
@@ -754,7 +763,8 @@ class CachedAttributeLoadingJob(AttributeLoadingJob):
 
     def depends_on(self, jobs):
         self.lfg.depends_on(jobs)
-        return Job.depends_on(self, jobs)
+        return self
+        #return Job.depends_on(self, jobs)
 
     def ignore_code_changes(self):
         self.lfg.ignore_code_changes()
@@ -781,8 +791,9 @@ class CachedDataLoadingJob(DataLoadingJob):
             raise ValueError("calculating_function was not a callable")
         if not hasattr(loading_function, '__call__'):
             raise ValueError("loading_function was not a callable")
+        abs_cache_filename = os.path.abspath(cache_filename)
 
-        def do_load():
+        def do_load(cache_filename = abs_cache_filename):
             op = open(cache_filename, 'rb')
             data = cPickle.load(op)
             op.close()
@@ -794,7 +805,8 @@ class CachedDataLoadingJob(DataLoadingJob):
 
     def depends_on(self, jobs):
         self.lfg.depends_on(jobs)
-        return Job.depends_on(self, jobs)
+        return self
+        #return Job.depends_on(self, jobs)
 
     def ignore_code_changes(self):
         self.lfg.ignore_code_changes()

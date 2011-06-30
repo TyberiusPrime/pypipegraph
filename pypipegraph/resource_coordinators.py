@@ -201,6 +201,7 @@ class LocalSlave:
         sys.stderr = stderr
         trace = ''
         new_jobs = False
+        util.global_pipegraph.new_jobs = None #ignore jobs created here.
         try:
             temp = job.run()
             was_ok = True
