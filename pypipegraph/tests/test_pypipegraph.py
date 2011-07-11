@@ -1739,7 +1739,7 @@ class CachedAttributeJobTests(PPGPerTest):
         ppg.new_pipegraph(rc_gen(), quiet=True)
         def calc2():
             return ", ".join(str(x) for x in range(0, 200))
-        job = ppg.CachedAttributeLoadingJob('out/mycalc', o, 'a', calc2)
+        job = ppg.CachedAttributeLoadingJob('out/mycalc', o, 'a', calc2) #now, jobB should be deleted...
         jobB = ppg.FileGeneratingJob(of, do_write).depends_on(job)
         ppg.run_pipegraph()
         self.assertEqual(
