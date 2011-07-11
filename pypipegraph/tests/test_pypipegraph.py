@@ -1938,6 +1938,11 @@ class NotYetImplementedTests(unittest.TestCase):
         #done for cached...
         return NotImplementedError()
 
+    def test_two_attribute_loading_jobs_sharing_lfg(self):
+        #this will probably fail because they not only share the calculating job,
+        #but also the loading job... Maybe refactor the lfg creation?
+        return NotImplementedError()
+
 
 
 
