@@ -1699,7 +1699,7 @@ class CachedAttributeJobTests(PPGPerTest):
                 read(of),
                 ", ".join(str(x) for x in range(0, 100)))
 
-    def test_preqrequisites_end_up_on_both(self):
+    def test_preqrequisites_end_up_on_lfg(self):
         o = Dummy()
         def calc():
             return ", ".join(str(x) for x in range(0, 100))
@@ -1710,7 +1710,7 @@ class CachedAttributeJobTests(PPGPerTest):
         jobB = ppg.FileGeneratingJob(of, do_write).depends_on(job)
         job_preq= ppg.FileGeneratingJob('out/B', do_write)
         job.depends_on(job_preq)
-        self.assertTrue(job_preq in job.prerequisites)
+        self.assertFalse(job_preq in job.prerequisites)
         self.assertTrue(job_preq in job.lfg.prerequisites)
 
 
@@ -1849,7 +1849,7 @@ class CachedDataLoadingJobTests(PPGPerTest):
         ppg.run_pipegraph()
         self.assertFalse(os.path.exists('out/mycalc'))
 
-    def test_preqrequisites_end_up_on_both(self):
+    def test_preqrequisites_end_up_on_lfg(self):
         o = Dummy()
         def calc():
             return ", ".join(str(x) for x in range(0, 100))
@@ -1862,7 +1862,7 @@ class CachedDataLoadingJobTests(PPGPerTest):
         jobB = ppg.FileGeneratingJob(of, do_write).depends_on(job)
         job_preq= ppg.FileGeneratingJob('out/B', do_write)
         job.depends_on(job_preq)
-        self.assertTrue(job_preq in job.prerequisites)
+        self.assertFalse(job_preq in job.prerequisites)
         self.assertTrue(job_preq in job.lfg.prerequisites)
 
     def test_passing_non_function_to_calc(self):

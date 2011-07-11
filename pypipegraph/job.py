@@ -764,6 +764,12 @@ class CachedAttributeLoadingJob(AttributeLoadingJob):
     def depends_on(self, jobs):
         self.lfg.depends_on(jobs)
         return self
+        #The loading job itself should not depend on the preqs
+        #because then the preqs would even have to be loaded if 
+        #the lfg had run already in another job
+        #and dataloadingpreqs could not be unloaded right away
+        #(and anyhow, the loading job is so simple it doesn't need
+        #anything but the lfg output file
         #return Job.depends_on(self, jobs)
 
     def ignore_code_changes(self):
@@ -806,6 +812,14 @@ class CachedDataLoadingJob(DataLoadingJob):
     def depends_on(self, jobs):
         self.lfg.depends_on(jobs)
         return self
+        #The loading job itself should not depend on the preqs
+        #because then the preqs would even have to be loaded if 
+        #the lfg had run already in another job
+        #and dataloadingpreqs could not be unloaded right away
+        #Now, if you need to have a more complex loading function,
+        #that also requires further jobs being loaded (integrating, etc)
+        #either add in another DataLoadingJob dependand on this CachedDataLoadingJob
+        #or call Job.depends_on(this_job, jobs) yourself.
         #return Job.depends_on(self, jobs)
 
     def ignore_code_changes(self):
