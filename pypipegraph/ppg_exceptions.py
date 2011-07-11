@@ -19,7 +19,7 @@ class JobContractError(PyPipelineGraphError):
     """One of the jobs did not confirm to it's supposed behaviour""" 
     pass
 
-class JobDied(PyPipelineGraphError):
+class JobDiedException(PyPipelineGraphError):
     """A job went away without signing off"""
     def __init__(self, exit_code):
         self.exit_code = exit_code
