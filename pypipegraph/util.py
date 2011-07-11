@@ -2,11 +2,13 @@ import os
 import stat
 import logging
 import logging.handlers
+from twisted.internet import reactor
 
 global_pipegraph = None
 is_remote = False
 job_uniquifier = {} #to singletonize jobs on job_id
 func_hashes = {} #to calculate invarionts on functions in a slightly more efficent manner
+reactor_was_started = False
 
 def start_logging(module):
     key = 'rem' if is_remote else 'ppg'

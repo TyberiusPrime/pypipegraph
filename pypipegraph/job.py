@@ -48,7 +48,7 @@ class Job(object):
     def __new__(cls, job_id, *args, **kwargs):
         #logger.info("New for %s %s" % (cls, job_id))
         if not isinstance(job_id, str):
-            raise ppg_exceptions.JobContractError("Job_id must be a string")
+            raise ValueError("Job_id must be a string")
         if not job_id in util.job_uniquifier:
             util.job_uniquifier[job_id] = object.__new__(cls)
             util.job_uniquifier[job_id].job_id = job_id #doing it later will fail because hash apperantly might be called before init has run?
@@ -97,13 +97,19 @@ class Job(object):
             self.prerequisites.add(job)
         return self
     
-    def is_in_dependency_chain(self, other_job):
-        """check wether the other job is in this job's dependency chain"""
+    def is_in_dependency_chain(self, other_job, max_depth):
+        """check wether the other job is in this job's dependency chain.
+        We check at most @max_depth levels, starting with this job (ie.
+        max_depth = 2 means this job and it's children).
+        Use a -1 for 'unlimited' (up to abs(sys.minint) ;))
+        """
+        if max_depth == 0:
+            return False
         if other_job in self.prerequisites:
             return True
         else:
             for preq in self.prerequisites:
-                if preq.is_in_dependency_chain(other_job):
+                if preq.is_in_dependency_chain(other_job, max_depth - 1):
                     return True
         return False
 
@@ -151,10 +157,18 @@ class Job(object):
                     #logger.info("case 2 - delay") #but we still need to try the other preqs if it was ok
                     pass
             else:
-                #logger.info("case 3 - false because of %s" % preq)
                 return False
         #logger.info("case 4 - true")
         return True
+
+    def list_blocks(self):
+        res = []
+        for preq in self.prerequisites:
+            if not preq.is_done() and not preq.is_loadable():
+                res.append((preq,0))
+            elif preq.is_done() and  preq.was_invalidated and not preq.was_run and not preq.is_loadable(): 
+                res.append((preq, 1))
+        return res
 
     def run(self):
         pass
@@ -204,6 +218,8 @@ class Job(object):
 inner_code_object_re = re.compile('<code	object	<[^>]+>	at	0x[a-f0-9]+[^>]+')
 class FunctionInvariant(Job):
     def __init__(self, job_id, function):
+        if not hasattr(function, '__call__'):
+            raise ValueError("function was not a callable")
         Job.__init__(self, job_id)
         self.function = function
 
@@ -301,7 +317,8 @@ class FileChecksumInvariant(Job):
 class FileGeneratingJob(Job):
 
     def __init__(self, output_filename, function, rename_broken = False):
-        logger.info("FG init for %s" % output_filename)
+        if not hasattr(function, '__call__'):
+            raise ValueError("function was not a callable")
         Job.__init__(self, output_filename)
         self.callback = function
         self.rename_broken = rename_broken
@@ -355,7 +372,15 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         return (self.filenames,)
 
     def __init__(self, filenames, function, rename_broken = False):
-        job_id = ":".join(sorted(str(x) for x in filenames))
+        if not hasattr(function, '__call__'):
+            raise ValueError("function was not a callable")
+        if not hasattr(filenames, '__iter__'):
+            raise ValueError("filenames was not iterable")
+        sorted_filenames = list(sorted(x for x in filenames))
+        for x in sorted_filenames:
+            if not isinstance(x, str) and not isinstance(x, unicode):
+                raise ValueError("Not all filenames passed to MultiFileGeneratingJob were str or unicode objects")
+        job_id = ":".join(sorted_filenames)
         Job.__init__(self, job_id)
         self.filenames = filenames
         self.callback = function
@@ -414,6 +439,9 @@ class TempFileGeneratingJob(FileGeneratingJob):
 
 class DataLoadingJob(Job):
     def __init__(self, job_id, callback):
+        if not hasattr(callback, '__call__'):
+            raise ValueError("callback was not a callable")
+
         Job.__init__(self, job_id)
         self.callback = callback
         self.do_ignore_code_changes = False
@@ -447,6 +475,10 @@ class DataLoadingJob(Job):
 class AttributeLoadingJob(DataLoadingJob):
 
     def __init__(self, job_id, object, attribute_name, callback):
+        if not hasattr(callback, '__call__'):
+            raise ValueError("callback was not a callable")
+        if not isinstance(attribute_name, str):
+            raise ValueError("attribute_name was not a string")
         self.object = object
         self.attribute_name = attribute_name
         if not hasattr(callback, '__call__'):
@@ -461,14 +493,14 @@ class AttributeLoadingJob(DataLoadingJob):
             self.depends_on(FunctionInvariant(self.job_id + '_func', self.callback))
 
     def load(self):
-        logger.info("%s load" % self)
+        #logger.info("%s load" % self)
         if self.was_loaded:
-            logger.info('Was loaded')
+        #    logger.info('Was loaded')
             return
         for preq in self.prerequisites: #load whatever is necessary...
             if preq.is_loadable():
                 preq.load()
-        logger.info("setting %s on id %i in pid %i" % (self.attribute_name, id(self.object), os.getpid()))
+        #logger.info("setting %s on id %i in pid %i" % (self.attribute_name, id(self.object), os.getpid()))
         setattr(self.object, self.attribute_name, self.callback())
         self.was_loaded = True
 
@@ -504,6 +536,8 @@ class _GraphModifyingJob(Job):
 
 class DependencyInjectionJob(_GraphModifyingJob):
     def __init__(self, job_id, callback):
+        if not hasattr(callback, '__call__'):
+            raise ValueError("callback was not a callable")
         Job.__init__(self, job_id)
         self.callback = callback
         self.do_ignore_code_changes = False
@@ -524,30 +558,36 @@ class DependencyInjectionJob(_GraphModifyingJob):
         logger.info("new_jobs count: %i, id %s"  % ( len(util.global_pipegraph.new_jobs), id(util.global_pipegraph.new_jobs)))
         for new_job in util.global_pipegraph.new_jobs.values():
             new_job.inject_auto_invariants()
-        #these are really mean performance succers...
         #we now need to fill new_jobs.dependants
+        #these implementations are much better than the old for loop based ones
+        #but still could use some improvements
+        #but at least for the first one, I don't see how to remove the remaining loops.
         logger.info("Now checking first step for dependency injection violations") 
-        if False:
+        new_job_set = set(util.global_pipegraph.new_jobs.values())
+        if True:
             for job in util.global_pipegraph.jobs.values():
-                for nw in util.global_pipegraph.new_jobs.values():
-                    if nw in job.prerequisites:
-                        logger.info("Checking %s against %s - %s" % (nw, job, job in self.dependants))
-                        if not job in self.dependants:
-                            raise ppg_exceptions.JobContractError("DependencyInjectionJob %s tried to inject %s into %s, but %s was not dependand on the DependencyInjectionJob. It was dependand on %s though" % (self, nw, job, job, nw.prerequisites))
-                        nw.dependants.add(job)
+                for nw in new_job_set.intersection(job.prerequisites):
+                    #logger.info("Checking %s against %s - %s" % (nw, job, job in self.dependants))
+                    if not job in self.dependants:
+                        raise ppg_exceptions.JobContractError("DependencyInjectionJob %s tried to inject %s into %s, but %s was not dependand on the DependencyInjectionJob. It was dependand on %s though" % (self, nw, job, job, nw.prerequisites))
+                    nw.dependants.add(job)
         #I need to check: All new jobs are now prereqs of my dependands
+
         #I also need to check that none of the jobs that ain't dependand on me have been injected
         logger.info("Checking for dependency injection violations")
-        if False:
+        if True:
             for job in util.global_pipegraph.jobs.values():
                 if job in self.dependants:
                     for new_job in util.global_pipegraph.new_jobs.values():
-                        if not new_job in job.prerequisites and not job.is_in_dependency_chain(new_job): 
+                        if not job.is_in_dependency_chain(new_job,2): #that's for the auto injected invariants, which should be one level below this job...
                             raise ppg_exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was not added to the prerequisites of %s" % (self.job_id, new_job.job_id, job.job_id))
                 else:
-                    for new_job in util.global_pipegraph.new_jobs.values():
-                        if new_job in job.prerequisites or job in new_job.dependants: #no connect_graph building so far...
-                            raise ppg_exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was added to the prerequisites of %s, but %s was not dependant on the DependencyInjectionJob" % (self.job_id, new_job.job_id, job.job_id))
+                    preq_intersection = job.prerequisites.intersection(new_job_set)
+                    if preq_intersection:
+                            raise ppg_exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was added to the prerequisites of %s, but was not dependant on the DependencyInjectionJob" % (self.job_id, preq_intersection, job.job_id))
+                    dep_intersection = job.prerequisites.intersection(new_job_set)
+                    if dep_intersection:
+                            raise ppg_exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was added to the dependants of %s, but was not dependant on the DependencyInjectionJob" % (self.job_id, dep_intersection, job.job_id))
 
         res = util.global_pipegraph.new_jobs
         logger.info('returning %i new jobs' % len(res))
@@ -558,6 +598,8 @@ class DependencyInjectionJob(_GraphModifyingJob):
 
 class JobGeneratingJob(_GraphModifyingJob):
     def __init__(self, job_id, callback):
+        if not hasattr(callback, '__call__'):
+            raise ValueError("callback was not a callable")
         Job.__init__(self, job_id)
         self.callback = callback
         self.do_ignore_code_changes = False
@@ -578,55 +620,68 @@ class JobGeneratingJob(_GraphModifyingJob):
             new_job.inject_auto_invariants()
         #I need to check: All new jobs are now prereqs of my dependands
         #I also need to check that none of the jobs that ain't dependand on me have been injected
+        new_job_set = set(util.global_pipegraph.new_jobs.values())
         for job in util.global_pipegraph.jobs.values():
-            for new_job in util.global_pipegraph.new_jobs.values():
-                if new_job in job.prerequisites:
-                    raise ppg_exceptions.JobContractError("JobGeneratingJob %s created a job %s that was added to the prerequisites of %s, which is invalid. Use a DependencyInjectionJob instead, this one might only create 'leave' nodes" % (self.job_id, new_job.job_id, job.job_id))
+            if new_job_set.intersection(job.prerequisites):
+                    raise ppg_exceptions.JobContractError("JobGeneratingJob %s created a job that was added to the prerequisites of %s, which is invalid. Use a DependencyInjectionJob instead, this one might only create 'leave' nodes" % (self.job_id, job.job_id))
         res = util.global_pipegraph.new_jobs
         util.global_pipegraph.tranfer_new_jobs()
         util.global_pipegraph.new_jobs = False
         logger.info("Returning from %s" % self)
         return res
 
-def PlotJob(output_filename, calc_function, plot_function): #a convienence wrapper for a quick plotting
-    """Calculate some data for plotting, cache it in cache/outputfilename, and plot from there.
-    creates two jobs, a plot_job (FileGeneratingJob) and a cache_job (FileGeneratingJob), 
-    returns plot_job, with plot_jbo.cache_job = cache_job
+class PlotJob(FileGeneratingJob): 
+    """Calculate some data for plotting, cache it in cache/output_filename , and plot from there.
+    creates two jobs, a plot_job (this one) and a cache_job (FileGeneratingJob, in self.cache_job), 
     """
+    def __init__(self, output_filename, calc_function, plot_function):
+        if not isinstance(output_filename , str) or isinstance(output_filename , unicode):
+            raise ValueError("output_filename was not a string or unicode")
+        if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):
+            raise ValueError("Don't know how to create this file %s, must end on .png or .pdf" % output_filename)
 
-    
-    if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):
-        raise ValueError("Don't know how to create this file %s, must end on .png or .pdf" % output_filename)
-    import pydataframe
-    import pyggplot
-    cache_filename = os.path.join('cache', output_filename)
-    def run_calc():
-        df = calc_function()
-        if not isinstance(df, pydataframe.DataFrame):
-            raise ppg_exceptions.JobContractError("%s.calc_function did not return a DataFrame, was %s " % (output_filename, df.__class__))
-        try:
-            os.makedirs(os.path.dirname(cache_filename))
-        except OSError:
-            pass
-        of = open(cache_filename, 'wb')
-        cPickle.dump(df, of, cPickle.HIGHEST_PROTOCOL)
-        of.close()
-    def run_plot():
-        of = open(cache_filename, 'rb')
-        df = cPickle.load(of)
-        of.close()
-        plot = plot_function(df)
-        if not isinstance(plot, pyggplot.Plot):
-            raise ppg_exceptions.JobContractError("%s.plot_function did not return a pyggplot.Plot " % (output_filename))
-        plot.render(output_filename)
 
-    cache_job = FileGeneratingJob(cache_filename, run_calc)
-    cache_job.depends_on(FunctionInvariant(output_filename + '.calcfunc', calc_function))
-    plot_job = FileGeneratingJob(output_filename, run_plot)
-    plot_job.depends_on(FunctionInvariant(output_filename + '.plotfunc', plot_function))
-    plot_job.depends_on(cache_job)
-    plot_job.cache_job = cache_job
-    return plot_job
+        self.calc_function = calc_function
+        self.plot_function = plot_function
+
+        import pydataframe
+        import pyggplot
+        cache_filename = os.path.join('cache', output_filename)
+        def run_calc():
+            df = calc_function()
+            if not isinstance(df, pydataframe.DataFrame):
+                raise ppg_exceptions.JobContractError("%s.calc_function did not return a DataFrame, was %s " % (output_filename, df.__class__))
+            try:
+                os.makedirs(os.path.dirname(cache_filename))
+            except OSError:
+                pass
+            of = open(cache_filename, 'wb')
+            cPickle.dump(df, of, cPickle.HIGHEST_PROTOCOL)
+            of.close()
+        def run_plot():
+            of = open(cache_filename, 'rb')
+            df = cPickle.load(of)
+            of.close()
+            plot = plot_function(df)
+            if not isinstance(plot, pyggplot.Plot):
+                raise ppg_exceptions.JobContractError("%s.plot_function did not return a pyggplot.Plot " % (output_filename))
+            plot.render(output_filename)
+        FileGeneratingJob.__init__(self, output_filename, run_plot)
+
+        cache_job = FileGeneratingJob(cache_filename, run_calc)
+        self.depends_on(cache_job)
+        self.cache_job = cache_job
+
+    def depends_on(self, other_job):
+        FileGeneratingJob.depends_on(self, other_job)
+        if hasattr(self, 'cache_job'): #activate this after we have added the invariants...
+            self.cache_job.depends_on(other_job)
+
+    def inject_auto_invariants(self):
+        if not self.do_ignore_code_changes:
+            self.cache_job.depends_on(FunctionInvariant(self.job_id + '.calcfunc', self.calc_function))
+            FileGeneratingJob.depends_on(self, FunctionInvariant(self.job_id + '.plotfunc', self.plot_function))
+
 
 
 class _LazyFileGeneratingJob(Job):
@@ -634,6 +689,8 @@ class _LazyFileGeneratingJob(Job):
     data_loading_job is dependend on somewhere"""
 
     def __init__(self, job_id, calc_function, dl_job):
+        if not hasattr(calc_function, '__call__'):
+            raise ValueError("calc_function was not a callable")
         Job.__init__(self, job_id)
         self.cache_filename = job_id
         self.callback = calc_function
@@ -681,12 +738,20 @@ class _LazyFileGeneratingJob(Job):
 class CachedAttributeLoadingJob(AttributeLoadingJob):
     
     def __new__(cls, job_id, *args, **kwargs):
+        if not isinstance(job_id, str) and not isinstance(job_id, unicode):
+            raise ValueError("cache_filename/job_id was not a str/unicode jobect")
+
         return Job.__new__(cls, job_id + '_load')
     
     def __init__(self, cache_filename, target_object, target_attribute, calculating_function):
+        if not isinstance(cache_filename, str) and not isinstance(cache_filename, unicode):
+            raise ValueError("cache_filename/job_id was not a str/unicode jobect")
         if not hasattr(calculating_function, '__call__'):
-            raise ValueError("calculating_function for %s was not callable (missed __call__ attribute)" % cache_filename)
-        def do_load():
+            raise ValueError("calculating_function was not a callable")
+        if not isinstance(target_attribute, str):
+            raise ValueError("attribute_name was not a string")
+        abs_cache_filename = os.path.abspath(cache_filename)
+        def do_load(cache_filename = abs_cache_filename):
             op = open(cache_filename, 'rb')
             data = cPickle.load(op)
             op.close()
@@ -698,11 +763,12 @@ class CachedAttributeLoadingJob(AttributeLoadingJob):
 
     def depends_on(self, jobs):
         self.lfg.depends_on(jobs)
-        return Job.depends_on(self, jobs)
+        return self
+        #return Job.depends_on(self, jobs)
 
     def ignore_code_changes(self):
         self.lfg.ignore_code_changes()
-        Job.ignore_code_changes(self)
+        self.do_ignore_code_changes = True
 
     def __del__(self):
         self.lfg = None
@@ -714,13 +780,20 @@ class CachedAttributeLoadingJob(AttributeLoadingJob):
 class CachedDataLoadingJob(DataLoadingJob):
     
     def __new__(cls, job_id, *args, **kwargs):
-        return Job.__new__(cls, job_id + '_load')
+        if not isinstance(job_id, str) and not isinstance(job_id, unicode):
+            raise ValueError("cache_filename/job_id was not a str/unicode jobect")
+        return Job.__new__(cls, job_id + '_load') #plus load, so that the cached data goes into the cache_filename passed to the constructor...
     
     def __init__(self, cache_filename, calculating_function, loading_function):
+        if not isinstance(cache_filename, str) and not isinstance(cache_filename, unicode):
+            raise ValueError("cache_filename/job_id was not a str/unicode jobect")
         if not hasattr(calculating_function, '__call__'):
-            raise ValueError("calculating_function for %s was not callable (missed __call__ attribute)" % cache_filename)
+            raise ValueError("calculating_function was not a callable")
+        if not hasattr(loading_function, '__call__'):
+            raise ValueError("loading_function was not a callable")
+        abs_cache_filename = os.path.abspath(cache_filename)
 
-        def do_load():
+        def do_load(cache_filename = abs_cache_filename):
             op = open(cache_filename, 'rb')
             data = cPickle.load(op)
             op.close()
@@ -732,11 +805,12 @@ class CachedDataLoadingJob(DataLoadingJob):
 
     def depends_on(self, jobs):
         self.lfg.depends_on(jobs)
-        return Job.depends_on(self, jobs)
+        return self
+        #return Job.depends_on(self, jobs)
 
     def ignore_code_changes(self):
         self.lfg.ignore_code_changes()
-        Job.ignore_code_changes(self)
+        self.do_ignore_code_changes = True
 
     def __del__(self):
         self.lfg = None

@@ -29,7 +29,7 @@ class LocalSystem:
     It uses multiprocessing and the LocalSlave
     """
 
-    def __init__(self, max_cores_to_use = 8):
+    def __init__(self, max_cores_to_use = 12):
         self.max_cores_to_use = max_cores_to_use #todo: update to local cpu count...
         self.slave = LocalSlave(self)
         self.cores_available = max_cores_to_use
@@ -84,7 +84,7 @@ class LocalSystem:
                         logger.info("Trace: %s" % trace)
                     logger.info("stdout: %s" % stdout)
                     logger.info("stderr: %s" % stderr)
-                if new_jobs:
+                if not new_jobs is False:
                     if not job.modifies_jobgraph():
                         job.exception = ppg_exceptions.JobContractError("%s created jobs, but was not a job with modifies_jobgraph() returning True" % job)
                         job.failed = True
@@ -107,7 +107,9 @@ class LocalSystem:
                 for job in self.pipegraph.running_jobs:
                     logger.info('running %s' % (job,))
                 pass
-
+        self.que.close()
+        self.que.join_thread() #wait for the que to close
+        logger.info("Leaving loop")
 class LocalSlave:
 
     def __init__(self, rc):
@@ -119,29 +121,39 @@ class LocalSlave:
     def spawn(self, job):
         logger.info("Slave: Spawning %s" % job.job_id)
         #logger.info("Slave: preqs are %s" % [preq.job_id for preq in job.prerequisites])
+        preq_failed = False
         for preq in job.prerequisites:
             if preq.is_loadable():
                 logger.info("Slave: Loading %s" % preq)
-                preq.load()
-        #if job.cores_needed == -1:
-            #self.rc.cores_available = 0
-        #else:
-            #self.rc.cores_available -= job.cores_needed
-        if job.modifies_jobgraph():
-            logger.info("Slave: Running %s in slave" % job)
-            self.run_a_job(job)
-            logger.info("Slave: returned from %s in slave, data was put" % job)
+                if not self.load_job(preq):
+                    preq_failed = True
+                    break
+        if preq_failed:
+            self.rc.que.put(
+                    (
+                        self.slave_id,
+                        False, #failed?
+                        job.job_id, #id...
+                        '', #output
+                        '', #output
+                        'Prerequsite failed', 
+                        '', 
+                        False,
+                    ))
         else:
-            logger.info("Slave: Forking for %s" % job.job_id)
-            p = multiprocessing.Process(target=self.run_a_job, args=[job, False])
-            job.run_info = "pid = %s" % (p.pid, )
-            p.start()
-            self.process_to_job[p] = job
-            logger.info("Slave, returning to start_jobs")
+            if job.modifies_jobgraph():
+                logger.info("Slave: Running %s in slave" % job)
+                self.run_a_job(job)
+                logger.info("Slave: returned from %s in slave, data was put" % job)
+            else:
+                logger.info("Slave: Forking for %s" % job.job_id)
+                p = multiprocessing.Process(target=self.run_a_job, args=[job, False])
+                job.run_info = "pid = %s" % (p.pid, )
+                p.start()
+                self.process_to_job[p] = job
+                logger.info("Slave, returning to start_jobs")
 
-    def run_a_job(self, job, is_local=True): #this runs in the spawned processes, except for job.modifies_jobgraph()==True jobs
-        #logger = util.start_logging('SlaveRun')
-        #logger.info("Entering run_a_job on %s in %s" % (job, os.getpid()))
+    def load_job(self, job): #this executes a load job returns false if an error occured 
         stdout = cStringIO.StringIO()
         stderr = cStringIO.StringIO()
         old_stdout = sys.stdout 
@@ -150,6 +162,46 @@ class LocalSlave:
         sys.stderr = stderr
         trace = ''
         new_jobs = False
+        try:
+            job.load()
+            was_ok = True
+            exception = None
+        except Exception, e:
+            trace = traceback.format_exc()
+            was_ok = False
+            exception = e
+            try:
+                exception = cPickle.dumps(exception)
+            except Exception, e: #some exceptions can't be pickled, so we send a string instead
+                exception = str(exception)
+        stdout = stdout.getvalue()
+        stderr = stderr.getvalue()
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+        if not was_ok:
+            self.rc.que.put(
+                    (
+                        self.slave_id,
+                        was_ok, #failed?
+                        job.job_id, #id...
+                        stdout, #output
+                        stderr, #output
+                        exception, 
+                        trace, 
+                        new_jobs,
+                    ))
+        return was_ok
+
+    def run_a_job(self, job, is_local=True): #this runs in the spawned processes, except for job.modifies_jobgraph()==True jobs
+        stdout = cStringIO.StringIO()
+        stderr = cStringIO.StringIO()
+        old_stdout = sys.stdout 
+        old_stderr = sys.stderr
+        sys.stdout = stdout
+        sys.stderr = stderr
+        trace = ''
+        new_jobs = False
+        util.global_pipegraph.new_jobs = None #ignore jobs created here.
         try:
             temp = job.run()
             was_ok = True
@@ -196,9 +248,7 @@ class LocalSlave:
             job.dependants = [dep.job_id for dep in job.dependants]
         #unpackanging is don in new_jobs_generated_during_runtime
         self.rc.pipegraph.new_jobs_generated_during_runtime(job_dict)
-        return [] # The LocalSlave does not need to serialize back the jobs, it already is running in the space of the MCP
-
-            
+        return cPickle.dumps({}) # The LocalSlave does not need to serialize back the jobs, it already is running in the space of the MCP
 
     def check_for_dead_jobs(self):
         remove = []
@@ -214,13 +264,12 @@ class LocalSlave:
                             job.job_id, 
                             'no stdout available', 
                             'no stderr available', 
-                            cPickle.dumps(ppg_exceptions.JobDied(proc.exitcode)),
+                            cPickle.dumps(ppg_exceptions.JobDiedException(proc.exitcode)),
                             '',
                             False #no new jobs
                             ))
         for proc in remove:
             del self.process_to_job[proc]
-
 
 
 
@@ -252,10 +301,40 @@ class LocalTwisted:
                     'memory': self.memory_available}
                 }
 
+    def enter_twisted(self, pipe):
+        #this happens in a spawned process...
+        reactor.run()
+        print 'exception in spawned', repr(self.pipegraph.jobs['out/a'].exception)
+        pipe.send((cloudpickle.dumps(self.pipegraph.jobs), cPickle.dumps(self.pipegraph.invariant_status)))
+
     def enter_loop(self):
         self.slaves_ready_count = 0
         logger.info("starting reactor")
-        reactor.run()
+        if not util.reactor_was_started:
+            util.reactor_was_started = True
+        parent_conn, child_conn = multiprocessing.Pipe()
+        p = multiprocessing.Process(None, self.enter_twisted, args=(child_conn,))
+        p.start()
+        jobs_str, invariant_str = parent_conn.recv()
+        p.join()
+        cPickle.loads(jobs_str) # which should automatically fill in the existing jobs...
+        self.pipegraph.invariant_status = cPickle.loads(invariant_str)
+        #p.start()
+        #p.join()
+        #if p.exitcode != 0:
+            #raise ppg_exceptions.RuntimeError()
+        #reactor.run() 
+        #now, the problem here is that you simply can't restart twisted reactors
+        #in ordinary coding, this is hardly a problem, though it is a hazzle to being
+        #able to start another pipeline.
+        #it does get fairly troublesome in testing.
+        #the idea of course would be to fork before calling reactor.run,
+        #and not returning until the forked child returns.
+        #problem with this is of course how to propegate the exceptions
+        #let' multiprocessing do the worring...
+
+
+
 
 
     def start_when_ready(self, response, slave_id): #this get's called when a slave has connected and transmitted the pipegraph...
@@ -304,7 +383,7 @@ class LocalTwisted:
                 logger.info("Trace: %s" % trace)
             logger.info("stdout: %s" % stdout)
             logger.info("stderr: %s" % stderr)
-        if new_jobs:
+        if new_jobs is not False:
             if not job.modifies_jobgraph():
                 job.exception = exceptions.JobContractError("%s created jobs, but was not a job with modifies_jobgraph() returning True" % job)
                 job.failed = True
@@ -312,7 +391,8 @@ class LocalTwisted:
                 logger.info("now unpickling new jbos")
                 new_jobs = cPickle.loads(new_jobs)
                 logger.info("We retrieved %i new jobs from %s"  % (len(new_jobs), job))
-                self.pipegraph.new_jobs_generated_during_runtime(new_jobs)
+                if new_jobs: #the local system sends back and empty list, because it has called new_jobs_generated_during_runtime itself (without serializing)
+                    self.pipegraph.new_jobs_generated_during_runtime(new_jobs)
 
         more_jobs = self.pipegraph.job_executed(job)
         if job.cores_needed == -1:

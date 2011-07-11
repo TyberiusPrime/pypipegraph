@@ -15,10 +15,10 @@ def run_pipegraph():
     util.global_pipegraph.run()
 
 
-def new_pipegraph(resource_coordinator = None):
+def new_pipegraph(resource_coordinator = None, quiet=False):
     if resource_coordinator is None:
         resource_coordinator = resource_coordinators.LocalSystem()
-    util.global_pipegraph = Pipegraph(resource_coordinator)
+    util.global_pipegraph = Pipegraph(resource_coordinator, quiet = quiet)
     util.job_uniquifier = {}
     util.func_hashes = {}
     logger.info("\n\n")
@@ -39,13 +39,14 @@ def get_running_job_count():
 
 class Pipegraph(object):
 
-    def __init__(self, resource_coordinator):
+    def __init__(self, resource_coordinator, quiet = False):
         self.rc = resource_coordinator
         self.rc.pipegraph = self
         self.jobs = {}
         self.running = False
         self.was_run = False
         self.new_jobs = False
+        self.quiet = quiet
 
     def __del__(self):
         self.rc.pipegraph = None
@@ -59,8 +60,11 @@ class Pipegraph(object):
         else:
             if self.new_jobs is False:
                 raise ValueError("Trying to add new jobs to running pipeline without having new_jobs set (ie. outside of a graph modifying job) - tried to add %s" %  job)
+            elif self.new_jobs is None:
+                logger.info("Ignored: Trying to add new jobs to running pipeline without having new_jobs set (ie. outside of a graph modifying job) - tried to add %s" %  job)
+                return
             if not job.job_id in self.jobs:
-                logger.info("Adding job to new_jobs %s %s" % (job, id(self.new_jobs)))
+            #    logger.info("Adding job to new_jobs %s %s" % (job, id(self.new_jobs)))
                 self.new_jobs[job.job_id] = job
             else:
                 pass
@@ -85,25 +89,29 @@ class Pipegraph(object):
 
         #make us some computational engines and put them to work.
         logger.info("now executing")
-        self.spawn_slaves()
-        self.execute_jobs()
+        try:
+            self.spawn_slaves()
+            self.execute_jobs()
 
-        #clean up
-        self.dump_html_status()
-        self.dump_invariant_status()
-        self.destroy_job_connections()
+        finally:
+            #clean up
+            self.dump_html_status()
+            self.dump_invariant_status()
+            self.destroy_job_connections()
+
 
         #and propagate if there was an exception
         any_failed = False
         for job in self.jobs.values():
             if job.failed:
-                if not any_failed:
+                if not any_failed and not self.quiet:
                     print >>sys.stderr, '\n------Pipegraph error-----'
                 any_failed = True
-                if job.error_reason != 'Indirect':
+                if job.error_reason != 'Indirect' and not self.quiet:
                     self.print_failed_job(job)
         if any_failed:
-            print >>sys.stderr, '\n------Pipegraph output end-----'
+            if not self.quiet:
+                print >>sys.stderr, '\n------Pipegraph output end-----'
             raise ppg_exceptions.RuntimeError()
 
     def inject_auto_invariants(self):
@@ -283,12 +291,16 @@ class Pipegraph(object):
         error_count = len(self.jobs) * 2
         maximal_startable_jobs = sum(x['cores'] for x in resources.values())
         runnable_jobs = []
+        logger.info("maximal_startable_jobs: %i" % maximal_startable_jobs)
         for job in self.possible_execution_order:
             if job.can_run_now():
                 runnable_jobs.append(job)
                 if len(runnable_jobs) == maximal_startable_jobs:
                     break
         if self.possible_execution_order and not runnable_jobs and not self.running_jobs:
+            logger.info("Nothing running, nothing runnable, but work left to do")
+            for job in self.possible_execution_order:
+                logger.info("%s - %s" % (job, job.list_blocks()))
             raise ppg_exceptions.RuntimeException(
             """We had more jobs that needed to be done, none of them could be run right now and none were running. Sounds like a dependency graph bug to me""")
 
@@ -367,7 +379,6 @@ class Pipegraph(object):
     def job_executed(self, job):
         """A job was done. Return whether there are more jobs read run""" 
         logger.info("job_executed %s failed: %s" % (job, job.failed))
-        self.running_jobs.remove(job)
         if job.failed:
             self.prune_job(job)
             if job.exception:
@@ -377,6 +388,8 @@ class Pipegraph(object):
         else:
             job.was_run = True
             job.check_prerequisites_for_cleanup()
+        if not job.is_loadable(): #dataloading jobs are not 'seperatly' executed, but still, they may be signaled as failed by a slave.
+            self.running_jobs.remove(job)
         #self.signal_job_done()
         return bool(self.running_jobs) or bool(self.possible_execution_order)
 
@@ -395,7 +408,7 @@ class Pipegraph(object):
                     #the case that it is injected as a dependency for a job that might have already been done
                     #is being taken care of in the JobGeneratingJob and DependencyInjectionJob s
         for job in new_jobs.values():
-            logger.info('new job %s' % job)
+            #logger.info('new job %s' % job)
             check_preqs(job)
             self.jobs[job.job_id] = job
         for job in new_jobs.values():
@@ -448,7 +461,7 @@ class Pipegraph(object):
     def dump_html_status(self):
         if not os.path.exists('logs'):
             os.mkdir('logs')
-        op = open("logs/pipeline_status.html",'wb')
+        op = open("logs/pipegraph_status.html",'wb')
         for job in self.jobs.values():
             if job.failed:
                 op.write("<p style='color:red'>")
