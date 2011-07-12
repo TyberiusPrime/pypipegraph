@@ -89,6 +89,8 @@ class Job(object):
     def depends_on(self, job_joblist_or_list_of_jobs):
         #if isinstance(job_joblist_or_list_of_jobs, Job):
             #job_joblist_or_list_of_jobs = [job_joblist_or_list_of_jobs]
+        if job_joblist_or_list_of_jobs is self:
+            raise ppg_exceptions.CycleError("job.depends_on(self) would create a cycle: %s" % (self.job_id))
 
         for job in job_joblist_or_list_of_jobs:
             if not isinstance(job, Job):
@@ -109,7 +111,7 @@ class Job(object):
         """check wether the other job is in this job's dependency chain.
         We check at most @max_depth levels, starting with this job (ie.
         max_depth = 2 means this job and it's children).
-        Use a -1 for 'unlimited' (up to abs(sys.minint) ;))
+        Use a -1 for 'unlimited' (up to the maximum recursion depth) ;))
         """
         if max_depth == 0:
             return False
@@ -236,6 +238,8 @@ class FunctionInvariant(Job):
         return False
 
     def get_invariant(self, old):
+        if self.function is None:
+            return None #since the 'default invariant' is False, this will still read 'invalidated the first time it's being used'
         if not id(self.function.func_code) in util.func_hashes:
             util.func_hashes[id(self.function.func_code)] = self.dis_code(self.function.__code__)
         return util.func_hashes[id(self.function.func_code)] 
@@ -691,7 +695,7 @@ class PlotJob(FileGeneratingJob):
 
     def depends_on(self, other_job):
         FileGeneratingJob.depends_on(self, other_job)
-        if hasattr(self, 'cache_job'): #activate this after we have added the invariants...
+        if hasattr(self, 'cache_job') and not other_job is self.cache_job: #activate this after we have added the invariants...
             self.cache_job.depends_on(other_job)
         return self
 

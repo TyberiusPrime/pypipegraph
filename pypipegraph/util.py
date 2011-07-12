@@ -5,6 +5,7 @@ import logging.handlers
 from twisted.internet import reactor
 
 global_pipegraph = None
+logging_port = 5005
 is_remote = False
 job_uniquifier = {} #to singletonize jobs on job_id
 func_hashes = {} #to calculate invarionts on functions in a slightly more efficent manner
@@ -15,7 +16,7 @@ def start_logging(module):
     name = "%s.%s" % (key, module)
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
-    handler = logging.handlers.SocketHandler('127.0.0.1', 5005)
+    handler = logging.handlers.SocketHandler('127.0.0.1', logging_port)
     logger.addHandler(handler)
     return logger
 

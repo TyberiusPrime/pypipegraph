@@ -160,7 +160,30 @@ class Pipegraph(object):
         for job in self.jobs.values():
             del job.dependants_copy
         if has_edges:
-            raise ppg_exceptions.CycleError("A cycle in the graph was detected")
+            import pprint
+            jobs_in_circles = []
+            max_depth = 50
+            for job in self.jobs.values():
+                if job.is_in_dependency_chain(job, max_depth): #we have to terminate this, otherwise the endless loop will explode python
+                    jobs_in_circles.append(job)
+            def find_circle_path(current_node, search_node, path, depth = 0):
+                if depth > max_depth:
+                    return False
+                if current_node == search_node and path:
+                    return True
+                for preq in current_node.prerequisites:
+                    path.append(preq)
+                    if find_circle_path(preq, search_node, path, depth + 1):
+                        return True
+                    else:
+                        path.pop()
+                return False
+            job_path_tuples = []
+            for job in jobs_in_circles:
+                path = []
+                find_circle_path(job, job, path)
+                job_path_tuples.append((job, path))
+            raise ppg_exceptions.CycleError("At least one cycle in the graph was detected\nJobs involved (up to a depth of %i) are\n %s " % (max_depth, pprint.pformat(job_path_tuples[0])))
         L.reverse()
         self.possible_execution_order = L
 

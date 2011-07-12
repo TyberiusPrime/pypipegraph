@@ -1086,6 +1086,12 @@ class FunctionInvariantTests(PPGPerTest):
 
     def test_passing_none_as_function_is_ok(self):
         job = ppg.FunctionInvariant('out/a',None)
+        jobB = ppg.FileGeneratingJob('out/A', lambda: write('out/A', 'A'))
+        jobB.depends_on(job)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/A'), 'A')
+
+
 
     def test_passing_non_string_as_jobid(self):
         def inner():

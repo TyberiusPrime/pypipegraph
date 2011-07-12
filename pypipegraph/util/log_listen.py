@@ -23,5 +23,10 @@ class Debug(Protocol):
 
 factory = Factory()
 factory.protocol= Debug
-reactor.listenTCP(5005, factory)
+import sys
+try:
+    port= int(sys.argv[1])
+except IndexError:
+    port = 5005
+reactor.listenTCP(port, factory)
 reactor.run()
