@@ -634,15 +634,19 @@ class PlotJob(FileGeneratingJob):
     """Calculate some data for plotting, cache it in cache/output_filename , and plot from there.
     creates two jobs, a plot_job (this one) and a cache_job (FileGeneratingJob, in self.cache_job), 
     """
-    def __init__(self, output_filename, calc_function, plot_function):
+    def __init__(self, output_filename, calc_function, plot_function, render_args = None):
         if not isinstance(output_filename , str) or isinstance(output_filename , unicode):
             raise ValueError("output_filename was not a string or unicode")
         if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):
             raise ValueError("Don't know how to create this file %s, must end on .png or .pdf" % output_filename)
 
 
+        self.output_filename = output_filename
         self.calc_function = calc_function
         self.plot_function = plot_function
+        if render_args is None:
+            render_args = {}
+        self.render_args = render_args
 
         import pydataframe
         import pyggplot
@@ -665,8 +669,9 @@ class PlotJob(FileGeneratingJob):
             plot = plot_function(df)
             if not isinstance(plot, pyggplot.Plot):
                 raise ppg_exceptions.JobContractError("%s.plot_function did not return a pyggplot.Plot " % (output_filename))
-            plot.render(output_filename)
+            plot.render(output_filename, **render_args)
         FileGeneratingJob.__init__(self, output_filename, run_plot)
+        Job.depends_on(self, ParameterInvariant(self.output_filename + '_params', render_args))
 
         cache_job = FileGeneratingJob(cache_filename, run_calc)
         self.depends_on(cache_job)
