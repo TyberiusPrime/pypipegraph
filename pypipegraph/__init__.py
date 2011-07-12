@@ -14,7 +14,7 @@ from job import (
         JobGeneratingJob, DependencyInjectionJob, 
         )
 
-
+assert_uniqueness_of_object = util.assert_uniqueness_of_object
 
 all = [
         run_pipegraph, new_pipegraph, forget_job_status, get_running_job_count, destroy_global_pipegraph,
