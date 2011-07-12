@@ -5,11 +5,12 @@ import util
 import cloudpickle
 
 from job import (
+        Job,
         FileGeneratingJob, MultiFileGeneratingJob, 
         DataLoadingJob, AttributeLoadingJob, 
         TempFileGeneratingJob, 
         CachedAttributeLoadingJob, CachedDataLoadingJob,
-        PlotJob,
+        PlotJob, CombinedPlotJob, 
         FunctionInvariant, ParameterInvariant, FileTimeInvariant, FileChecksumInvariant,
         JobGeneratingJob, DependencyInjectionJob, 
         )
@@ -20,11 +21,12 @@ all = [
         run_pipegraph, new_pipegraph, forget_job_status, get_running_job_count, destroy_global_pipegraph,
          RuntimeError, CycleError, JobContractError, PyPipelineGraphError, JobDiedException,
 
+         Job,
         FileGeneratingJob, MultiFileGeneratingJob, 
         DataLoadingJob, AttributeLoadingJob, 
         TempFileGeneratingJob, 
         CachedAttributeLoadingJob, CachedDataLoadingJob,
-        PlotJob,
+        PlotJob, CombinedPlotJob,
         FunctionInvariant, ParameterInvariant, FileTimeInvariant, FileChecksumInvariant,
         JobGeneratingJob, DependencyInjectionJob,
 

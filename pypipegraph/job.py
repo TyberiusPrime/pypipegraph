@@ -91,10 +91,18 @@ class Job(object):
             #job_joblist_or_list_of_jobs = [job_joblist_or_list_of_jobs]
 
         for job in job_joblist_or_list_of_jobs:
-            if self in job.prerequisites:
-                raise ppg_exceptions.CycleError("Cycle adding %s to %s" % (self.job_id, job.job_id))
+            if not isinstance(job, Job):
+                if hasattr(job, '__iter__'): #a nested list
+                    self.depends_on(job) 
+                    pass
+                else:
+                    raise ValueError("Can only depend on Job objects")
+            else:
+                if self in job.prerequisites:
+                    raise ppg_exceptions.CycleError("Cycle adding %s to %s" % (self.job_id, job.job_id))
         for job in job_joblist_or_list_of_jobs:
-            self.prerequisites.add(job)
+            if isinstance(job, Job): #skip the lists here, they will be delegated to further calls during the checking... 
+                self.prerequisites.add(job)
         return self
     
     def is_in_dependency_chain(self, other_job, max_depth):
@@ -219,8 +227,8 @@ class Job(object):
 inner_code_object_re = re.compile('<code	object	<[^>]+>	at	0x[a-f0-9]+[^>]+')
 class FunctionInvariant(Job):
     def __init__(self, job_id, function):
-        if not hasattr(function, '__call__'):
-            raise ValueError("function was not a callable")
+        if not hasattr(function, '__call__') and function is not None:
+            raise ValueError("function was not a callable (or None)")
         Job.__init__(self, job_id)
         self.function = function
 
@@ -260,7 +268,12 @@ class FunctionInvariant(Job):
 
 class ParameterInvariant(Job):
 
+    def __new__(cls, job_id, *parameters, **kwargs):
+        job_id = 'PI' + job_id
+        return Job.__new__(cls, job_id)
+
     def __init__(self, job_id, parameters):
+        job_id = 'PI' + job_id
         self.parameters = parameters
         Job.__init__(self, job_id)
 
@@ -635,7 +648,7 @@ class PlotJob(FileGeneratingJob):
     """Calculate some data for plotting, cache it in cache/output_filename , and plot from there.
     creates two jobs, a plot_job (this one) and a cache_job (FileGeneratingJob, in self.cache_job), 
     """
-    def __init__(self, output_filename, calc_function, plot_function, render_args = None):
+    def __init__(self, output_filename, calc_function, plot_function, render_args = None, skip_table = False):
         if not isinstance(output_filename , str) or isinstance(output_filename , unicode):
             raise ValueError("output_filename was not a string or unicode")
         if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):
@@ -651,22 +664,20 @@ class PlotJob(FileGeneratingJob):
 
         import pydataframe
         import pyggplot
-        cache_filename = os.path.join('cache', output_filename)
+        self.cache_filename = os.path.join('cache', output_filename)
         def run_calc():
             df = calc_function()
             if not isinstance(df, pydataframe.DataFrame):
                 raise ppg_exceptions.JobContractError("%s.calc_function did not return a DataFrame, was %s " % (output_filename, df.__class__))
             try:
-                os.makedirs(os.path.dirname(cache_filename))
+                os.makedirs(os.path.dirname(self.cache_filename))
             except OSError:
                 pass
-            of = open(cache_filename, 'wb')
+            of = open(self.cache_filename, 'wb')
             cPickle.dump(df, of, cPickle.HIGHEST_PROTOCOL)
             of.close()
         def run_plot():
-            of = open(cache_filename, 'rb')
-            df = cPickle.load(of)
-            of.close()
+            df = self.get_data()
             plot = plot_function(df)
             if not isinstance(plot, pyggplot.Plot):
                 raise ppg_exceptions.JobContractError("%s.plot_function did not return a pyggplot.Plot " % (output_filename))
@@ -674,7 +685,7 @@ class PlotJob(FileGeneratingJob):
         FileGeneratingJob.__init__(self, output_filename, run_plot)
         Job.depends_on(self, ParameterInvariant(self.output_filename + '_params', render_args))
 
-        cache_job = FileGeneratingJob(cache_filename, run_calc)
+        cache_job = FileGeneratingJob(self.cache_filename, run_calc)
         self.depends_on(cache_job)
         self.cache_job = cache_job
 
@@ -682,11 +693,45 @@ class PlotJob(FileGeneratingJob):
         FileGeneratingJob.depends_on(self, other_job)
         if hasattr(self, 'cache_job'): #activate this after we have added the invariants...
             self.cache_job.depends_on(other_job)
+        return self
 
     def inject_auto_invariants(self):
         if not self.do_ignore_code_changes:
             self.cache_job.depends_on(FunctionInvariant(self.job_id + '.calcfunc', self.calc_function))
             FileGeneratingJob.depends_on(self, FunctionInvariant(self.job_id + '.plotfunc', self.plot_function))
+
+    def get_data(self):
+        of = open(self.cache_filename, 'rb')
+        df = cPickle.load(of)
+        of.close()
+        return df
+
+def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args = None):
+    if render_args is None:
+        render_args = {}
+    def plot():
+        import pydataframe
+        data = pydataframe.combine([plot_job.get_data for plot_job in plot_jobs])
+        plot = plot_jobs[0].plot_function(data)
+        if isinstance(facet_arguments, list):
+            plot.facet(*facet_arguments)
+        elif isinstance(facet_arguments, dict):
+            plot.facet(**facet_arguments)
+        else:
+            raise ValueError("Don't know how to pass object of type %s to a function, needs to be a list or a dict. Was: %s" % (type(facet_arguments), facet_arguments))
+        plot.render(output_filename, **render_args)
+    job = FileGeneratingJob(output_filename, plot)
+    job.depends_on(ParameterInvariant(output_filename + '_params', 
+        (
+            list(sorted([plot_job.output_filename for plot_job in plot_jobs])), #so to detect new plot_jobs...
+            render_args, 
+            facet_arguments
+        )))
+    job.depends_on([plot_job.cache_job for plot_job in plot_jobs])
+    return job
+
+
+
 
 
 
