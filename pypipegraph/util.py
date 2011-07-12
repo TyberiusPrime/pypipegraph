@@ -40,7 +40,48 @@ class NothingChanged(Exception):
     tuple, without invalidating the jobs.
     """
 
-
     def __init__(self, new_value):
         self.new_value = new_value
+
+def assert_uniqueness_of_object(object_with_name_attribute, pipeline = None):
+    """Makes certain there is only one object with this class & .name.
+
+    This is necesarry so the pipeline jobs assign their data only to the 
+    objects you're actually working with."""
+    if pipeline is None:
+        pipeline = global_pipegraph
+
+    if object_with_name_attribute.name.find('/') != -1:
+        raise ValueError("Names must not contain /, it confuses the directory calculations")
+    typ = object_with_name_attribute.__class__
+    if not typ in pipeline.object_uniquifier:
+        pipeline.object_uniquifier[typ] = {}
+    if object_with_name_attribute.name in pipeline.object_uniquifier[typ]:
+        raise ValueError("Doublicate object: %s, %s" % (typ, object_with_name_attribute.name))
+    object_with_name_attribute.unique_id = len(pipeline.object_uniquifier[typ])
+    pipeline.object_uniquifier[typ][object_with_name_attribute.name] = True
+
+cpu_count = 0
+def CPUs():
+    """
+    Detects the number of CPUs on a system. Cribbed from pp.
+    """
+    global cpu_count
+    if cpu_count == 0:
+        cpu_count = 1 #default
+        # Linux, Unix and MacOS:
+        if hasattr(os, "sysconf"):
+            if os.sysconf_names.has_key("SC_NPROCESSORS_ONLN"):
+                # Linux & Unix:
+                ncpus = os.sysconf("SC_NPROCESSORS_ONLN")
+                if isinstance(ncpus, int) and ncpus > 0:
+                    cpu_count = ncpus
+            else: # OSX:
+                cpu_count = int(os.popen2("sysctl -n hw.ncpu")[1].read())
+         # Windows:
+        if os.environ.has_key("NUMBER_OF_PROCESSORS"):
+            ncpus = int(os.environ["NUMBER_OF_PROCESSORS"]);
+            if ncpus > 0:
+                cpu_count = ncpus
+    return cpu_count
 
