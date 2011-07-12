@@ -941,6 +941,15 @@ class InvariantTests(PPGPerTest):
         ppg.run_pipegraph()
         self.assertEqual(read(of), 'shushu') #has been run again ;).
 
+    def test_parameter_invariant_adds_hidden_job_id_prefix(self):
+        param = 'A'
+        jobA = ppg.FileGeneratingJob('out/A', lambda: write('out/A', param))
+        jobB = ppg.ParameterInvariant('out/A', param)
+        jobA.depends_on(jobB)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/A'), param)
+
+
     def test_filetime_dependency(self):
         of = 'out/a'
         def do_write():
@@ -1070,10 +1079,13 @@ class FunctionInvariantTests(PPGPerTest):
         self.assertNotEqual(av, cv)
 
 
-    def test_passing_non_function(self):
+    def test_passing_non_function_raises(self):
         def inner():
             job = ppg.FunctionInvariant('out/a', 'shu')
         self.assertRaises(ValueError, inner)
+
+    def test_passing_none_as_function_is_ok(self):
+        job = ppg.FunctionInvariant('out/a',None)
 
     def test_passing_non_string_as_jobid(self):
         def inner():
@@ -1209,6 +1221,33 @@ class DependencyTests(PPGPerTest):
         self.assertTrue(read('out/B'), 'BB')
         self.assertTrue(read('out/C'), 'CC')
         self.assertTrue(read('out/D'), 'D') #since that one does not to be rerun...
+
+    def test_depends_on_accepts_a_list(self):
+        o = Dummy()
+        jobA = ppg.FileGeneratingJob('out/A', lambda: write('out/A', 'A'))
+        jobB = ppg.FileGeneratingJob('out/B', lambda: write('out/B', 'B'))
+        jobC = ppg.FileGeneratingJob('out/C', lambda: write('out/C', 'C'))
+        jobC.depends_on([jobA, jobB])
+        ppg.run_pipegraph()
+        self.assertTrue(read('out/A'), 'A')
+        self.assertTrue(read('out/B'), 'B')
+        self.assertTrue(read('out/C'), 'C')
+
+    def test_depends_on_accepts_a_list_of_lists(self):
+        o = Dummy()
+        jobA = ppg.FileGeneratingJob('out/A', lambda: write('out/A', 'A'))
+        jobB = ppg.FileGeneratingJob('out/B', lambda: write('out/B', 'B'))
+        jobC = ppg.FileGeneratingJob('out/C', lambda: write('out/C', read('out/A') + read('out/B') + read('out/D')))
+        jobD = ppg.FileGeneratingJob('out/D', lambda: write('out/D', 'D'))
+        jobC.depends_on([jobA, [jobB, jobD]])
+        ppg.run_pipegraph()
+        self.assertTrue(jobD in jobC.prerequisites)
+        self.assertTrue(jobA in jobC.prerequisites)
+        self.assertTrue(jobB in jobC.prerequisites)
+        self.assertTrue(read('out/A'), 'A')
+        self.assertTrue(read('out/B'), 'B')
+        self.assertTrue(read('out/C'), 'ABD')
+        self.assertTrue(read('out/D'), 'D')
 
 
 class DependencyInjectionJobTests(PPGPerTest):
