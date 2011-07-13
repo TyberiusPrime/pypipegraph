@@ -423,7 +423,8 @@ class MultiFileGeneratingJob(FileGeneratingJob):
     def run(self):
         try:
             self.callback()
-        except:
+        except Exception, e:
+            exc_info = sys.exc_info()
             if self.rename_broken:
                 for fn in self.filenames:
                     try:
@@ -436,14 +437,20 @@ class MultiFileGeneratingJob(FileGeneratingJob):
                         os.unlink(fn)
                     except OSError:
                         pass
+            raise exc_info[1], None, exc_info[2] #so we reraise as if in the original place
         if not self.is_done():
-            raise ppg_exceptions.JobContractError("%s did not create all of its files" % (self.job_id,))
+            missing_files = []
+            for f in self.filenames:
+                if not os.path.exists(f):
+                    missing_files.append(f)
+            raise ppg_exceptions.JobContractError("%s did not create all of its files.\nMissing were:\n %s" % (self.job_id,"\n".join(missing_files)))
     def runs_in_slave(self):
         return False
 
 class TempFileGeneratingJob(FileGeneratingJob):
 
     def cleanup(self):
+        logger.info("%s cleanup" % self)
         try:
             if self.rename_broken:
                 shutil.move(self.job_id, self.job_id + '.broken')
