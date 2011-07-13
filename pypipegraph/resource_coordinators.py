@@ -29,7 +29,7 @@ class LocalSystem:
     It uses multiprocessing and the LocalSlave
     """
 
-    def __init__(self, max_cores_to_use = 12):
+    def __init__(self, max_cores_to_use = util.CPUs()):
         self.max_cores_to_use = max_cores_to_use #todo: update to local cpu count...
         self.slave = LocalSlave(self)
         self.cores_available = max_cores_to_use
