@@ -5,20 +5,31 @@ import logging.handlers
 from twisted.internet import reactor
 
 global_pipegraph = None
-logging_port = 5005
 is_remote = False
 job_uniquifier = {} #to singletonize jobs on job_id
 func_hashes = {} #to calculate invarionts on functions in a slightly more efficent manner
 reactor_was_started = False
+
+default_logging_handler = logging.handlers.SocketHandler('127.0.0.1', 5005)
+loggers = []
 
 def start_logging(module):
     key = 'rem' if is_remote else 'ppg'
     name = "%s.%s" % (key, module)
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
-    handler = logging.handlers.SocketHandler('127.0.0.1', logging_port)
-    logger.addHandler(handler)
+    logger.addHandler(default_logging_handler)
+    loggers.append(logger)
     return logger
+
+def change_logging_port(port):
+    global default_logging_handler
+    new_handler = logging.handlers.SocketHandler('127.0.0.1', port)
+    for logger in loggers:
+        logger.removeHandler(default_logging_handler)
+        logger.addHandler(new_handler)
+    default_logging_handler = new_handler
+
 
 
 def output_file_exists(filename):
