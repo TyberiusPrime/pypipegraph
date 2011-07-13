@@ -350,7 +350,7 @@ class Pipegraph(object):
                                 resources[slave]['cores'] = 0 #since the job modifying blocks the Slave-Process (runs in it), no point in spawning further ones till it has returned.
                             break
                         else:
-                            if (job.cores_needed == -1 and resources[slave]['cores'] == resources[slave['total cores']]
+                            if (job.cores_needed == -1 and resources[slave]['cores'] == resources[slave]['total cores']
                                 and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
                                     job.slave_name = slave
                                     self.slaves[slave].spawn(job)
@@ -359,7 +359,7 @@ class Pipegraph(object):
                                     resources[slave]['cores'] = 0
                                     #don't worry about memory...
                                     break
-                            elif (job.cores_needed <= resources[slave]['cores'] 
+                            elif (job.cores_needed <= resources[slave]['cores'] and job.cores_needed != -1 
                                 and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
                                 job.slave_name = slave
                                 self.slaves[slave].spawn(job)
