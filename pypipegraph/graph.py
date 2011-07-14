@@ -222,7 +222,7 @@ class Pipegraph(object):
                         import difflib
                         for line in difflib.unified_diff(old.split("\n"), inv.split("\n"), n=5):
                             logger.info(line)
-                job.invalidated()
+                job.invalidated(reason = 'invariant')
                 self.invariant_status[job.job_id] = inv # for now, it is the dependant job's job to clean up so they get reinvalidated if the executing is terminated before they are reubild (ie. filegenjobs delete their outputfiles)
 
     def build_todo_list(self):
@@ -232,9 +232,11 @@ class Pipegraph(object):
         needs_to_be_run = set()
         for job in self.jobs.values():
             if not job.is_done():
+                logger.info("Was not done: %s" % job)
                 if not job.is_loadable():
+                    logger.info("and is not loadable")
                     needs_to_be_run.add(job.job_id)
-                    job.invalidated()
+                    job.invalidated('not done')
                 #for preq in job.prerequisites:
                     #preq.require_loading() #think I can get away with  lettinng the slaves what they need to execute a given job...
             else:
@@ -324,7 +326,7 @@ class Pipegraph(object):
         if self.possible_execution_order and not runnable_jobs and not self.running_jobs:
             logger.info("Nothing running, nothing runnable, but work left to do")
             for job in self.possible_execution_order:
-                logger.info("%s - %s" % (job, job.list_blocks()))
+                logger.info("%s - %s - %s" % (job, job.can_run_now(), job.list_blocks()))
             raise ppg_exceptions.RuntimeException(
             """We had more jobs that needed to be done, none of them could be run right now and none were running. Sounds like a dependency graph bug to me""")
 
@@ -359,7 +361,7 @@ class Pipegraph(object):
                                     resources[slave]['cores'] = 0
                                     #don't worry about memory...
                                     break
-                            elif (job.cores_needed <= resources[slave]['cores'] and job.cores_needed != -1 
+                            elif (job.cores_needed <= resources[slave]['cores'] and (job.cores_needed != -1) 
                                 and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
                                 job.slave_name = slave
                                 self.slaves[slave].spawn(job)
@@ -440,7 +442,7 @@ class Pipegraph(object):
             job.dependants = set([self.jobs[job_id] for job_id in job.dependants])
         for job in new_jobs.values():
             if not job.is_done():
-                job.invalidated()
+                job.invalidated(reason = 'not done')
         self.connect_graph()
         self.distribute_invariant_changes()
         for job in new_jobs.values():
