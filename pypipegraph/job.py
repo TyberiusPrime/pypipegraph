@@ -148,15 +148,16 @@ class Job(object):
     def runs_in_slave(self):
         return True
 
-    def invalidated(self):
-        logger.info("%s invalidated called" % self)
+    def invalidated(self, reason = ''):
+        logger.info("%s invalidated called, reason: %s" % (self, reason))
         self.was_invalidated = True
         for dep in self.dependants:
-            dep.invalidated()
+            dep.invalidated(reason = 'preq invalidated')
 
     def can_run_now(self):
         #logger.info("can_run_now %s" % self)
         for preq in self.prerequisites:
+            #logger.info("checking preq %s" % preq)
             if preq.is_done():
                 if preq.was_invalidated and not preq.was_run and not preq.is_loadable(): 
                     #was_run is necessary, a filegen job might have already created the file (and written a bit to it), but that does not mean that it's done enough to start the next one. Was_run means it has returned.
@@ -168,6 +169,7 @@ class Job(object):
                     #logger.info("case 2 - delay") #but we still need to try the other preqs if it was ok
                     pass
             else:
+                #logger.info("case 3 - not done")
                 return False
         #logger.info("case 4 - true")
         return True
@@ -356,12 +358,12 @@ class FileGeneratingJob(Job):
     def is_done(self):
         return util.output_file_exists(self.job_id)
 
-    def invalidated(self):
+    def invalidated(self, reason = ''):
         try:
             os.unlink(self.job_id)
         except OSError:
             pass
-        Job.invalidated(self)
+        Job.invalidated(self, reason)
 
     def run(self):
         try:
@@ -411,14 +413,14 @@ class MultiFileGeneratingJob(FileGeneratingJob):
                 return False
         return True
 
-    def invalidated(self):
+    def invalidated(self, reason = ''):
         for fn in self.filenames:
             try:
                 logger.info("Removing %s" % fn)
                 os.unlink(fn)
             except OSError:
                 pass
-        Job.invalidated(self)
+        Job.invalidated(self, reason)
 
     def run(self):
         try:
@@ -774,7 +776,7 @@ class _LazyFileGeneratingJob(Job):
     def is_done(self):
         if util.output_file_exists(self.job_id):
             return True
-        else:
+        else: #only do the job if there is someone dependand on the loading of our data_loading_job
             if self.data_loading_job.dependants:
                 return False
             else:
@@ -792,14 +794,15 @@ class _LazyFileGeneratingJob(Job):
         else:
             logger.info("not Injecting outa invariants %s" % self)
 
-    def invalidated(self):
+    def invalidated(self, reason=''):
+        logger.info("%s invalidated called, reason: %s" % (self, reason))
         try:
             os.unlink(self.job_id)
         except OSError:
             pass
         self.was_invalidated = True
         if (not self.data_loading_job.was_invalidated):
-            self.data_loading_job.invalidated()
+            self.data_loading_job.invalidated(reason)
         #Job.invalidated(self) #no going back up the dependants... the dataloading job takes care of that
 
     def run(self):
@@ -852,10 +855,10 @@ class CachedAttributeLoadingJob(AttributeLoadingJob):
     def __del__(self):
         self.lfg = None
 
-    def invalidated(self):
+    def invalidated(self, reason = ''):
         if not self.lfg.was_invalidated:
-            self.lfg.invalidated()
-        Job.invalidated(self)
+            self.lfg.invalidated(reason)
+        Job.invalidated(self, reason)
 
 class CachedDataLoadingJob(DataLoadingJob):
     
@@ -903,10 +906,10 @@ class CachedDataLoadingJob(DataLoadingJob):
     def __del__(self):
         self.lfg = None
 
-    def invalidated(self):
+    def invalidated(self, reason = ''):
         if not self.lfg.was_invalidated:
-            self.lfg.invalidated()
-        Job.invalidated(self)
+            self.lfg.invalidated(reason)
+        Job.invalidated(self, reason)
  
 
     #TODOs
