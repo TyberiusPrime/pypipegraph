@@ -769,6 +769,84 @@ class TempFileGeneratingJobTest(PPGPerTest):
         self.assertEqual(read(ofA), 'hello')
         self.assertFalse(os.path.exists(temp_file))
 
+    def test_does_not_get_return_if_output_is_done(self):
+        temp_file = 'out/temp'
+        out_file = 'out/A'
+        count_file = 'out/count'
+        normal_count_file = 'out/countA'
+        def write_count():
+            try:
+                count = read(out_file)
+                count = count[:count.find(':')]
+            except IOError:
+                count = '0'
+            count = int(count) + 1
+            write(out_file, str(count) + ':' + read(temp_file))
+            append(normal_count_file,'A')
+        def write_temp():
+            write(temp_file, 'temp')
+            append(count_file, 'X')
+        jobA = ppg.FileGeneratingJob(out_file, write_count)
+        jobTemp = ppg.TempFileGeneratingJob(temp_file, write_temp)
+        jobA.depends_on(jobTemp)
+        ppg.run_pipegraph()
+        self.assertFalse(os.path.exists(temp_file))
+        self.assertEqual(read(out_file), '1:temp')
+        self.assertEqual(read(count_file), 'X')
+        self.assertEqual(read(normal_count_file), 'A')
+        #now, rerun. Tempfile has been deleted, 
+        #and should not be regenerated
+        ppg.new_pipegraph(rc_gen(), quiet=True)
+        jobA = ppg.FileGeneratingJob(out_file, write_count)
+        jobTemp = ppg.TempFileGeneratingJob(temp_file, write_temp)
+        jobA.depends_on(jobTemp)
+        ppg.run_pipegraph()
+        self.assertFalse(os.path.exists(temp_file))
+        self.assertEqual(read(out_file), '1:temp')
+        self.assertEqual(read(count_file), 'X')
+        self.assertEqual(read(normal_count_file), 'A')
+
+
+    def test_does_not_get_return_if_output_is_not(self):
+        temp_file = 'out/temp'
+        out_file = 'out/A'
+        count_file = 'out/count'
+        normal_count_file = 'out/countA'
+        def write_count():
+            try:
+                count = read(out_file)
+                count = count[:count.find(':')]
+            except IOError:
+                count = '0'
+            count = int(count) + 1
+            write(out_file, str(count) + ':' + read(temp_file))
+            append(normal_count_file,'A')
+        def write_temp():
+            write(temp_file, 'temp')
+            append(count_file, 'X')
+        jobA = ppg.FileGeneratingJob(out_file, write_count)
+        jobTemp = ppg.TempFileGeneratingJob(temp_file, write_temp)
+        jobA.depends_on(jobTemp)
+        ppg.run_pipegraph()
+        self.assertFalse(os.path.exists(temp_file))
+        self.assertEqual(read(out_file), '1:temp')
+        self.assertEqual(read(count_file), 'X')
+        self.assertEqual(read(normal_count_file), 'A')
+        #now, rerun. Tempfile has been deleted, 
+        #and should  be regenerated
+        os.unlink(out_file)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
+        jobA = ppg.FileGeneratingJob(out_file, write_count)
+        jobTemp = ppg.TempFileGeneratingJob(temp_file, write_temp)
+        jobA.depends_on(jobTemp)
+        ppg.run_pipegraph()
+        self.assertFalse(os.path.exists(temp_file))
+        self.assertEqual(read(out_file), '1:temp') #since the outfile was removed...
+        self.assertEqual(read(count_file), 'XX')
+        self.assertEqual(read(normal_count_file), 'AA')
+
+
+
     def test_dependand_explodes(self):
         temp_file = 'out/temp'
         def write_temp():

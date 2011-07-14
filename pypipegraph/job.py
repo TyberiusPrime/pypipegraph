@@ -462,6 +462,15 @@ class TempFileGeneratingJob(FileGeneratingJob):
     def runs_in_slave(self):
         return False
 
+    def is_done(self):
+        if util.output_file_exists(self.job_id):
+            return True
+        else:
+            for dep in self.dependants:
+                if (not dep.is_done()) and (not dep.is_loadable()):
+                    return False
+            return True
+
 class DataLoadingJob(Job):
     def __init__(self, job_id, callback):
         if not hasattr(callback, '__call__'):
