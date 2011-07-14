@@ -7,12 +7,12 @@ import traceback
 import multiprocessing
 import Queue
 import sys
-import cStringIO
 import cloudpickle
 import cPickle
 import exceptions
 import ppg_exceptions
 import subprocess
+import tempfile
 
 import messages
 from twisted.internet import reactor
@@ -154,8 +154,8 @@ class LocalSlave:
                 logger.info("Slave, returning to start_jobs")
 
     def load_job(self, job): #this executes a load job returns false if an error occured 
-        stdout = cStringIO.StringIO()
-        stderr = cStringIO.StringIO()
+        stdout = tempfile.SpooledTemporaryFile()
+        stderr = tempfile.SpooledTemporaryFile()
         old_stdout = sys.stdout 
         old_stderr = sys.stderr
         sys.stdout = stdout
@@ -174,8 +174,12 @@ class LocalSlave:
                 exception = cPickle.dumps(exception)
             except Exception, e: #some exceptions can't be pickled, so we send a string instead
                 exception = str(exception)
-        stdout = stdout.getvalue()
-        stderr = stderr.getvalue()
+        stdout.seek(0, os.SEEK_SET)
+        stdout_text = stdout.read() 
+        stdout.close()
+        stderr.seek(0, os.SEEK_SET)
+        stderr_text = stderr.read()
+        stderr.close()
         sys.stdout = old_stdout
         sys.stderr = old_stderr
         if not was_ok:
@@ -184,8 +188,8 @@ class LocalSlave:
                         self.slave_id,
                         was_ok, #failed?
                         job.job_id, #id...
-                        stdout, #output
-                        stderr, #output
+                        stdout_text, #output
+                        stderr_text, #output
                         exception, 
                         trace, 
                         new_jobs,
@@ -193,8 +197,8 @@ class LocalSlave:
         return was_ok
 
     def run_a_job(self, job, is_local=True): #this runs in the spawned processes, except for job.modifies_jobgraph()==True jobs
-        stdout = cStringIO.StringIO()
-        stderr = cStringIO.StringIO()
+        stdout = tempfile.SpooledTemporaryFile()
+        stderr = tempfile.SpooledTemporaryFile()
         old_stdout = sys.stdout 
         old_stderr = sys.stderr
         sys.stdout = stdout
@@ -218,8 +222,12 @@ class LocalSlave:
                 exception = cPickle.dumps(exception)
             except Exception, e: #some exceptions can't be pickled, so we send a string instead
                 exception = str(exception)
-        stdout = stdout.getvalue()
-        stderr = stderr.getvalue()
+        stdout.seek(0, os.SEEK_SET)
+        stdout_text = stdout.read() 
+        stdout.close()
+        stderr.seek(0, os.SEEK_SET)
+        stderr_text = stderr.read()
+        stderr.close()
         sys.stdout = old_stdout
         sys.stderr = old_stderr
         #logger.info("Now putting job data into que: %s - %s" % (job, os.getpid()))
@@ -228,8 +236,8 @@ class LocalSlave:
                     self.slave_id,
                     was_ok, #failed?
                     job.job_id, #id...
-                    stdout, #output
-                    stderr, #output
+                    stdout_text, #output
+                    stderr_text, #output
                     exception, 
                     trace, 
                     new_jobs,
