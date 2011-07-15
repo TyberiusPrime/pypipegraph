@@ -177,10 +177,16 @@ class Job(object):
     def list_blocks(self):
         res = []
         for preq in self.prerequisites:
-            if not preq.is_done() and not preq.is_loadable():
-                res.append((preq,0))
-            elif preq.is_done() and  preq.was_invalidated and not preq.was_run and not preq.is_loadable(): 
-                res.append((preq, 1))
+            if preq.is_done():
+                if preq.was_invalidated and not preq.was_run and not preq.is_loadable(): 
+                    res.append((preq, 0))
+                else:
+                    #logger.info("case 2 - delay") #but we still need to try the other preqs if it was ok
+                    pass
+            else:
+                #logger.info("case 3 - not done")
+                res.append((preq,1))
+                return False
         return res
 
     def run(self):
@@ -369,6 +375,7 @@ class FileGeneratingJob(Job):
         try:
             self.callback()
         except Exception, e:
+            exc_info = sys.exc_info()
             sys.stderr.write(traceback.format_exc())
             try:
                 if self.rename_broken:
@@ -377,7 +384,7 @@ class FileGeneratingJob(Job):
                     os.unlink(self.job_id)
             except (OSError, IOError):
                 pass
-            raise e
+            raise exc_info[1], None, exc_info[2] #so we reraise as if in the original place
         if not util.output_file_exists(self.job_id):
             raise ppg_exceptions.JobContractError("%s did not create its file" % (self.job_id,))
 
@@ -615,7 +622,7 @@ class DependencyInjectionJob(_GraphModifyingJob):
             for job in util.global_pipegraph.jobs.values():
                 if job in self.dependants:
                     for new_job in util.global_pipegraph.new_jobs.values():
-                        if not job.is_in_dependency_chain(new_job,2): #that's for the auto injected invariants, which should be one level below this job...
+                        if not job.is_in_dependency_chain(new_job,5): #1 for the job, 2 for auto dependencies, 3 for load jobs, 4 for the dependencies of load jobs... 5 seems to work in pratice.
                             raise ppg_exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was not added to the prerequisites of %s" % (self.job_id, new_job.job_id, job.job_id))
                 else:
                     preq_intersection = job.prerequisites.intersection(new_job_set)
@@ -676,8 +683,8 @@ class PlotJob(FileGeneratingJob):
         if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):
             raise ValueError("Don't know how to create this file %s, must end on .png or .pdf" % output_filename)
 
-
         self.output_filename = output_filename
+        self.table_filename = self.output_filename + '.tsv'
         self.calc_function = calc_function
         self.plot_function = plot_function
         if render_args is None:
@@ -703,16 +710,31 @@ class PlotJob(FileGeneratingJob):
             plot = plot_function(df)
             if not isinstance(plot, pyggplot.Plot):
                 raise ppg_exceptions.JobContractError("%s.plot_function did not return a pyggplot.Plot " % (output_filename))
+            if not 'width' in render_args and hasattr(plot, 'width'):
+                render_args['width'] = plot.width
+            if not 'height' in render_args and hasattr(plot, 'height'):
+                render_args['height'] = plot.width
             plot.render(output_filename, **render_args)
         FileGeneratingJob.__init__(self, output_filename, run_plot)
         Job.depends_on(self, ParameterInvariant(self.output_filename + '_params', render_args))
 
         cache_job = FileGeneratingJob(self.cache_filename, run_calc)
-        self.depends_on(cache_job)
+        Job.depends_on(self, cache_job)
         self.cache_job = cache_job
 
+        if not skip_table:
+            def dump_table():
+                df = self.get_data()
+                pydataframe.DF2TSV().write(df, self.table_filename)
+            table_gen_job = FileGeneratingJob(self.table_filename, dump_table)
+            table_gen_job.depends_on(cache_job)
+            self.table_job = table_gen_job
+        else:
+            self.table_job = None
+
+
     def depends_on(self, other_job):
-        FileGeneratingJob.depends_on(self, other_job)
+        #FileGeneratingJob.depends_on(self, other_job) #just like the cached jobs, the plotting does not depend on the loading of prerequisites
         if hasattr(self, 'cache_job') and not other_job is self.cache_job: #activate this after we have added the invariants...
             self.cache_job.depends_on(other_job)
         return self
@@ -729,18 +751,30 @@ class PlotJob(FileGeneratingJob):
         return df
 
 def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args = None):
+    if not isinstance(output_filename , str) or isinstance(output_filename , unicode):
+        raise ValueError("output_filename was not a string or unicode")
+    if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):
+        raise ValueError("Don't know how to create this file %s, must end on .png or .pdf" % output_filename)
+
     if render_args is None:
-        render_args = {}
+        render_args = {'width': 10, 'height': 10}
     def plot():
         import pydataframe
-        data = pydataframe.combine([plot_job.get_data for plot_job in plot_jobs])
+        import pyggplot
+        data = pydataframe.combine([plot_job.get_data() for plot_job in plot_jobs])
         plot = plot_jobs[0].plot_function(data)
         if isinstance(facet_arguments, list):
-            plot.facet(*facet_arguments)
+            if facet_arguments: #empty lists mean no faceting
+                plot.facet(*facet_arguments)
         elif isinstance(facet_arguments, dict):
             plot.facet(**facet_arguments)
         else:
             raise ValueError("Don't know how to pass object of type %s to a function, needs to be a list or a dict. Was: %s" % (type(facet_arguments), facet_arguments))
+        if not isinstance(plot, pyggplot.Plot):
+            raise ppg_exceptions.JobContractError("%s.plot_function did not return a pyggplot.Plot " % (output_filename))
+        path = os.path.dirname(output_filename)
+        if not os.path.exists(path):
+            os.makedirs(path)
         plot.render(output_filename, **render_args)
     job = FileGeneratingJob(output_filename, plot)
     job.depends_on(ParameterInvariant(output_filename + '_params', 
