@@ -2256,6 +2256,11 @@ class NotYetImplementedTests(unittest.TestCase):
     def test_filegenerating_job_exceptions_are_preserved(self):
         raise NotImplementedError()
 
+    def test_cached_attribute_job_does_not_load_its_preqs_on_cached():
+        raise NotImplementedError()
+
+    def test_cached_dataloading_job_does_not_load_its_preqs_on_cached():
+        raise NotImplementedError()
 
 
 
