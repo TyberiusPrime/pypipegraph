@@ -14,7 +14,6 @@ import cPickle
 import traceback
 
 
-
 class JobList(object):
     def __init__(self, jobs):
         jobs = list(jobs)
@@ -178,15 +177,16 @@ class Job(object):
         res = []
         for preq in self.prerequisites:
             if preq.is_done():
-                if preq.was_invalidated and not preq.was_run and not preq.is_loadable(): 
-                    res.append((preq, 0))
+                if preq.was_invalidated and not preq.was_run and not preq.is_loadable():  #see can_run_now for why
+                    res.append((preq, 'not run'))
                 else:
                     #logger.info("case 2 - delay") #but we still need to try the other preqs if it was ok
                     pass
             else:
                 #logger.info("case 3 - not done")
-                res.append((preq,1))
-                return False
+                res.append((preq,'not done'))
+                break
+                #return False
         return res
 
     def run(self):
@@ -197,10 +197,12 @@ class Job(object):
             logger.info("check_prerequisites_for_cleanup %s" % preq)
             all_done = True
             for dep in preq.dependants:
-                if dep.failed or not dep.was_run:
+                logger.info('checking %s, failed %s, was_run: %s' % (dep, dep.failed, dep.was_run))
+                if dep.failed or (not dep.was_run) or not preq.is_done():
                     all_done = False
                     break
             if all_done:
+                logger.info("Calling %s cleanup" % preq)
                 preq.cleanup()
 
     def cleanup(self):
@@ -454,7 +456,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
                     missing_files.append(f)
             raise ppg_exceptions.JobContractError("%s did not create all of its files.\nMissing were:\n %s" % (self.job_id,"\n".join(missing_files)))
     def runs_in_slave(self):
-        return False
+        return True
 
 class TempFileGeneratingJob(FileGeneratingJob):
 
@@ -469,7 +471,7 @@ class TempFileGeneratingJob(FileGeneratingJob):
             pass
 
     def runs_in_slave(self):
-        return False
+        return True
 
     def is_done(self):
         if util.output_file_exists(self.job_id):
@@ -840,10 +842,11 @@ class _LazyFileGeneratingJob(Job):
         #Job.invalidated(self) #no going back up the dependants... the dataloading job takes care of that
 
     def run(self):
-        data = self.callback()
-        op = open(self.cache_filename, 'wb')
-        cPickle.dump(data, op, cPickle.HIGHEST_PROTOCOL)
-        op.close()
+        if self.data_loading_job.dependants: #otherwise, don't bother running.
+            data = self.callback()
+            op = open(self.cache_filename, 'wb')
+            cPickle.dump(data, op, cPickle.HIGHEST_PROTOCOL)
+            op.close()
 
 class CachedAttributeLoadingJob(AttributeLoadingJob):
     
