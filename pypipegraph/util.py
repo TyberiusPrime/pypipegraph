@@ -11,6 +11,10 @@ func_hashes = {} #to calculate invarionts on functions in a slightly more effice
 reactor_was_started = False
 
 default_logging_handler = logging.handlers.SocketHandler('127.0.0.1', 5005)
+if os.path.exists('logs'):
+    file_logging_handler = logging.FileHandler("logs/ppg_run.txt",mode="w")
+else:
+    file_logging_handler = None
 loggers = []
 
 def start_logging(module):
@@ -19,6 +23,8 @@ def start_logging(module):
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
     logger.addHandler(default_logging_handler)
+    if file_logging_handler is not None:
+        logger.addHandler(file_logging_handler)
     loggers.append(logger)
     return logger
 
