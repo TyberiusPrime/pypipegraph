@@ -926,6 +926,60 @@ class TempFileGeneratingJobTest(PPGPerTest):
             job = ppg.TempFileGeneratingJob(5, lambda: 1)
         self.assertRaises(ValueError, inner)
 
+    def test_rerun_because_of_new_dependency_does_not_rerun_old(self):
+        jobA = ppg.FileGeneratingJob('out/A', lambda: append("out/A", read('out/temp')) or append('out/Ax', 'A'))
+        jobB = ppg.TempFileGeneratingJob("out/temp", lambda :write("out/temp", 'T'))
+        jobA.depends_on(jobB)
+        ppg.run_pipegraph()
+        self.assertFalse(os.path.exists('out/temp'))
+        self.assertEqual(read("out/A"), "T")
+        self.assertEqual(read("out/Ax"), "A") #ran once
+
+        ppg.new_pipegraph(rc_gen(), quiet=True)
+        jobA = ppg.FileGeneratingJob('out/A', lambda: append("out/A", read('out/temp')))
+        jobB = ppg.TempFileGeneratingJob("out/temp", lambda :write("out/temp", 'T'))
+        jobA.depends_on(jobB)
+        jobC = ppg.FileGeneratingJob('out/C', lambda: append("out/C", read('out/temp')))
+        jobC.depends_on(jobB)
+        ppg.run_pipegraph()
+        self.assertFalse(os.path.exists('out/temp'))
+        self.assertEqual(read("out/Ax"), "A") #ran once, not rewritten
+        self.assertEqual(read("out/C"), "T") #a new file
+
+    def test_chaining_multiple(self):
+        jobA = ppg.TempFileGeneratingJob("out/A", lambda: write('out/A', 'A'))
+        jobB = ppg.TempFileGeneratingJob('out/B', lambda: write('out/B', read('out/A') + 'B'))
+        jobC = ppg.TempFileGeneratingJob('out/C', lambda: write('out/C', read('out/A') + 'C'))
+        jobD = ppg.FileGeneratingJob('out/D', lambda: write('out/D', read('out/B') + read('out/C')))
+        jobD.depends_on(jobC)
+        jobD.depends_on(jobB)
+        jobC.depends_on(jobA)
+        jobB.depends_on(jobA)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/D'), 'ABAC')
+        self.assertFalse(os.path.exists('out/A'))
+        self.assertFalse(os.path.exists('out/B'))
+        self.assertFalse(os.path.exists('out/C'))
+
+    def test_chaining_multiple_differently(self):
+        jobA = ppg.TempFileGeneratingJob("out/A", lambda: write('out/A', 'A'))
+        jobB = ppg.TempFileGeneratingJob('out/B', lambda: write('out/B', read('out/A') + 'B'))
+        jobD = ppg.FileGeneratingJob('out/D', lambda: write('out/D', read('out/B') + "D"))
+        jobE = ppg.FileGeneratingJob('out/E', lambda: write('out/E', read('out/B') + "E"))
+        jobF = ppg.FileGeneratingJob('out/F', lambda: write('out/F', read('out/A') + 'F'))
+        jobD.depends_on(jobB)
+        jobE.depends_on(jobB)
+        jobB.depends_on(jobA)
+        jobF.depends_on(jobA)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/D'), 'ABD')
+        self.assertEqual(read('out/E'), 'ABE')
+        self.assertEqual(read('out/F'), 'AF')
+        self.assertFalse(os.path.exists('out/A'))
+        self.assertFalse(os.path.exists('out/B'))
+        self.assertFalse(os.path.exists('out/C'))
+
+
 class InvariantTests(PPGPerTest):
 
     def setUp(self):
@@ -1743,7 +1797,7 @@ class PlotJobTests(PPGPerTest):
         self.assertEqual(read('out/calc'),'A')
 
         self.assertEqual(read('out/plot'),'B')
-    def test_plot_job_dependencies_are_added_to_both_inner_jobs(self):
+    def test_plot_job_dependencies_are_added_to_just_the_cache_job(self):
         import pydataframe
         import pyggplot
 
@@ -1755,7 +1809,7 @@ class PlotJobTests(PPGPerTest):
         job = ppg.PlotJob(of, calc, plot)
         dep = ppg.FileGeneratingJob('out/A', lambda : write('out/A', 'A'))
         job.depends_on(dep)
-        self.assertTrue(dep in job.prerequisites)
+        #self.assertTrue(dep in job.prerequisites)
         self.assertTrue(dep in job.cache_job.prerequisites)
 
     def test_raises_if_calc_returns_non_df(self):
@@ -1968,7 +2022,9 @@ class CachedDataLoadingJobTests(PPGPerTest):
             return ", ".join(str(x) for x in range(0, 100))
         def store(value):
             o.a = value
-        job = ppg.CachedDataLoadingJob('out/mycalc', calc, store)
+        job = ppg.CachedDataLoadingJob('out/mycalc', calc, store) 
+        #job.ignore_code_changes() #or it would run anyway... hm.
+        self.assertFalse(os.path.exists('out/mycalc'))
         ppg.run_pipegraph()
         self.assertFalse(os.path.exists('out/mycalc'))
 

@@ -102,6 +102,7 @@ class Pipegraph(object):
 
 
         #and propagate if there was an exception
+        print 'Pipegraph done. Executed %i jobs. %i failed' % (len([x for x in self.jobs.values() if x.was_run]), len([x for x in self.jobs.values() if x.failed]))
         any_failed = False
         for job in self.jobs.values():
             if job.failed:
@@ -237,6 +238,8 @@ class Pipegraph(object):
                     logger.info("and is not loadable")
                     needs_to_be_run.add(job.job_id)
                     job.invalidated('not done')
+                    if not job.was_invalidated:
+                        raise util.JobContractError("job.invalidated called, but was_invalidated was false")
                 #for preq in job.prerequisites:
                     #preq.require_loading() #think I can get away with  lettinng the slaves what they need to execute a given job...
             else:
@@ -244,11 +247,13 @@ class Pipegraph(object):
 
         for job in self.jobs.values():
             if ( job.was_invalidated #this has been invalidated
-                and job.runs_in_slave #it is not one of the invariantes
-                and not job.is_loadable #and it is not a loading job (these the slaves do automagically for now)
+                and job.runs_in_slave() #it is not one of the invariantes
+                and not job.is_loadable() #and it is not a loading job (these the slaves do automagically for now)
                 ):
                 needs_to_be_run.add(job.job_id)
             elif (not job.runs_in_slave()):
+                logger.info("Mark was_run before running: %s" % job)
+                logger.info("job.was_invalidated %s, job.runs_in_slave %s, job.is_loadable: %s" % (job.was_invalidated, job.runs_in_slave(), job.is_loadable()))
                 job.was_run = True #invarites get marked as ran..
         #now prune the possible_execution_order
         self.possible_execution_order = [job for job in self.possible_execution_order if job.job_id in needs_to_be_run]
@@ -325,8 +330,9 @@ class Pipegraph(object):
                     break
         if self.possible_execution_order and not runnable_jobs and not self.running_jobs:
             logger.info("Nothing running, nothing runnable, but work left to do")
+            logger.info("job\tcan_run_now\tlist_blocks")
             for job in self.possible_execution_order:
-                logger.info("%s - %s - %s" % (job, job.can_run_now(), job.list_blocks()))
+                logger.info("%s\t%s\t%s" % (job, job.can_run_now(), job.list_blocks()))
             raise ppg_exceptions.RuntimeException(
             """We had more jobs that needed to be done, none of them could be run right now and none were running. Sounds like a dependency graph bug to me""")
 
@@ -412,6 +418,7 @@ class Pipegraph(object):
             else:
                 job.error_reason = "Unknown/died"
         else:
+            logger.info("Setting %s.was_run to true, returned" % job)
             job.was_run = True
             job.check_prerequisites_for_cleanup()
         if not job.is_loadable(): #dataloading jobs are not 'seperatly' executed, but still, they may be signaled as failed by a slave.
@@ -454,6 +461,7 @@ class Pipegraph(object):
                 self.possible_execution_order.append(job)
             elif not job.runs_in_slave(): 
                 #logger.info("ignoring invariant - does not need to run "%  job)
+                logger.info("Setting %s.was_run to true, generated" % job)
                 job.was_run = True #invarites get marked as ran..
             else:
                 #logger.info("Not doing anything with %s, was done"%  job)
