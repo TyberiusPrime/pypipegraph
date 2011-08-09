@@ -29,4 +29,5 @@ try:
 except IndexError:
     port = 5005
 reactor.listenTCP(port, factory)
+print "Going to listen on port %i, logging to %s" % (port, of.name)
 reactor.run()
