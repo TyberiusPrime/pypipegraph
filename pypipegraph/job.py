@@ -697,7 +697,15 @@ class PlotJob(FileGeneratingJob):
         def run_calc():
             df = calc_function()
             if not isinstance(df, pydataframe.DataFrame):
-                raise ppg_exceptions.JobContractError("%s.calc_function did not return a DataFrame, was %s " % (output_filename, df.__class__))
+                do_raise = True
+                if isinstance(df, dict): #might be a list dfs...
+                    do_raise = False
+                    for x in df.values():
+                        if not isinstance(x, pydataframe.DataFrame):
+                            do_raise = True
+                            break
+                if do_raise:
+                    raise ppg_exceptions.JobContractError("%s.calc_function did not return a DataFrame (or dict of such), was %s " % (output_filename, df.__class__))
             try:
                 os.makedirs(os.path.dirname(self.cache_filename))
             except OSError:
@@ -725,7 +733,10 @@ class PlotJob(FileGeneratingJob):
         if not skip_table:
             def dump_table():
                 df = self.get_data()
-                pydataframe.DF2TSV().write(df, self.table_filename)
+                if isinstance(df, pydataframe.DataFrame):
+                    pydataframe.DF2TSV().write(df, self.table_filename)
+                else:
+                    pydataframe.DF2Excel().write(df, self.table_filename) #must have been a dict...
             table_gen_job = FileGeneratingJob(self.table_filename, dump_table)
             table_gen_job.depends_on(cache_job)
             self.table_job = table_gen_job
