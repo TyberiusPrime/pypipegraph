@@ -2,12 +2,14 @@ import os
 import collections
 import resource_coordinators
 import cPickle
+import pickle
 import ppg_exceptions
 import util
 import sys
 logger = util.start_logging('graph')
 
-invariant_status_filename= '.pypipegraph_status'
+invariant_status_filename_old= '.pypipegraph_status'
+invariant_status_filename_new= '.pypipegraph_status_robust'
 
 def run_pipegraph():
     if util.global_pipegraph is None:
@@ -26,7 +28,11 @@ def new_pipegraph(resource_coordinator = None, quiet=False):
 
 def forget_job_status():
     try:
-        os.unlink(invariant_status_filename)
+        os.unlink(invariant_status_filename_new)
+    except OSError:
+        pass
+    try:
+        os.unlink(invariant_status_filename_old)
     except OSError:
         pass
 
@@ -48,6 +54,7 @@ class Pipegraph(object):
         self.new_jobs = False
         self.quiet = quiet
         self.object_uniquifier = {} #used by util.assert_uniqueness_of_object to enforce pseudo-singletons
+        self.invariant_loading_issues = {} #jobs whose invariant could not be unpickled for some reason - and the exception.
 
     def __del__(self):
         self.rc.pipegraph = None
@@ -96,21 +103,26 @@ class Pipegraph(object):
 
         finally:
             #clean up
+            print 'starting cleanup'
+            util.flush_logging()
             self.dump_html_status()
             self.dump_invariant_status()
             self.destroy_job_connections()
+            print 'sucessfull cleanup'
 
 
         #and propagate if there was an exception
         print 'Pipegraph done. Executed %i jobs. %i failed' % (len([x for x in self.jobs.values() if x.was_run]), len([x for x in self.jobs.values() if x.failed]))
         any_failed = False
         for job in self.jobs.values():
-            if job.failed:
+            if job.failed or job in self.invariant_loading_issues:
                 if not any_failed and not self.quiet:
                     print >>sys.stderr, '\n------Pipegraph error-----'
                 any_failed = True
                 if job.error_reason != 'Indirect' and not self.quiet:
                     self.print_failed_job(job)
+                if job in self.invariant_loading_issues:
+                    print 'Could not unpickle invariant for %s - exception was %s' % (job, self.invariant_loading_issues[job])
         if any_failed:
             if not self.quiet:
                 print >>sys.stderr, '\n------Pipegraph output end-----'
@@ -189,16 +201,44 @@ class Pipegraph(object):
         self.possible_execution_order = L
 
     def load_invariant_status(self):
-        if os.path.exists(invariant_status_filename):
-            op = open(invariant_status_filename, 'rb')
+        if os.path.exists(invariant_status_filename_old):
+            op = open(invariant_status_filename_old, 'rb')
             self.invariant_status = cPickle.load(op)
             op.close()
+        elif os.path.exists(invariant_status_filename_new):
+            op = open(invariant_status_filename_new, 'rb')
+            all = op.read()
+            op.seek(0, os.SEEK_SET)
+            self.invariant_status = collections.defaultdict(bool)
+            leave = False
+            while not leave:
+                try:
+                    key = None
+                    key = cPickle.load(op)
+                    value = cPickle.load(op)
+                    self.invariant_status[key] = value
+                except TypeError, e:
+                    print e
+                    if key is None:
+                        raise ValueError("Could not depickle invariants - even in the robust implementation (key not found")
+                    logger.error("Could not depickle invariant for %s - check code for depickling bugs. Job will rerun, probably until the (de)pickling bug is fixed.\n Exception: %s" % (key ,e))
+                    self.invariant_loading_issues[key] = e
+                    letter = op.read(1)
+                    #at least try to find the end of the pickle... this might fail horribly though
+                    while letter and letter != pickle.STOP:
+                        letter = op.read(1)
+                    if not letter:
+                        leave = True
+                except EOFError:
+                    leave = True
         else:
             self.invariant_status = collections.defaultdict(bool)
 
     def dump_invariant_status(self):
-        op = open(invariant_status_filename, 'wb')
-        cPickle.dump(self.invariant_status, op)
+        op = open(invariant_status_filename_new, 'wb')
+        for key, value in self.invariant_status.items():
+            cPickle.dump(key, op, cPickle.HIGHEST_PROTOCOL)
+            cPickle.dump(value, op, cPickle.HIGHEST_PROTOCOL)
         op.close()
 
     def distribute_invariant_changes(self):
@@ -333,6 +373,8 @@ class Pipegraph(object):
             logger.info("job\tcan_run_now\tlist_blocks")
             for job in self.possible_execution_order:
                 logger.info("%s\t%s\t%s" % (job, job.can_run_now(), job.list_blocks()))
+            util.flush_logging()
+            logger.exception("Job excution order error")
             raise ppg_exceptions.RuntimeException(
             """We had more jobs that needed to be done, none of them could be run right now and none were running. Sounds like a dependency graph bug to me""")
 

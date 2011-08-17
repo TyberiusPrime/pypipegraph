@@ -36,6 +36,11 @@ def change_logging_port(port):
         logger.addHandler(new_handler)
     default_logging_handler = new_handler
 
+def flush_logging():
+    default_logging_handler.flush()
+    if file_logging_handler:
+        file_logging_handler.flush()
+
 
 
 def output_file_exists(filename):
