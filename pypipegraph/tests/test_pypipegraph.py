@@ -2236,6 +2236,16 @@ if False:
             self.assertTrue(jobD.error_reason.find('too much') != -1)
             self.assertFalse(jobD.exception)
 
+class CantDepickle():
+    """A class that can't be depickled (throws a type error, 
+    just like the numpy.maskedarray sometimes)"""
+    def __getstate__(self):
+        return ['5']
+
+    def __setstate__(self, state):
+        print state
+        raise TypeError("I can be pickled, but not unpickled")
+
 class TestingTheUnexpectedTests(PPGPerTest):
 
     def test_job_killing_python(self):
@@ -2253,6 +2263,36 @@ class TestingTheUnexpectedTests(PPGPerTest):
         self.assertFalse(os.path.exists('out/A'))
         self.assertTrue(isinstance(fg.exception, ppg.JobDiedException))
         self.assertEqual(fg.exception.exit_code, 5)
+
+    def test_unpickle_bug_prevents_single_job_from_unpickling(self):
+        def do_a():
+            write('out/A', 'A')
+            append("out/As", 'A')
+        job_A = ppg.FileGeneratingJob('out/A', do_a)
+        def do_b():
+            write('out/B', 'A')
+            append("out/Bs", 'A')
+        job_B = ppg.FileGeneratingJob('out/B', do_b)
+        cd = CantDepickle()
+        job_parameter_unpickle_problem = ppg.ParameterInvariant("C", (cd, ))
+        job_B.depends_on(job_parameter_unpickle_problem)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/A'), 'A')
+        self.assertEqual(read('out/As'), 'A')
+        self.assertEqual(read('out/B'), 'A')
+        self.assertEqual(read('out/Bs'), 'A')
+        ppg.new_pipegraph()
+
+        job_A = ppg.FileGeneratingJob('out/A', do_a)
+        job_B = ppg.FileGeneratingJob('out/B', do_b)
+        job_parameter_unpickle_problem = ppg.ParameterInvariant("C", (cd, ))
+        job_B.depends_on(job_parameter_unpickle_problem)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/A'), 'A')
+        self.assertEqual(read('out/As'), 'A')
+        self.assertEqual(read('out/B'), 'A')
+        self.assertEqual(read('out/Bs'), 'AA') #this one got rerun because we could not load the invariant...
+
 
 class HTMLDumpTests(PPGPerTest):
 
