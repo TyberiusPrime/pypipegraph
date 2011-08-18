@@ -1891,13 +1891,14 @@ class CachedAttributeJobTests(PPGPerTest):
         self.assertTrue(job_preq in job.lfg.prerequisites)
 
 
-    def test_no_dependand_no_calc(self):
+    def test_no_dependand_still_calc(self):
         o = Dummy()
         def calc():
             return ", ".join(str(x) for x in range(0, 100))
         job = ppg.CachedAttributeLoadingJob('out/mycalc', o, 'a', calc)
-        ppg.run_pipegraph()
         self.assertFalse(os.path.exists('out/mycalc'))
+        ppg.run_pipegraph()
+        self.assertTrue(os.path.exists('out/mycalc'))
 
     def test_invalidation_redoes_output(self):
         o = Dummy()
@@ -2016,7 +2017,7 @@ class CachedDataLoadingJobTests(PPGPerTest):
                 read(of),
                 ", ".join(str(x) for x in range(0, 100)))
 
-    def test_no_dependand_no_calc(self):
+    def test_no_dependand_still_calc(self):
         o = Dummy()
         def calc():
             return ", ".join(str(x) for x in range(0, 100))
@@ -2026,7 +2027,7 @@ class CachedDataLoadingJobTests(PPGPerTest):
         #job.ignore_code_changes() #or it would run anyway... hm.
         self.assertFalse(os.path.exists('out/mycalc'))
         ppg.run_pipegraph()
-        self.assertFalse(os.path.exists('out/mycalc'))
+        self.assertTrue(os.path.exists('out/mycalc'))
 
     def test_preqrequisites_end_up_on_lfg(self):
         o = Dummy()
@@ -2058,6 +2059,42 @@ class CachedDataLoadingJobTests(PPGPerTest):
         def inner():
             job = ppg.CachedDataLoadingJob(5, lambda: 1, lambda value: 55)
         self.assertRaises(ValueError, inner)
+
+    def test_being_generated(self):
+        o = Dummy()
+        def calc():
+            return 55
+        def store(value):
+            o.a = value
+        def dump():
+            write("out/A", str(o.a))
+        def gen():
+            calc_job = ppg.CachedDataLoadingJob('out/B', calc, store)
+            dump_job = ppg.FileGeneratingJob('out/A', dump)
+            dump_job.depends_on(calc_job)
+        gen_job = ppg.JobGeneratingJob("out/C", gen)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/A'), '55')
+
+    def test_being_generated_nested(self):
+        o = Dummy()
+        def calc():
+            return 55
+        def store(value):
+            o.a = value
+        def dump():
+            write("out/A", str(o.a))
+        def gen():
+            calc_job = ppg.CachedDataLoadingJob('out/B', calc, store)
+            def gen2():
+                dump_job = ppg.FileGeneratingJob('out/A', dump)
+                dump_job.depends_on(calc_job)
+            ppg.JobGeneratingJob('out/D', gen2)
+        gen_job = ppg.JobGeneratingJob("out/C", gen)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/A'), '55')
+
+
 
 
 class TestResourceCoordinator:
@@ -2352,10 +2389,10 @@ class NotYetImplementedTests(unittest.TestCase):
     def test_filegenerating_job_exceptions_are_preserved(self):
         raise NotImplementedError()
 
-    def test_cached_attribute_job_does_not_load_its_preqs_on_cached():
+    def test_cached_attribute_job_does_not_load_its_preqs_on_cached(self):
         raise NotImplementedError()
 
-    def test_cached_dataloading_job_does_not_load_its_preqs_on_cached():
+    def test_cached_dataloading_job_does_not_load_its_preqs_on_cached(self):
         raise NotImplementedError()
 
 
