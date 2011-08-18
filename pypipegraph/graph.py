@@ -395,6 +395,7 @@ class Pipegraph(object):
                             to_remove.append(job) #remove just once...
                             for slave in self.slaves:
                                 job.slave_name = slave
+                                logger.info("running_jobs added :%s" % job)
                                 self.running_jobs.add(job)
                                 self.slaves[slave].spawn(job)
                                 resources[slave]['cores'] = 0 #since the job modifying blocks the Slave-Process (runs in it), no point in spawning further ones till it has returned.
@@ -404,6 +405,7 @@ class Pipegraph(object):
                                 and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
                                     job.slave_name = slave
                                     self.slaves[slave].spawn(job)
+                                    logger.info("running_jobs added2 :%s" % job)
                                     self.running_jobs.add(job)
                                     to_remove.append(job)
                                     resources[slave]['cores'] = 0
@@ -413,6 +415,7 @@ class Pipegraph(object):
                                 and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
                                 job.slave_name = slave
                                 self.slaves[slave].spawn(job)
+                                logger.info("running_jobs added3 :%s" % job)
                                 self.running_jobs.add(job)
                                 to_remove.append(job)
                                 resources[slave]['cores'] -= job.cores_needed
@@ -464,6 +467,7 @@ class Pipegraph(object):
             job.was_run = True
             job.check_prerequisites_for_cleanup()
         if not job.is_loadable(): #dataloading jobs are not 'seperatly' executed, but still, they may be signaled as failed by a slave.
+            logger.info("running_jobs removed :%s" % job)
             self.running_jobs.remove(job)
         #self.signal_job_done()
         return bool(self.running_jobs) or bool(self.possible_execution_order)
@@ -496,17 +500,17 @@ class Pipegraph(object):
         self.distribute_invariant_changes()
         for job in new_jobs.values():
             if job.is_loadable():
-                #logger.info("Ignoring %s" % job)
+                logger.info("Ignoring %s" % job)
                 pass
             elif not job.is_done():
-                #logger.info("Adding %s to possible_execution_order"%  job)
+                logger.info("Adding %s to possible_execution_order"%  job)
                 self.possible_execution_order.append(job)
             elif not job.runs_in_slave(): 
-                #logger.info("ignoring invariant - does not need to run "%  job)
+                logger.info("ignoring invariant - does not need to run "%  job)
                 logger.info("Setting %s.was_run to true, generated" % job)
                 job.was_run = True #invarites get marked as ran..
             else:
-                #logger.info("Not doing anything with %s, was done"%  job)
+                logger.info("Not doing anything with %s, was done"%  job)
                 pass
         #for slave in self.slaves.values():
             #slave.transmit_new_jobs(new_jobs)

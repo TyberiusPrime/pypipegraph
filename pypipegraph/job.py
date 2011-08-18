@@ -368,6 +368,7 @@ class FileGeneratingJob(Job):
 
     def invalidated(self, reason = ''):
         try:
+            logger.info("unlinking %s" % self.job_id)
             os.unlink(self.job_id)
         except OSError:
             pass
@@ -383,6 +384,7 @@ class FileGeneratingJob(Job):
                 if self.rename_broken:
                     shutil.move(self.job_id, self.job_id + '.broken')
                 else:
+                    logger.info("unlinking %s" % self.job_id)
                     os.unlink(self.job_id)
             except (OSError, IOError):
                 pass
@@ -425,7 +427,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
     def invalidated(self, reason = ''):
         for fn in self.filenames:
             try:
-                logger.info("Removing %s" % fn)
+                logger.info("unlinking %s" % self.job_id)
                 os.unlink(fn)
             except OSError:
                 pass
@@ -445,6 +447,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
             else:
                 for fn in self.filenames:
                     try:
+                        logger.info("Removing %s" % fn)
                         os.unlink(fn)
                     except OSError:
                         pass
@@ -466,6 +469,7 @@ class TempFileGeneratingJob(FileGeneratingJob):
             if self.rename_broken:
                 shutil.move(self.job_id, self.job_id + '.broken')
             else:
+                logger.info("unlinking %s" % self.job_id)
                 os.unlink(self.job_id)
         except (OSError, IOError):
             pass
@@ -512,9 +516,12 @@ class DataLoadingJob(Job):
         self.was_loaded = True
 
     def is_done(self): #delegate to preqs... passthrough of 'not yet done'
+        logger.info("Checking is done on %s" % self)
         for preq in self.prerequisites:
             if not preq.is_done():
+                logger.info("failed on %s" % preq)
                 return False
+        logger.info("Passed")
         return True
 
 class AttributeLoadingJob(DataLoadingJob):
@@ -804,46 +811,23 @@ def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args = N
 
 
 
-class _LazyFileGeneratingJob(Job):
-    """A job that only needs to be done if it's
+class _CacheFileGeneratingJob(FileGeneratingJob):
+    """A job that takes the results from it's callback and pickles it.
     data_loading_job is dependend on somewhere"""
 
     def __init__(self, job_id, calc_function, dl_job):
         if not hasattr(calc_function, '__call__'):
             raise ValueError("calc_function was not a callable")
-        Job.__init__(self, job_id)
+        Job.__init__(self, job_id) #FileGeneratingJob has no benefits for us
         self.cache_filename = job_id
         self.callback = calc_function
         self.data_loading_job = dl_job
         self.do_ignore_code_changes = False
 
-    def __del__(self):
-        self.data_loading_job = None
-
-    def is_done(self):
-        if util.output_file_exists(self.job_id):
-            return True
-        else: #only do the job if there is someone dependand on the loading of our data_loading_job
-            if self.data_loading_job.dependants:
-                return False
-            else:
-                return True
-
-    def ignore_code_changes(self):
-        self.do_ignore_code_changes = True
-
-    def inject_auto_invariants(self):
-        if not self.do_ignore_code_changes:
-            func_invariant = FunctionInvariant(self.job_id + '_func', self.callback)
-            #print func_invariant
-            self.depends_on(func_invariant)
-            self.data_loading_job.depends_on(func_invariant)
-        else:
-            logger.info("not Injecting outa invariants %s" % self)
-
     def invalidated(self, reason=''):
         logger.info("%s invalidated called, reason: %s" % (self, reason))
         try:
+            logger.info("unlinking %s" % self.job_id)
             os.unlink(self.job_id)
         except OSError:
             pass
@@ -853,11 +837,10 @@ class _LazyFileGeneratingJob(Job):
         #Job.invalidated(self) #no going back up the dependants... the dataloading job takes care of that
 
     def run(self):
-        if self.data_loading_job.dependants: #otherwise, don't bother running.
-            data = self.callback()
-            op = open(self.cache_filename, 'wb')
-            cPickle.dump(data, op, cPickle.HIGHEST_PROTOCOL)
-            op.close()
+        data = self.callback()
+        op = open(self.cache_filename, 'wb')
+        cPickle.dump(data, op, cPickle.HIGHEST_PROTOCOL)
+        op.close()
 
 class CachedAttributeLoadingJob(AttributeLoadingJob):
     
@@ -881,7 +864,7 @@ class CachedAttributeLoadingJob(AttributeLoadingJob):
             op.close()
             return data
         AttributeLoadingJob.__init__(self, cache_filename + '_load', target_object, target_attribute, do_load)
-        lfg = _LazyFileGeneratingJob(cache_filename, calculating_function, self)
+        lfg = _CacheFileGeneratingJob(cache_filename, calculating_function, self)
         self.lfg = lfg
         Job.depends_on(self, lfg)
 
@@ -930,7 +913,7 @@ class CachedDataLoadingJob(DataLoadingJob):
             op.close()
             loading_function(data)
         DataLoadingJob.__init__(self, cache_filename + '_load', do_load) #todo: adjust functioninvariant injection
-        lfg = _LazyFileGeneratingJob(cache_filename, calculating_function, self)
+        lfg = _CacheFileGeneratingJob(cache_filename, calculating_function, self)
         self.lfg = lfg
         Job.depends_on(self, lfg)
 
