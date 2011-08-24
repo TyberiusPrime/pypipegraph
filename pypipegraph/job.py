@@ -909,7 +909,10 @@ class CachedDataLoadingJob(DataLoadingJob):
 
         def do_load(cache_filename = abs_cache_filename):
             op = open(cache_filename, 'rb')
-            data = cPickle.load(op)
+            try:
+                data = cPickle.load(op)
+            except Exception, e:
+                raise ValueError("Unpickling error in file %s - original error was %s" % (cache_filename, e))
             op.close()
             loading_function(data)
         DataLoadingJob.__init__(self, cache_filename + '_load', do_load) #todo: adjust functioninvariant injection
