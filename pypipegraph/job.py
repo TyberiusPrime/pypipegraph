@@ -151,7 +151,7 @@ class Job(object):
         logger.info("%s invalidated called, reason: %s" % (self, reason))
         self.was_invalidated = True
         for dep in self.dependants:
-            dep.invalidated(reason = 'preq invalidated')
+            dep.invalidated(reason = 'preq invalidated %s' % self)
 
     def can_run_now(self):
         #logger.info("can_run_now %s" % self)
