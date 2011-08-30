@@ -310,6 +310,8 @@ class Pipegraph(object):
                 job.was_run = True #invarites get marked as ran..
         #now prune the possible_execution_order
         self.possible_execution_order = [job for job in self.possible_execution_order if job.job_id in needs_to_be_run]
+        self.jobs_to_run_count = len(self.possible_execution_order)
+        self.jobs_done_count = 0
         logger.info(" possible execution order %s" % [str(x) for x in self.possible_execution_order])
 
     def spawn_slaves(self):
@@ -483,6 +485,9 @@ class Pipegraph(object):
             logger.info("running_jobs removed :%s" % job)
             self.running_jobs.remove(job)
         #self.signal_job_done()
+        self.jobs_done_count += 1
+        if not self.quiet:
+            sys.stderr.write("Done %i of %i jobs (%i total including non-running)\r" % (self.jobs_done_count, self.jobs_to_run_count, len(self.jobs)))
         return bool(self.running_jobs) or bool(self.possible_execution_order)
 
     def new_jobs_generated_during_runtime(self, new_jobs):
