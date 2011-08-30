@@ -475,6 +475,8 @@ class Pipegraph(object):
                 job.error_reason = "Exception"
             else:
                 job.error_reason = "Unknown/died"
+            if not self.quiet:
+                self.print_failed_job(job, sys.stderr)
         else:
             logger.info("Setting %s.was_run to true, returned" % job)
             job.was_run = True
