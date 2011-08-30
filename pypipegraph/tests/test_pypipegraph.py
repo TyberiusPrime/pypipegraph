@@ -2395,6 +2395,9 @@ class NotYetImplementedTests(unittest.TestCase):
     def test_cached_dataloading_job_does_not_load_its_preqs_on_cached(self):
         raise NotImplementedError()
 
+    def test_dataloading_before_invariant_raises(self):
+        raise NotImplementedError() #since it makes no sense to chain something before an invariant - the dataloading job would be unloaded afterwards anyhow.
+
 
 
 
