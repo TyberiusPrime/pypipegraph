@@ -218,6 +218,7 @@ class Pipegraph(object):
             op = open(invariant_status_filename_old, 'rb')
             self.invariant_status = cPickle.load(op)
             op.close()
+            os.unlink(invariant_status_filename_old) #throw away the old file
         elif os.path.exists(invariant_status_filename_new):
             op = open(invariant_status_filename_new, 'rb')
             all = op.read()
@@ -523,6 +524,7 @@ class Pipegraph(object):
             elif not job.is_done():
                 logger.info("Adding %s to possible_execution_order"%  job)
                 self.possible_execution_order.append(job)
+                self.jobs_to_run_count += 1
             elif not job.runs_in_slave(): 
                 logger.info("ignoring invariant - does not need to run "%  job)
                 logger.info("Setting %s.was_run to true, generated" % job)
