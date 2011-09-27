@@ -10,7 +10,7 @@ job_uniquifier = {} #to singletonize jobs on job_id
 func_hashes = {} #to calculate invarionts on functions in a slightly more efficent manner
 reactor_was_started = False
 
-default_logging_handler = logging.handlers.SocketHandler('127.0.0.1', 5005)
+default_logging_handler = logging.handlers.SocketHandler('localhost', 5005)
 if os.path.exists('logs'):
     file_logging_handler = logging.FileHandler("logs/ppg_run.txt",mode="w")
 else:
