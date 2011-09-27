@@ -73,6 +73,9 @@ class LocalSystem:
                 job.failed = not was_ok
                 if job.failed:
                     try:
+                        if job.exception.startswith('STR'):
+                            job.exception = job.exception[3:]
+                            raise cPickle.UnpicklingError("String Transmission") #what an ugly control flow...
                         logger.info("Before depickle %s" % type(exception))
                         job.exception = cPickle.loads(exception)
                         logger.info("After depickle %s" % type(job.exception))
@@ -221,7 +224,7 @@ class LocalSlave:
             try:
                 exception = cPickle.dumps(exception)
             except Exception, e: #some exceptions can't be pickled, so we send a string instead
-                exception = str(exception)
+                exception = "STR" + str(exception)
         stdout.seek(0, os.SEEK_SET)
         stdout_text = stdout.read() 
         stdout.close()
