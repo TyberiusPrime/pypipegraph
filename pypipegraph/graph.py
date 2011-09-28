@@ -344,6 +344,9 @@ class Pipegraph(object):
         self.running_jobs = set()
         if self.possible_execution_order: #no jobs, no spawning...
             self.rc.pipegraph = self
+            if not self.quiet:
+                sys.stderr.write("Done %i of %i jobs (%i total including non-running)\r" % (self.jobs_done_count, self.jobs_to_run_count, len(self.jobs)))
+
             self.rc.enter_loop() #doesn't return until all jobs have been done.
         logger.info("Control returned from ResourceCoordinator")
 

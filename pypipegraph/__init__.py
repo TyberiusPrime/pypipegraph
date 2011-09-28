@@ -5,7 +5,7 @@ import util
 import cloudpickle
 
 from job import (
-        Job,
+        Job, JobList,
         FileGeneratingJob, MultiFileGeneratingJob, 
         DataLoadingJob, AttributeLoadingJob, 
         TempFileGeneratingJob, 
@@ -21,7 +21,7 @@ all = [
         run_pipegraph, new_pipegraph, forget_job_status, get_running_job_count, destroy_global_pipegraph,
          RuntimeError, CycleError, JobContractError, PyPipelineGraphError, JobDiedException,
 
-         Job,
+         Job, JobList,
         FileGeneratingJob, MultiFileGeneratingJob, 
         DataLoadingJob, AttributeLoadingJob, 
         TempFileGeneratingJob, 
