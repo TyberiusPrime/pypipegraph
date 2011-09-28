@@ -15,6 +15,8 @@ import traceback
 
 
 class JobList(object):
+    """For when you want to return a list of jobs that mostly behaves like a single Job
+    """
     def __init__(self, jobs):
         jobs = list(jobs)
         for job in jobs:
@@ -41,6 +43,10 @@ class JobList(object):
 
     def __len__(self):
         return len(self.jobs)
+
+    def depends_on(self, other_job):
+        for job in self.jobs:
+            job.depends_on(other_job)
 
 class Job(object):
 
@@ -751,6 +757,26 @@ class PlotJob(FileGeneratingJob):
             self.table_job = table_gen_job
         else:
             self.table_job = None
+
+    def add_another_plot(self, output_filename, plot_function, render_args = None):
+        """Add another plot job that runs on the same data as the original one (calc only done once)"""
+        import pyggplot
+
+        def run_plot():
+            df = self.get_data()
+            plot = plot_function(df)
+            if not isinstance(plot, pyggplot.Plot):
+                raise ppg_exceptions.JobContractError("%s.plot_function did not return a pyggplot.Plot " % (output_filename))
+            if not 'width' in render_args and hasattr(plot, 'width'):
+                render_args['width'] = plot.width
+            if not 'height' in render_args and hasattr(plot, 'height'):
+                render_args['height'] = plot.width
+            plot.render(output_filename, **render_args)
+        job = FileGeneratingJob(output_filename, run_plot)
+        job.depends_on(ParameterInvariant(self.output_filename + '_params', render_args))
+        job.depends_on(self.cache_job)
+        return job
+           
 
 
     def depends_on(self, other_job):
