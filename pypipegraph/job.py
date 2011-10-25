@@ -705,6 +705,7 @@ class PlotJob(FileGeneratingJob):
         if render_args is None:
             render_args = {}
         self.render_args = render_args
+        self._fiddle = None
 
         import pydataframe
         import pyggplot
@@ -737,6 +738,8 @@ class PlotJob(FileGeneratingJob):
                 render_args['width'] = plot.width
             if not 'height' in render_args and hasattr(plot, 'height'):
                 render_args['height'] = plot.height
+            if self._fiddle:
+                self._fiddle(plot)
             plot.render(output_filename, **render_args)
         FileGeneratingJob.__init__(self, output_filename, run_plot)
         Job.depends_on(self, ParameterInvariant(self.output_filename + '_params', render_args))
@@ -776,6 +779,16 @@ class PlotJob(FileGeneratingJob):
         job.depends_on(ParameterInvariant(self.output_filename + '_params', render_args))
         job.depends_on(self.cache_job)
         return job
+    
+    def add_fiddle(self, fiddle_function):
+        """Add another function that is called right before the plot is 
+        rendered with a pyggplot.Plot as the only argument in order to be able
+        to 'fiddle' with the plot.
+        Please note: if you want to remove an add_fiddle, the plot is only redone if you
+        call add_fiddle(None) instead of removing the call altogether
+        """
+        self._fiddle = fiddle_function
+        Job.depends_on(self, FunctionInvariant(self.output_filename + '_fiddle', fiddle_function))
            
 
 
