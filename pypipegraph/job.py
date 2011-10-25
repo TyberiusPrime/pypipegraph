@@ -736,7 +736,7 @@ class PlotJob(FileGeneratingJob):
             if not 'width' in render_args and hasattr(plot, 'width'):
                 render_args['width'] = plot.width
             if not 'height' in render_args and hasattr(plot, 'height'):
-                render_args['height'] = plot.width
+                render_args['height'] = plot.height
             plot.render(output_filename, **render_args)
         FileGeneratingJob.__init__(self, output_filename, run_plot)
         Job.depends_on(self, ParameterInvariant(self.output_filename + '_params', render_args))
