@@ -273,6 +273,7 @@ class Pipegraph(object):
             if inv != old:
                 if False:
                     logger.info("Invariant change for %s" % job)
+                    logger.info("%s invariant was %s, is now %s" % (job, old,inv))
                     if type(old) is str and type(inv) is str:
                         import difflib
                         for line in difflib.unified_diff(old.split("\n"), inv.split("\n"), n=5):
@@ -291,9 +292,10 @@ class Pipegraph(object):
                 if not job.is_loadable():
                     logger.info("and is not loadable")
                     needs_to_be_run.add(job.job_id)
-                    job.invalidated('not done')
-                    if not job.was_invalidated:
-                        raise util.JobContractError("job.invalidated called, but was_invalidated was false")
+                    if not job.always_runs: #there is no need for the job injecting jobs to invalidate just because they need to be run.
+                        job.invalidated('not done')
+                        if not job.was_invalidated:
+                            raise util.JobContractError("job.invalidated called, but was_invalidated was false")
                 #for preq in job.prerequisites:
                     #preq.require_loading() #think I can get away with  lettinng the slaves what they need to execute a given job...
             else:
