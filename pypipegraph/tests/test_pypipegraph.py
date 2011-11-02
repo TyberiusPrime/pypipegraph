@@ -1481,6 +1481,59 @@ class DependencyInjectionJobTests(PPGPerTest):
         self.assertRaises(ValueError, inner)
 
 
+    def test_injecting_into_data_loading_does_not_retrigger(self):
+        o = Dummy()
+
+        def do_run():
+            of = 'out/A'
+            def do_write():
+                append('out/A', o.a + o.b)
+                append('out/B', 'X')
+            def dl_a():
+                o.a = 'A'
+            def inject():
+                def dl_b():
+                    o.b = 'B'
+                job_dl_b = ppg.DataLoadingJob('ob', dl_b)
+                job_dl.depends_on(job_dl_b)
+            job_fg = ppg.FileGeneratingJob(of, do_write)
+            job_dl = ppg.DataLoadingJob('oa', dl_a)
+            job_fg.depends_on(job_dl)
+            job_inject = ppg.DependencyInjectionJob('inject', inject)
+            job_dl.depends_on(job_inject)
+            ppg.run_pipegraph()
+        do_run()
+        self.assertEqual(read('out/A'), 'AB')
+        self.assertEqual(read('out/B'), 'X')
+        ppg.new_pipegraph(rc_gen(), quiet=True)
+        do_run()
+        self.assertEqual(read('out/A'), 'AB') #same data
+        self.assertEqual(read('out/B'), 'X') #no rerun!
+        #now let's test if a change triggers the rerun
+        def do_run2():
+            of = 'out/A'
+            def do_write():
+                append('out/A', o.a + o.b)
+                append('out/B', 'X')
+            def dl_a():
+                o.a = 'A'
+            def inject():
+                def dl_b():
+                    o.b = 'C' #so this dl has changed...
+                job_dl_b = ppg.DataLoadingJob('ob', dl_b)
+                job_dl.depends_on(job_dl_b)
+            job_fg = ppg.FileGeneratingJob(of, do_write)
+            job_dl = ppg.DataLoadingJob('oa', dl_a)
+            job_fg.depends_on(job_dl)
+            job_inject = ppg.DependencyInjectionJob('inject', inject)
+            job_dl.depends_on(job_inject)
+            ppg.run_pipegraph()
+        ppg.new_pipegraph(rc_gen(), quiet=True)
+        do_run2()
+        self.assertEqual(read('out/A'), 'AC') #same data
+        self.assertEqual(read('out/B'), 'XX') #one rerun...
+
+
 class JobGeneratingJobTests(PPGPerTest):
 
     def test_basic(self):

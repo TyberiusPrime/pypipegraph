@@ -88,6 +88,7 @@ class Job(object):
             self.was_done_on = set() #on which slave(s) was this job run?
             self.was_loaded = False
             self.was_invalidated = False
+            self.always_runs = False
         #logger.info("adding self %s to %s" % (job_id, id(util.global_pipegraph)))
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
 
@@ -137,7 +138,7 @@ class Job(object):
     def get_invariant(self, old):
         return False
 
-    def is_done(self):
+    def is_done(self, depth = 0):
         return True
 
     def is_loadable(self):
@@ -248,6 +249,12 @@ class FunctionInvariant(Job):
         if not hasattr(function, '__call__') and function is not None:
             raise ValueError("function was not a callable (or None)")
         Job.__init__(self, job_id)
+        if hasattr(self, 'function') and function != self.function:
+            raise ppg_exceptions.JobContractError("FunctionInvariant %s created twice with different functions: \n%s %i\n%s %i" % (
+                job_id,
+                self.function.func_code.co_filename, self.function.func_code.co_firstlineno,
+                function.func_code.co_filename, function.func_code.co_firstlineno,
+                ))
         self.function = function
 
     def runs_in_slave(self):
@@ -369,7 +376,7 @@ class FileGeneratingJob(Job):
             pass
             #logger.info("not Injecting outa invariants %s" % self)
 
-    def is_done(self):
+    def is_done(self, depth = 0):
         return util.output_file_exists(self.job_id)
 
     def invalidated(self, reason = ''):
@@ -424,7 +431,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         self.rename_broken = rename_broken
         self.do_ignore_code_changes = False
 
-    def is_done(self):
+    def is_done(self, depth = 0):
         for fn in self.filenames:
             if not util.output_file_exists(fn):
                 return False
@@ -483,7 +490,7 @@ class TempFileGeneratingJob(FileGeneratingJob):
     def runs_in_slave(self):
         return True
 
-    def is_done(self):
+    def is_done(self, depth = 0):
         if util.output_file_exists(self.job_id):
             return True
         else:
@@ -512,22 +519,23 @@ class DataLoadingJob(Job):
         return True
 
     def load(self):
-        logger.info("%s.load" % self)
         if self.was_loaded:
+            logger.info("%s.load (repeat)" % self)
             return
+        logger.info("%s.load" % self)
         for preq in self.prerequisites: #load whatever is necessary...
             if preq.is_loadable():
                 preq.load()
         self.callback()
         self.was_loaded = True
 
-    def is_done(self): #delegate to preqs... passthrough of 'not yet done'
-        logger.info("Checking is done on %s" % self)
+    def is_done(self, depth = 0): #delegate to preqs... passthrough of 'not yet done'
+        logger.info("\t" * depth + "Checking is done on %s" % self)
         for preq in self.prerequisites:
-            if not preq.is_done():
-                logger.info("failed on %s" % preq)
+            if not preq.is_done(depth = depth + 1):
+                logger.info("\t" * depth + "failed on %s" % preq)
                 return False
-        logger.info("Passed")
+        logger.info("\t" * depth + "Passed")
         return True
 
 class AttributeLoadingJob(DataLoadingJob):
@@ -565,7 +573,7 @@ class AttributeLoadingJob(DataLoadingJob):
     def is_loadable(self):
         return True
 
-    def is_done(self): #delegate to preqs... passthrough of 'not yet done'
+    def is_done(self, depth = 0): #delegate to preqs... passthrough of 'not yet done'
         for preq in self.prerequisites:
             if not preq.is_done():
                 return False
@@ -586,7 +594,7 @@ class _GraphModifyingJob(Job):
     def modifies_jobgraph(self):
         return True
 
-    def is_done(self):
+    def is_done(self, depth = 0):
         return self.was_run
 
 
@@ -599,6 +607,7 @@ class DependencyInjectionJob(_GraphModifyingJob):
         Job.__init__(self, job_id)
         self.callback = callback
         self.do_ignore_code_changes = False
+        self.always_runs = True
 
     def ignore_code_changes(self):
         self.do_ignore_code_changes = True
@@ -661,6 +670,7 @@ class JobGeneratingJob(_GraphModifyingJob):
         Job.__init__(self, job_id)
         self.callback = callback
         self.do_ignore_code_changes = False
+        self.always_runs = True
 
     def ignore_code_changes(self):
         self.do_ignore_code_changes = True
