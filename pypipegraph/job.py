@@ -89,6 +89,8 @@ class Job(object):
             self.was_loaded = False
             self.was_invalidated = False
             self.always_runs = False
+            self.start_time = None
+            self.stop_time = None
         #logger.info("adding self %s to %s" % (job_id, id(util.global_pipegraph)))
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
 
@@ -243,8 +245,18 @@ class Job(object):
     def __repr__(self):
         return str(self)
 
+class _InvariantJob(Job):
+    #common code for all invariant jobs
+
+    def depends_on(self, job_joblist_or_list_of_jobs):
+        raise ppg_exceptions.JobContractError("Invariants can't have dependencies")
+
+    def runs_in_slave(self):
+        return False
+
+
 inner_code_object_re = re.compile('<code	object	<[^>]+>	at	0x[a-f0-9]+[^>]+')
-class FunctionInvariant(Job):
+class FunctionInvariant(_InvariantJob):
     def __init__(self, job_id, function):
         if not hasattr(function, '__call__') and function is not None:
             raise ValueError("function was not a callable (or None)")
@@ -257,8 +269,6 @@ class FunctionInvariant(Job):
                 ))
         self.function = function
 
-    def runs_in_slave(self):
-        return False
 
     def get_invariant(self, old):
         if self.function is None:
@@ -293,7 +303,8 @@ class FunctionInvariant(Job):
                 res += self.dis_code(constant)
         return res
 
-class ParameterInvariant(Job):
+
+class ParameterInvariant(_InvariantJob):
 
     def __new__(cls, job_id, *parameters, **kwargs):
         job_id = 'PI' + job_id
@@ -304,34 +315,27 @@ class ParameterInvariant(Job):
         self.parameters = parameters
         Job.__init__(self, job_id)
 
-    def runs_in_slave(self):
-        return False
-
     def get_invariant(self, old):
         return self.parameters
 
-class FileTimeInvariant(Job):
+class FileTimeInvariant(_InvariantJob):
 
     def __init__(self, filename):
         Job.__init__(self, filename)
         self.input_file = filename
 
-    def runs_in_slave(self):
-        return False
 
     def get_invariant(self, old):
         st = os.stat(self.input_file)
         return st[stat.ST_MTIME]
 
 
-class FileChecksumInvariant(Job):
+class FileChecksumInvariant(_InvariantJob):
 
     def __init__(self, filename):
         Job.__init__(self, filename)
         self.input_file = filename
 
-    def runs_in_slave(self):
-        return False
 
     def get_invariant(self, old):
         st = os.stat(self.input_file)
@@ -545,8 +549,14 @@ class AttributeLoadingJob(DataLoadingJob):
             raise ValueError("callback was not a callable")
         if not isinstance(attribute_name, str):
             raise ValueError("attribute_name was not a string")
-        self.object = object
-        self.attribute_name = attribute_name
+        if not hasattr(self, 'object'):
+            self.object = object
+            self.attribute_name = attribute_name
+        else:
+            if not self.object is object:
+                raise ppg_exceptions.JobContractError("Creating AttributeLoadingJob twice with different target objects")
+            if not self.attribute_name == attribute_name:
+                raise ppg_exceptions.JobContractError("Creating AttributeLoadingJob twice with different target attributes")
         if not hasattr(callback, '__call__'):
             raise ValueError("Callback for %s was not callable (missed __call__ attribute)" % job_id)
         DataLoadingJob.__init__(self, job_id, callback)
@@ -868,10 +878,11 @@ class _CacheFileGeneratingJob(FileGeneratingJob):
         if not hasattr(calc_function, '__call__'):
             raise ValueError("calc_function was not a callable")
         Job.__init__(self, job_id) #FileGeneratingJob has no benefits for us
-        self.cache_filename = job_id
-        self.callback = calc_function
-        self.data_loading_job = dl_job
-        self.do_ignore_code_changes = False
+        if not hasattr(self, 'data_loading_job'): #only do this the first time...
+            self.cache_filename = job_id
+            self.callback = calc_function
+            self.data_loading_job = dl_job
+            self.do_ignore_code_changes = False
 
     def invalidated(self, reason=''):
         logger.info("%s invalidated called, reason: %s" % (self, reason))

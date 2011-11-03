@@ -352,7 +352,6 @@ class Pipegraph(object):
             self.rc.enter_loop() #doesn't return until all jobs have been done.
         logger.info("Control returned from ResourceCoordinator")
 
-
     def start_jobs(self): #I really don't like this function... and I also have the strong inkling it should acttually sit in the resource coordinatora
         #first, check what we actually have some resources...
         resources = self.rc.get_resources() # a dict of slave name > {cores: y, memory: x}
