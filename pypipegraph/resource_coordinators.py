@@ -71,6 +71,7 @@ class LocalSystem:
                 job.exception = exception
                 job.trace = trace
                 job.failed = not was_ok
+                job.stop_time = time.time()
                 if job.failed:
                     try:
                         if job.exception.startswith('STR'):
@@ -123,6 +124,7 @@ class LocalSlave:
 
     def spawn(self, job):
         logger.info("Slave: Spawning %s" % job.job_id)
+        job.start_time = time.time()
         #logger.info("Slave: preqs are %s" % [preq.job_id for preq in job.prerequisites])
         preq_failed = False
         for preq in job.prerequisites:
