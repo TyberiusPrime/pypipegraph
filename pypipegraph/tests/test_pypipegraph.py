@@ -538,6 +538,10 @@ class MultiFileGeneratingJobTests(PPGPerTest):
         self.assertFalse(os.path.exists('out/B')) #should clobber the resulting files in this case - just a double check to test_invaliding_removes_file
         self.assertEqual(read('out/Ax'), 'ax') #but the job did run, right?
 
+    def raises_on_non_string_filnames(self):
+        def inner():
+            job = ppg.MultiFileGeneratingJob(['one', 2], lambda : write('out/A'))
+        self.assertRaises(ValueError, inner)
 
 test_modifies_shared_global = []
 class DataLoadingJobTests(PPGPerTest):
@@ -835,6 +839,18 @@ class AttributeJobTests(PPGPerTest):
             jobB = ppg.AttributeLoadingJob('out/A', o, 'b', cache)
         self.assertRaises(ppg.JobContractError, inner)
 
+    def test_raises_on_non_string_attribute_name(self):
+        def inner():
+            o = Dummy()
+            job = ppg.AttributeLoadingJob('out/A', o, 23, lambda : 5)
+        self.assertRaises(ValueError, inner)
+
+    def test_raises_on_non_function_callback(self):
+        def inner():
+            o = Dummy()
+            job = ppg.AttributeLoadingJob('out/A', o, 23, 55)
+        self.assertRaises(ValueError, inner)
+
     def test_no_swapping_objects_for_one_job(self):
         def cache():
             return range(0, 100)
@@ -844,6 +860,31 @@ class AttributeJobTests(PPGPerTest):
         def inner():
             jobB = ppg.CachedAttributeLoadingJob('out/A', o2, 'a', cache)
         self.assertRaises(ppg.JobContractError, inner)
+
+    def test_ignore_code_changes(self):
+        def a():
+            append('out/Ax', 'A')
+            return '5'
+        o = Dummy()
+        jobA = ppg.AttributeLoadingJob('out/A', o, 'a', a)
+        jobA.ignore_code_changes()
+        jobB = ppg.FileGeneratingJob('out/B', lambda: write('out/B', o.a))
+        jobB.depends_on(jobA)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/Ax'), 'A')
+        self.assertEqual(read('out/B'), '5')
+        ppg.new_pipegraph(rc_gen(), quiet=True)
+        def b():
+            append('out/Ax', 'B')
+            return '5'
+        jobA = ppg.AttributeLoadingJob('out/A', o, 'a', b)
+        jobA.ignore_code_changes()
+        jobB = ppg.FileGeneratingJob('out/B', lambda: write('out/B', o.a))
+        jobB.depends_on(jobA)
+        ppg.run_pipegraph()
+        #not rerun
+        self.assertEqual(read('out/Ax'), 'A')
+        self.assertEqual(read('out/B'), '5')
 
 class TempFileGeneratingJobTest(PPGPerTest):
 
@@ -1459,6 +1500,15 @@ class FunctionInvariantTests(PPGPerTest):
         jobB = ppg.FileGeneratingJob('out/A', lambda: write('out/A', 'a'))
         def inner():
             job.depends_on(jobB)
+        self.assertRaises(ppg.JobContractError, inner)
+
+    def test_raises_on_duplicate_with_different_functions(self):
+        def shu():
+            return 'a'
+        job = ppg.FunctionInvariant('A', shu)
+        jobB = ppg.FunctionInvariant('A', shu) #ok.
+        def inner():
+            jobC = ppg.FunctionInvariant('A', lambda: 'b') #raises ValueError
         self.assertRaises(ppg.JobContractError, inner)
 
 class DependencyTests(PPGPerTest):
@@ -2325,6 +2375,9 @@ class CachedAttributeJobTests(PPGPerTest):
         job.depends_on(jobB)
         self.assertFalse(jobB in job.prerequisites)
         self.assertTrue(jobB in job.lfg.prerequisites)
+        ppg.run_pipegraph()
+        self.assertTrue(jobB.was_invalidated)
+        self.assertTrue(job.was_invalidated)
 
     def test_cached_attribute_job_does_not_load_its_preqs_on_cached(self):
         o = Dummy()
@@ -2357,6 +2410,18 @@ class CachedAttributeJobTests(PPGPerTest):
         self.assertEqual(read('out/A'), 'A') #did not run the dl job
         self.assertEqual(read('out/B'), 'B') #did not run the calc job again
 
+    def test_raises_on_non_string_filename(self):
+        def inner():
+            o = Dummy()
+            ca = ppg.CachedAttributeLoadingJob(55, o, 'c', lambda: 55)
+        self.assertRaises(ValueError, inner)
+
+
+    def test_raises_on_non_string_attribute(self):
+        def inner():
+            o = Dummy()
+            ca = ppg.CachedAttributeLoadingJob('out/C', o, 354, lambda: 55)
+        self.assertRaises(ValueError, inner)
 
 class CachedDataLoadingJobTests(PPGPerTest):
 
@@ -2615,6 +2680,14 @@ class HTMLDumpTests(PPGPerTest):
         fg = ppg.FileGeneratingJob('out/A', lambda: write('out/A', 'A'))
         ppg.run_pipegraph()
         self.assertTrue(os.path.exists('logs/pipegraph_status.html'))
+
+class UtilTests(unittest.TestCase):
+
+    def test_need_to_call_new_pipegraph_first(self):
+        ppg.util.global_pipegraph = None
+        def inner():
+            ppg.run_pipegraph()
+        self.assertRaises(ValueError, inner)
 
 
 class NotYetImplementedTests(unittest.TestCase):

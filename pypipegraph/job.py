@@ -183,6 +183,7 @@ class Job(object):
         return True
 
     def list_blocks(self):
+        """A helper to list what blocked this job from running - debug function"""
         res = []
         for preq in self.prerequisites:
             if preq.is_done():
@@ -224,9 +225,6 @@ class Job(object):
         return other is self
 
     def __hash__(self):
-        if not hasattr(self, 'job_id'):
-            print 'missing job id'
-            print dir(self)
         return hash(self.job_id)
     
     def __add__(self, other_job):
@@ -483,11 +481,12 @@ class TempFileGeneratingJob(FileGeneratingJob):
     def cleanup(self):
         logger.info("%s cleanup" % self)
         try:
-            if self.rename_broken:
-                shutil.move(self.job_id, self.job_id + '.broken')
-            else:
-                logger.info("unlinking %s" % self.job_id)
-                os.unlink(self.job_id)
+            #the renaming will already have been done when FileGeneratingJob.run(self) was called...
+            #if self.rename_broken:
+                #shutil.move(self.job_id, self.job_id + '.broken')
+            #else:
+            logger.info("unlinking %s" % self.job_id)
+            os.unlink(self.job_id)
         except (OSError, IOError):
             pass
 
