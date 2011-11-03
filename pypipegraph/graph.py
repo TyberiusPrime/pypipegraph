@@ -185,7 +185,7 @@ class Pipegraph(object):
                 break
         for job in self.jobs.values():
             del job.dependants_copy
-        if has_edges:
+        if has_edges: #ie. we have a circle
             import pprint
             jobs_in_circles = []
             max_depth = 50
@@ -295,7 +295,7 @@ class Pipegraph(object):
                     if not job.always_runs: #there is no need for the job injecting jobs to invalidate just because they need to be run.
                         job.invalidated('not done')
                         if not job.was_invalidated:
-                            raise util.JobContractError("job.invalidated called, but was_invalidated was false")
+                            raise ppg_exceptions.RuntimeException("job.invalidated called, but was_invalidated was false")
                 #for preq in job.prerequisites:
                     #preq.require_loading() #think I can get away with  lettinng the slaves what they need to execute a given job...
             else:
@@ -328,7 +328,7 @@ class Pipegraph(object):
         maximal_memory = max([x['memory'] for x in resources.values()])
         maximal_cores = max([x['cores'] for x in resources.values()])
         if maximal_cores == 0:
-            raise ValueError("No cores available?!")
+            raise ppg_exceptions.RuntimeException("No cores available?!")
 
         for job in self.possible_execution_order:
             #logger.info("checking job %s,  %s %s vs %s %s " % (job, job.cores_needed, job.memory_needed, maximal_cores, maximal_memory))
@@ -458,7 +458,7 @@ class Pipegraph(object):
                         runnable_jobs.remove(job)
             error_count -= 1
             if error_count == 0:
-                raise ValueError("There was a loop error that should never 've been reached in start_jobs")
+                raise ppg_exceptions.RuntimeException("There was a loop error that should never 've been reached in start_jobs")
         logger.info("can't start any more jobs. either there are no more, or resources all utilized. There are currently %i jobs remaining" % len(self.possible_execution_order))
 
              
@@ -505,10 +505,10 @@ class Pipegraph(object):
         def check_preqs(job):
             for preq_job_id in job.prerequisites:
                 if not preq_job_id in self.jobs and not preq_job_id in new_jobs:
-                    raise ValueError("New job dependen on job that is not in the job list but also not in the new jobs")
+                    raise ppg_exceptions.JobContractError("New job depends on job that is not in the job list but also not in the new jobs")
             for dep_job_id in job.dependants:
                 if not dep_job_id in self.jobs and not dep_job_id in new_jobs:
-                    raise ValueError("New job was depedency for is not in the job list but also not in the new jobs")
+                    raise ppg_exceptions.JobContractError("New job was dependency for is not in the job list but also not in the new jobs")
                     #the case that it is injected as a dependency for a job that might have already been done
                     #is being taken care of in the JobGeneratingJob and DependencyInjectionJob s
         for job in new_jobs.values():
