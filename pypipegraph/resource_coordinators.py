@@ -35,7 +35,7 @@ class LocalSystem:
         self.cores_available = max_cores_to_use
         self.memory_available = 50 * 1024 * 1024 * 1024 #50 gigs ;), todo, update to actual memory + swap...
         self.total_memory_available = self.memory_available
-        self.timeout = 15
+        self.timeout = 5
 
     def spawn_slaves(self):
         return {
@@ -59,6 +59,7 @@ class LocalSystem:
         self.pipegraph.start_jobs()
         while True:
             self.slave.check_for_dead_jobs() #whether time out or or job was done, let's check this...
+            self.see_if_output_is_requested()
             try:
                 logger.info("Listening to que")
                 slave_id, was_ok, job_id_done, stdout, stderr,exception, trace, new_jobs = self.que.get(block=True, timeout=self.timeout) #was there a job done?
@@ -107,13 +108,25 @@ class LocalSystem:
                 self.pipegraph.start_jobs()
                  
             except Queue.Empty, IOError: #either timeout, or the que failed
-                logger.info("Timout")
-                for job in self.pipegraph.running_jobs:
-                    logger.info('running %s' % (job,))
+                #logger.info("Timout")
+                #for job in self.pipegraph.running_jobs:
+                    #logger.info('running %s' % (job,))
                 pass
         self.que.close()
         self.que.join_thread() #wait for the que to close
         logger.info("Leaving loop")
+
+    def see_if_output_is_requested(self):
+        import select
+        try:
+            if select.select([sys.stdin], [], [], 0)[0]:
+                ch = sys.stdin.read(1) #enter pressed...
+                self.pipegraph.print_running_jobs()
+                pass
+        finally:
+            pass
+            #termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
 class LocalSlave:
 
     def __init__(self, rc):
