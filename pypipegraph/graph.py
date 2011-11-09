@@ -1,4 +1,5 @@
 import os
+import time
 import collections
 import resource_coordinators
 import cPickle
@@ -340,7 +341,6 @@ class Pipegraph(object):
 
     def execute_jobs(self):
         """Pass control to ResourceCoordinator"""
-        logger.info("Executing jobs/passing control to RC")
         self.jobs_by_slave = {}
         #the rc loop externalizes the start_jobs / job_executed, start more jobs
         self.running_jobs = set()
@@ -349,8 +349,9 @@ class Pipegraph(object):
             if not self.quiet:
                 sys.stderr.write("Done %i of %i jobs (%i total including non-running)\r" % (self.jobs_done_count, self.jobs_to_run_count, len(self.jobs)))
 
+            logger.info("Executing jobs/passing control to RC")
             self.rc.enter_loop() #doesn't return until all jobs have been done.
-        logger.info("Control returned from ResourceCoordinator")
+            logger.info("Control returned from ResourceCoordinator")
 
     def start_jobs(self): #I really don't like this function... and I also have the strong inkling it should acttually sit in the resource coordinatora
         #first, check what we actually have some resources...
@@ -563,6 +564,14 @@ class Pipegraph(object):
         print >>file_handle, '\t stdout was %s' % (job.stdout,)
         print >>file_handle, '\t stderr was %s' % (job.stderr,)
         print >>file_handle, ''
+
+    def print_running_jobs(self):
+        print 'Running jobs:'
+        now = time.time()
+        for job in self.running_jobs:
+            print job, 'running for %i seconds' % (now - job.start_time)
+
+
 
     def dump_html_status(self):
         if not os.path.exists('logs'):
