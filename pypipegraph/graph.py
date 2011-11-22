@@ -151,16 +151,25 @@ class Pipegraph(object):
 
     def connect_graph(self):
         """Convert the dependency graph in jobs into a bidirectional graph"""
+        #connect graph
         for job in self.jobs.values():
             #logger.info("X %s %s %s " % (job , job.prerequisites, job.dependants))
             for preq in job.prerequisites:
                 preq.dependants.add(job)
 
+        #inject final jobs to run after all others...
+        for job in self.jobs.values():
+            if job.is_final_job:
+                for jobB in self.jobs.values():
+                    if not jobB.is_final_job and not jobB.dependants:
+                        job.prerequisites.add(jobB)
+                        jobB.dependants.add(job)
+
     def destroy_job_connections(self):
         """Delete connections between jobs for gc purposes"""
         for job in self.jobs.values():
             job.dependants = None
-            job.prequisites = None
+            job.prerequisites= None
 
     def check_cycles(self):
         """Check whether there are any loops in the graph which prevent execution.
@@ -284,7 +293,7 @@ class Pipegraph(object):
 
     def build_todo_list(self):
         """Go through each job. If it needs to be done, invalidate() all dependands.
-        also requires all prequisites to require_loading
+        also requires all prerequisites to require_loading
         """
         needs_to_be_run = set()
         for job in self.jobs.values():

@@ -91,6 +91,7 @@ class Job(object):
             self.always_runs = False
             self.start_time = None
             self.stop_time = None
+            self.is_final_job = False
         #logger.info("adding self %s to %s" % (job_id, id(util.global_pipegraph)))
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
 
@@ -110,6 +111,8 @@ class Job(object):
             else:
                 if self in job.prerequisites:
                     raise ppg_exceptions.CycleError("Cycle adding %s to %s" % (self.job_id, job.job_id))
+                if isinstance(job, FinalJob):
+                    raise ppg_exceptions.JobContractError("No jobs can depend on FinalJobs")
         for job in job_joblist_or_list_of_jobs:
             if isinstance(job, Job): #skip the lists here, they will be delegated to further calls during the checking... 
                 self.prerequisites.add(job)
@@ -610,13 +613,14 @@ class _GraphModifyingJob(Job):
 
 
 class DependencyInjectionJob(_GraphModifyingJob):
-    def __init__(self, job_id, callback):
+    def __init__(self, job_id, callback, check_for_dependency_injections = True):
         if not hasattr(callback, '__call__'):
             raise ValueError("callback was not a callable")
         Job.__init__(self, job_id)
         self.callback = callback
         self.do_ignore_code_changes = False
         self.always_runs = True
+        self.check_for_dependency_injections = check_for_dependency_injections
 
     def ignore_code_changes(self):
         self.do_ignore_code_changes = True
@@ -650,8 +654,10 @@ class DependencyInjectionJob(_GraphModifyingJob):
         #I need to check: All new jobs are now prereqs of my dependands
 
         #I also need to check that none of the jobs that ain't dependand on me have been injected
-        logger.info("Checking for dependency injection violations")
-        if True:
+        if not self.check_for_dependency_injections:
+            logger.info("Skipping check for dependency injection violations")
+        else:
+            logger.info("Checking for dependency injection violations")
             for job in util.global_pipegraph.jobs.values():
                 if job in self.dependants:
                     for new_job in util.global_pipegraph.new_jobs.values():
@@ -706,6 +712,36 @@ class JobGeneratingJob(_GraphModifyingJob):
         util.global_pipegraph.new_jobs = False
         logger.info("Returning from %s" % self)
         return res
+
+class FinalJob(Job):
+    """A final job runs after all other (non final) jobs have run.
+    Use these sparringly - they really only make sense for things where you really want to hook
+    'after the pipeline has run', everything else realy is better of if you depend on the appropriate job
+
+    FinalJobs are also run on each run - but only iff no other job died
+    """
+
+    def __init__(self, jobid, callback):
+        Job.__init__(self, jobid)
+        self.callback = callback
+        self.is_final_job = True
+        self.do_ignore_code_changes = False
+        self.always_runs = True
+
+    def is_done(self, depth = 0):
+        return self.was_run
+
+    def depends_on(self):
+        raise ValueError("Final jobs can not have explicit dependencies - they run in random order after all other jobs")
+
+    def ignore_code_changes(self):
+        pass
+
+    def inject_auto_invariants(self):
+        pass
+
+    def run(self):
+        self.callback()
 
 class PlotJob(FileGeneratingJob): 
     """Calculate some data for plotting, cache it in cache/output_filename , and plot from there.

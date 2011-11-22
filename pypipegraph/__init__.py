@@ -13,6 +13,7 @@ from job import (
         PlotJob, CombinedPlotJob, 
         FunctionInvariant, ParameterInvariant, FileTimeInvariant, FileChecksumInvariant,
         JobGeneratingJob, DependencyInjectionJob, 
+        FinalJob
         )
 
 assert_uniqueness_of_object = util.assert_uniqueness_of_object
@@ -29,6 +30,7 @@ all = [
         PlotJob, CombinedPlotJob,
         FunctionInvariant, ParameterInvariant, FileTimeInvariant, FileChecksumInvariant,
         JobGeneratingJob, DependencyInjectionJob,
+        FinalJob,
 
 	util, twisted_fork, cloudpickle
 
