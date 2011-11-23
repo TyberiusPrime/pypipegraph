@@ -259,11 +259,17 @@ class Pipegraph(object):
             self.invariant_status = collections.defaultdict(bool)
 
     def dump_invariant_status(self):
-        op = open(invariant_status_filename_new, 'wb')
-        for key, value in self.invariant_status.items():
-            cPickle.dump(key, op, cPickle.HIGHEST_PROTOCOL)
-            cPickle.dump(value, op, cPickle.HIGHEST_PROTOCOL)
-        op.close()
+        finished = False
+        while not finished:
+            try:
+                op = open(invariant_status_filename_new, 'wb')
+                for key, value in self.invariant_status.items():
+                    cPickle.dump(key, op, cPickle.HIGHEST_PROTOCOL)
+                    cPickle.dump(value, op, cPickle.HIGHEST_PROTOCOL)
+                op.close()
+                finished = True
+            except KeyboardInterrupt:
+                pass
 
     def distribute_invariant_changes(self):
         """check each job for whether it's invariance has changed,
