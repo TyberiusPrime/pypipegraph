@@ -140,12 +140,13 @@ class LocalSlave:
         job.start_time = time.time()
         #logger.info("Slave: preqs are %s" % [preq.job_id for preq in job.prerequisites])
         preq_failed = False
-        for preq in job.prerequisites:
-            if preq.is_loadable():
-                logger.info("Slave: Loading %s" % preq)
-                if not self.load_job(preq):
-                    preq_failed = True
-                    break
+        if not job.is_final_job: #final jobs don't load their (fake) prereqs.
+            for preq in job.prerequisites:
+                if preq.is_loadable():
+                    logger.info("Slave: Loading %s" % preq)
+                    if not self.load_job(preq):
+                        preq_failed = True
+                        break
         if preq_failed:
             self.rc.que.put(
                     (
