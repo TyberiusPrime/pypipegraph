@@ -310,7 +310,7 @@ class Pipegraph(object):
                     needs_to_be_run.add(job.job_id)
                     if not job.always_runs: #there is no need for the job injecting jobs to invalidate just because they need to be run.
                         job.invalidated('not done')
-                        if not job.was_invalidated:
+                        if not job.was_invalidated: #paranoia
                             raise ppg_exceptions.RuntimeException("job.invalidated called, but was_invalidated was false")
                 #for preq in job.prerequisites:
                     #preq.require_loading() #think I can get away with  lettinng the slaves what they need to execute a given job...
@@ -536,7 +536,8 @@ class Pipegraph(object):
             job.dependants = set([self.jobs[job_id] for job_id in job.dependants])
         for job in new_jobs.values():
             if not job.is_done():
-                job.invalidated(reason = 'not done')
+                if not job.always_runs:
+                    job.invalidated(reason = 'not done')
         self.connect_graph()
         self.distribute_invariant_changes()
         for job in new_jobs.values():
