@@ -304,7 +304,6 @@ class Pipegraph(object):
         also requires all prerequisites to require_loading
         """
         needs_to_be_run = set()
-        needs_cleanup_at_the_end = set()
         for job in self.jobs.values():
             if not job.is_done():
                 logger.info("Was not done: %s" % job)
@@ -318,8 +317,6 @@ class Pipegraph(object):
                 #for preq in job.prerequisites:
                     #preq.require_loading() #think I can get away with  lettinng the slaves what they need to execute a given job...
             else:
-                if job.do_cleanup_if_was_never_run:
-                    needs_cleanup_at_the_end.add(job)
                 logger.info("was done %s. Invalidation status: %s" % (job, job.was_invalidated))
 
         for job in self.jobs.values():
@@ -336,7 +333,6 @@ class Pipegraph(object):
         self.possible_execution_order = [job for job in self.possible_execution_order if job.job_id in needs_to_be_run]
         self.jobs_to_run_count = len(self.possible_execution_order)
         self.jobs_done_count = 0
-        self.jobs_needing_cleanup_afterwards = needs_cleanup_at_the_end
         logger.info(" possible execution order %s" % [str(x) for x in self.possible_execution_order])
 
     def spawn_slaves(self):
@@ -376,8 +372,9 @@ class Pipegraph(object):
 
     def cleanup_jobs_that_requested_it(self):
         """Temporary* generating jobs that don't get run (because their downstream is done) might still attempt to clean up their output. They register by setting do_cleanup_if_was_never_run = True"""
-        for job in self.jobs_needing_cleanup_afterwards:
-            job.cleanup()
+        for job in self.jobs.values():
+            if job.do_cleanup_if_was_never_run and not job.was_run:
+                job.cleanup()
 
     def start_jobs(self): #I really don't like this function... and I also have the strong inkling it should acttually sit in the resource coordinatora
         #first, check what we actually have some resources...
@@ -542,7 +539,7 @@ class Pipegraph(object):
             #logger.info('new job %s' % job)
             check_preqs(job)
             self.jobs[job.job_id] = job
-        for job in new_jobs.values():
+        for job in new_jobs.values(): #canonize these jobs
             job.prerequisites = set([self.jobs[job_id] for job_id in job.prerequisites])
             job.dependants = set([self.jobs[job_id] for job_id in job.dependants])
         for job in new_jobs.values():
@@ -563,6 +560,7 @@ class Pipegraph(object):
         for job in new_jobs.values():
             if job.was_invalidated:
                 add_dependands(job)
+        #and now, let's see what new stuff needs to be done.
         for job in jobs_to_check:
             if job.was_run:
                 raise ValueError("A job that was already run was readded to the check-if-it-needs executing list. This should not happen")
@@ -591,9 +589,6 @@ class Pipegraph(object):
         so that they're still fresh"""
         for job_id in self.new_jobs:
             self.jobs[job_id] = self.new_jobs[job_id]
-
-
-
 
     def print_failed_job(self, job, file_handle):
         print >> file_handle, '-' * 75
