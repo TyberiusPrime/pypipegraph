@@ -88,6 +88,7 @@ class Job(object):
             self.was_done_on = set() #on which slave(s) was this job run?
             self.was_loaded = False
             self.was_invalidated = False
+            self.was_cleaned_up = False
             self.always_runs = False
             self.start_time = None
             self.stop_time = None
@@ -197,7 +198,13 @@ class Job(object):
                     pass
             else:
                 #logger.info("case 3 - not done")
-                res.append((preq,'not done'))
+                if preq.was_run:
+                    if preq.was_cleaned_up:
+                        res.append((preq,'not done - but was run! - after cleanup'))
+                    else:
+                        res.append((preq,'not done - but was run! - no cleanup'))
+                else:
+                    res.append((preq,'not done'))
                 break
                 #return False
         return res
@@ -217,6 +224,7 @@ class Job(object):
             if all_done:
                 logger.info("Calling %s cleanup" % preq)
                 preq.cleanup()
+                preq.was_cleaned_up = True
 
     def cleanup(self):
         pass
@@ -637,11 +645,15 @@ class DependencyInjectionJob(_GraphModifyingJob):
         #this is different form JobGeneratingJob.run in it's checking of the contract
         util.global_pipegraph.new_jobs = {}
         logger.info("DependencyInjectionJob.dependants = %s %s" % (", ".join(str(x) for x in self.dependants), id(self.dependants)))
-        self.callback()
+        reported_jobs = self.callback()
         logger.info("DependencyInjectionJob.dependants after callback = %s %s" % (", ".join(str(x) for x in self.dependants), id(self.dependants)))
         logger.info("new_jobs count: %i, id %s"  % ( len(util.global_pipegraph.new_jobs), id(util.global_pipegraph.new_jobs)))
         for new_job in util.global_pipegraph.new_jobs.values():
             new_job.inject_auto_invariants()
+        if reported_jobs:
+            for new_job in reported_jobs:
+                for my_dependand in self.dependants:
+                    my_dependand.depends_on(new_job)
         #we now need to fill new_jobs.dependants
         #these implementations are much better than the old for loop based ones
         #but still could use some improvements
