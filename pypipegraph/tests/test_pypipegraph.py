@@ -1765,19 +1765,19 @@ class DependencyInjectionJobTests(PPGPerTest):
 
     def test_injecting_into_data_loading_does_not_retrigger(self):
         o = Dummy()
-
+        def do_write():
+            append('out/A', o.a + o.b)
+            append('out/B', 'X')
+        def dl_a():
+                o.a = 'A'
         def do_run():
             of = 'out/A'
-            def do_write():
-                append('out/A', o.a + o.b)
-                append('out/B', 'X')
-            def dl_a():
-                o.a = 'A'
             def inject():
                 def dl_b():
                     o.b = 'B'
                 job_dl_b = ppg.DataLoadingJob('ob', dl_b)
                 job_dl.depends_on(job_dl_b)
+
             job_fg = ppg.FileGeneratingJob(of, do_write)
             job_dl = ppg.DataLoadingJob('oa', dl_a)
             job_fg.depends_on(job_dl)
@@ -1794,11 +1794,6 @@ class DependencyInjectionJobTests(PPGPerTest):
         #now let's test if a change triggers the rerun
         def do_run2():
             of = 'out/A'
-            def do_write():
-                append('out/A', o.a + o.b)
-                append('out/B', 'X')
-            def dl_a():
-                o.a = 'A'
             def inject():
                 def dl_b():
                     o.b = 'C' #so this dl has changed...
@@ -2692,7 +2687,26 @@ class UtilTests(unittest.TestCase):
 
 
 class NotYetImplementedTests(unittest.TestCase):
-    pass
+
+    def test_temp_jobs_and_gen_jobs(self):
+        #DependencyInjection A creates TempJob B and job C (c is already done)
+        #DependencyInjeciton D (dep on A) creates TempJob B and job E
+        #Now, When A runs, B is created, and not added to the jobs-to-run list
+        #since it is not necessary (with C being done).
+        #now D runs, B would not be required by E, but does not get added to the 
+        #run list (since it is not new), and later on, the sanity check crashes.
+
+        #alternativly, if C is not done, execution order is A, B, C. Then cleanup
+        #for B happens, then D is run, the E explodes, because cleanup has been done!
+        
+        #now, if A returns B, it get's injected into the dependenies of D,
+        #the exeuction order is correct, but B get's done no matter what because D
+        #now requires it, even if both C and E have already been done.
+    
+        #what a conundrum
+
+
+        pass
 
 
 

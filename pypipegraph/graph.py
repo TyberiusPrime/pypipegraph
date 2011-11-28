@@ -138,6 +138,8 @@ class Pipegraph(object):
                     if error_log.name != '/dev/null':
                         print >>sys.stderr, '\n failed job log in logs/ppg_erros'
                 raise ppg_exceptions.RuntimeError()
+            else:
+                self.cleanup_jobs_that_requested_it()
         finally:
             if not self.quiet:
                 print 'Pipegraph done. Executed %i jobs. %i failed' % (len([x for x in self.jobs.values() if x.was_run]), len([x for x in self.jobs.values() if x.failed]))
@@ -302,6 +304,7 @@ class Pipegraph(object):
         also requires all prerequisites to require_loading
         """
         needs_to_be_run = set()
+        needs_cleanup_at_the_end = set()
         for job in self.jobs.values():
             if not job.is_done():
                 logger.info("Was not done: %s" % job)
@@ -315,6 +318,8 @@ class Pipegraph(object):
                 #for preq in job.prerequisites:
                     #preq.require_loading() #think I can get away with  lettinng the slaves what they need to execute a given job...
             else:
+                if job.do_cleanup_if_was_never_run:
+                    needs_cleanup_at_the_end.add(job)
                 logger.info("was done %s. Invalidation status: %s" % (job, job.was_invalidated))
 
         for job in self.jobs.values():
@@ -331,6 +336,7 @@ class Pipegraph(object):
         self.possible_execution_order = [job for job in self.possible_execution_order if job.job_id in needs_to_be_run]
         self.jobs_to_run_count = len(self.possible_execution_order)
         self.jobs_done_count = 0
+        self.jobs_needing_cleanup_afterwards = needs_cleanup_at_the_end
         logger.info(" possible execution order %s" % [str(x) for x in self.possible_execution_order])
 
     def spawn_slaves(self):
@@ -367,6 +373,11 @@ class Pipegraph(object):
             logger.info("Executing jobs/passing control to RC")
             self.rc.enter_loop() #doesn't return until all jobs have been done.
             logger.info("Control returned from ResourceCoordinator")
+
+    def cleanup_jobs_that_requested_it(self):
+        """Temporary* generating jobs that don't get run (because their downstream is done) might still attempt to clean up their output. They register by setting do_cleanup_if_was_never_run = True"""
+        for job in self.jobs_needing_cleanup_afterwards:
+            job.cleanup()
 
     def start_jobs(self): #I really don't like this function... and I also have the strong inkling it should acttually sit in the resource coordinatora
         #first, check what we actually have some resources...
@@ -540,7 +551,21 @@ class Pipegraph(object):
                     job.invalidated(reason = 'not done')
         self.connect_graph()
         self.distribute_invariant_changes()
+        #we not only need to check the jobs we have received, we also need to check their dependands
+        #for example there might have been a DependencyInjectionJob than injected a DataLoadingJob
+        #that had it's invariant FunctionInvariant changed...
+        jobs_to_check = set(new_jobs.values())
+        def add_dependands(j):
+            for dep in j.dependants:
+                if not dep in self.possible_execution_order: #don't add it twice
+                    jobs_to_check.add(dep)
+                add_dependands(dep)
         for job in new_jobs.values():
+            if job.was_invalidated:
+                add_dependands(job)
+        for job in jobs_to_check:
+            if job.was_run:
+                raise ValueError("A job that was already run was readded to the check-if-it-needs executing list. This should not happen")
             if job.is_loadable():
                 logger.info("Ignoring %s" % job)
                 pass
