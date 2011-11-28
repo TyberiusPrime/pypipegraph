@@ -93,6 +93,7 @@ class Job(object):
             self.start_time = None
             self.stop_time = None
             self.is_final_job = False
+            self.do_cleanup_if_was_never_run = False
         #logger.info("adding self %s to %s" % (job_id, id(util.global_pipegraph)))
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
 
@@ -635,11 +636,12 @@ class DependencyInjectionJob(_GraphModifyingJob):
         self.check_for_dependency_injections = check_for_dependency_injections
 
     def ignore_code_changes(self):
-        self.do_ignore_code_changes = True
+        pass
 
     def inject_auto_invariants(self):
-        if not self.do_ignore_code_changes:
-            self.depends_on(FunctionInvariant(self.job_id + '_func', self.callback))
+        #if not self.do_ignore_code_changes:
+            #self.depends_on(FunctionInvariant(self.job_id + '_func', self.callback))
+        pass
 
     def run(self):
         #this is different form JobGeneratingJob.run in it's checking of the contract
@@ -704,11 +706,10 @@ class JobGeneratingJob(_GraphModifyingJob):
         self.always_runs = True
 
     def ignore_code_changes(self):
-        self.do_ignore_code_changes = True
+        pass
 
     def inject_auto_invariants(self):
-        if not self.do_ignore_code_changes:
-            self.depends_on(FunctionInvariant(self.job_id + '_func', self.callback))
+        pass
 
 
     def run(self):
