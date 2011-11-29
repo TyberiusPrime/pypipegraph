@@ -447,7 +447,15 @@ class Pipegraph(object):
                             break
                         else:
                             if (job.cores_needed == -1 and resources[slave]['cores'] == resources[slave]['total cores']
-                                and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
+                                and (job.memory_needed == -1 or 
+                                    (
+                                        job.memory_needed < resources[slave]['memory']
+                                        or (
+                                            (resources[slave]['memory'] == resources[slave]['physical_memory']) and 
+                                            job.memory_needed < resources[slave]['physical_memory'] + resources[slave]['swap_memory'])
+                                        )
+                                        
+                                        )):
                                     job.slave_name = slave
                                     self.slaves[slave].spawn(job)
                                     logger.info("running_jobs added2 :%s" % job)
@@ -457,7 +465,13 @@ class Pipegraph(object):
                                     #don't worry about memory...
                                     break
                             elif (job.cores_needed <= resources[slave]['cores'] and (job.cores_needed != -1) 
-                                and (job.memory_needed == -1 or job.memory_needed < resources[slave]['memory'])):
+                                and (job.memory_needed == -1 or 
+                                    (
+                                        job.memory_needed < resources[slave]['memory']
+                                        or (
+                                            (resources[slave]['memory'] == resources[slave]['physical_memory']) and 
+                                            job.memory_needed < resources[slave]['physical_memory'] + resources[slave]['swap_memory'])
+                                        ))):
                                 job.slave_name = slave
                                 self.slaves[slave].spawn(job)
                                 logger.info("running_jobs added3 :%s" % job)
@@ -471,7 +485,7 @@ class Pipegraph(object):
                                 break
                             else:
                                 #this job needed to much resources, or was not runnable
-                                #logger.info("Job needed too many resources %s" % job)
+                                logger.info("Job needed too many resources %s" % job)
                                 runnable_jobs.remove(job) #can't run right now on this slave..., maybe later...
                         next_job += 1
                     logger.info('Resources after spawning %s' % resources)
