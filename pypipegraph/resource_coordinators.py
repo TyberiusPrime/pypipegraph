@@ -22,6 +22,21 @@ from twisted.protocols import amp
 class DummyResourceCoordinator:
     """For the calculating slaves. so it throws exceptions..."""
 
+def get_memory_available():
+    op = open("/proc/meminfo",'rb')
+    d = op.read()
+    op.close()
+    mem_total = d[d.find('MemTotal:') + len('MemTotal:'):]
+    mem_total = mem_total[:mem_total.find("kB")].strip()
+    swap_total = d[d.find('SwapTotal:') + len('SwapTotal:'):]
+    swap_total = swap_total[:swap_total.find("kB")].strip()
+    physical_memory = int(mem_total) * 1024
+    swap_memory = int(swap_total) * 1024
+    return physical_memory, swap_memory
+    
+
+
+
 class LocalSystem:
     """A ResourceCoordinator that uses the current machine,
     up to max_cores_to_use cores of it
@@ -33,8 +48,7 @@ class LocalSystem:
         self.max_cores_to_use = max_cores_to_use #todo: update to local cpu count...
         self.slave = LocalSlave(self)
         self.cores_available = max_cores_to_use
-        self.memory_available = 50 * 1024 * 1024 * 1024 #50 gigs ;), todo, update to actual memory + swap...
-        self.total_memory_available = self.memory_available
+        self.physical_memory, self.swap_memory = get_memory_available()
         self.timeout = 5
 
     def spawn_slaves(self):
@@ -46,7 +60,8 @@ class LocalSystem:
         res = {
                 'LocalSlave': { #this is always the maximum available - the graph is handling the bookeeping of running jobs
                     'cores': self.cores_available,
-                    'memory': self.memory_available,
+                    'physical_memory': self.physical_memory,
+                    'swap_memory': self.swap_memory,
                     }
                 }
         logger.info('get_resources, result %s - %s' % (id(res), res))

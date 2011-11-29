@@ -343,7 +343,7 @@ class Pipegraph(object):
     def check_all_jobs_can_be_executed(self):
         """Check all jobs for memory/cpu requirements and prune those that we can't satisfy"""
         resources = self.rc.get_resources() # a dict of slave name > {cores: y, memory: x}
-        maximal_memory = max([x['memory'] for x in resources.values()])
+        maximal_memory = max([x['physical_memory'] + x['swap_memory'] for x in resources.values()])
         maximal_cores = max([x['cores'] for x in resources.values()])
         if maximal_cores == 0:
             raise ppg_exceptions.RuntimeException("No cores available?!")
@@ -380,7 +380,8 @@ class Pipegraph(object):
         #first, check what we actually have some resources...
         resources = self.rc.get_resources() # a dict of slave name > {cores: y, memory: x}
         for slave in resources:
-            resources[slave]['memory/core'] = resources[slave]['memory'] / resources[slave]['cores']
+            resources[slave]['memory/core'] = resources[slave]['physical_memory'] / resources[slave]['cores']
+            resources[slave]['memory'] = resources[slave]['physical_memory'] 
             resources[slave]['total cores'] = resources[slave]['cores']
         #substract the running jobs
         for job in self.running_jobs:
