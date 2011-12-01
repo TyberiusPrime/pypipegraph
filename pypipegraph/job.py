@@ -13,6 +13,7 @@ import hashlib
 import cPickle
 import traceback
 
+ 
 
 class JobList(object):
     """For when you want to return a list of jobs that mostly behaves like a single Job
@@ -94,6 +95,7 @@ class Job(object):
             self.stop_time = None
             self.is_final_job = False
             self.do_cleanup_if_was_never_run = False
+            self.invariant_cache = None
         #logger.info("adding self %s to %s" % (job_id, id(util.global_pipegraph)))
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
 
@@ -143,6 +145,11 @@ class Job(object):
         pass
 
     def get_invariant(self, old):
+        if self.invariant_cache is None or self.invariant_cache[0] != old:
+            self.invariant_cache = (old, self._get_invariant(old))
+        return self.invariant_cache[1]
+
+    def _get_invariant(self, old):
         return False
 
     def is_done(self, depth = 0):
@@ -280,7 +287,7 @@ class FunctionInvariant(_InvariantJob):
         self.function = function
 
 
-    def get_invariant(self, old):
+    def _get_invariant(self, old):
         if self.function is None:
             return None #since the 'default invariant' is False, this will still read 'invalidated the first time it's being used'
         if not id(self.function.func_code) in util.func_hashes:
@@ -325,7 +332,7 @@ class ParameterInvariant(_InvariantJob):
         self.parameters = parameters
         Job.__init__(self, job_id)
 
-    def get_invariant(self, old):
+    def _get_invariant(self, old):
         return self.parameters
 
 class FileTimeInvariant(_InvariantJob):
@@ -335,7 +342,7 @@ class FileTimeInvariant(_InvariantJob):
         self.input_file = filename
 
 
-    def get_invariant(self, old):
+    def _get_invariant(self, old):
         st = os.stat(self.input_file)
         return st[stat.ST_MTIME]
 
@@ -347,12 +354,15 @@ class FileChecksumInvariant(_InvariantJob):
         self.input_file = filename
 
 
-    def get_invariant(self, old):
+    def _get_invariant(self, old):
         st = os.stat(self.input_file)
         filetime = st[stat.ST_MTIME]
         filesize = st[stat.ST_SIZE]
         try:
             if not old or old[1] != filesize or old[0] != filetime:
+                #print 'triggered checksum', self.input_file
+                #print 'old', old
+                #print 'new', filetime, filesize
                 chksum = self.checksum()
                 if old and old[2] == chksum:
                     raise util.NothingChanged((filetime, filesize, chksum))
