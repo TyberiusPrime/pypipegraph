@@ -155,6 +155,8 @@ class Pipegraph(object):
         """Convert the dependency graph in jobs into a bidirectional graph"""
         #connect graph
         for job in self.jobs.values():
+            if job.was_run:
+                continue
             #logger.info("X %s %s %s " % (job , job.prerequisites, job.dependants))
             for preq in job.prerequisites:
                 preq.dependants.add(job)
@@ -288,6 +290,7 @@ class Pipegraph(object):
                 #logger.info("Invariant difference, but NothingChanged")
                 inv = e.new_value
                 old = inv #so no change...
+                self.invariant_status[job.job_id] = inv #so not to recheck next time...
             if inv != old:
                 if False:
                     logger.info("Invariant change for %s" % job)
