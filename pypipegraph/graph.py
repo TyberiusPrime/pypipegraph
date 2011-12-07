@@ -96,7 +96,7 @@ class Pipegraph(object):
         self.distribute_invariant_changes()
         self.build_todo_list()
 
-        #make us some computational engines and put them to work.
+        #make up some computational engines and put them to work.
         logger.info("now executing")
         try:
             self.spawn_slaves()
@@ -104,13 +104,11 @@ class Pipegraph(object):
 
         finally:
             #clean up
-            print 'starting cleanup'
+            logger.info('starting cleanup')
             util.flush_logging()
-            self.dump_html_status()
             self.dump_invariant_status()
             self.destroy_job_connections()
-            print 'sucessfull cleanup'
-
+            logger.info('sucessfull cleanup')
 
         #and propagate if there was an exception
         try:
@@ -503,7 +501,6 @@ class Pipegraph(object):
                 raise ppg_exceptions.RuntimeException("There was a loop error that should never 've been reached in start_jobs")
         logger.info("can't start any more jobs. either there are no more, or resources all utilized. There are currently %i jobs remaining" % len(self.possible_execution_order))
 
-             
     def prune_job(self, job):
         try:
             self.possible_execution_order.remove(job)
@@ -513,7 +510,6 @@ class Pipegraph(object):
         job.error_reason = "Indirect"
         for dep in job.dependants:
             self.prune_job(dep)
-
 
     def job_executed(self, job):
         """A job was done. Return whether there are more jobs read run""" 
@@ -600,7 +596,6 @@ class Pipegraph(object):
             #slave.transmit_new_jobs(new_jobs)
         self.check_all_jobs_can_be_executed() #for this, the job must be in possible_execution_order
            
-
     def tranfer_new_jobs(self):
         """push jobs from self.new_jobs into self.jobs.
         This is called in a remote slave that just created a bunch of jobs and send them of to the master,
@@ -625,26 +620,4 @@ class Pipegraph(object):
         for job in self.running_jobs:
             print job, 'running for %i seconds' % (now - job.start_time)
 
-
-
-    def dump_html_status(self):
-        if not os.path.exists('logs'):
-            os.mkdir('logs')
-        op = open("logs/pipegraph_status.html",'wb')
-        for job in self.jobs.values():
-            if job.failed:
-                op.write("<p style='color:red'>")
-                op.write(job.job_id + """
-                Status: %s
-                <br />
-                Stdout: %s
-                <br />
-                Stderr: %s
-                <br />
-                Exception: %s""" % (job.error_reason, job.stdout, job.stderr, job.exception))
-            else:
-                op.write("<p>")
-                op.write(job.job_id + " was ok")
-            op.write("</p>")
-        op.close()
 

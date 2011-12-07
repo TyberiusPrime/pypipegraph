@@ -22,7 +22,8 @@ def start_logging(module):
     name = "%s.%s" % (key, module)
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
-    logger.addHandler(default_logging_handler)
+    if default_logging_handler:
+        logger.addHandler(default_logging_handler)
     if file_logging_handler is not None:
         logger.addHandler(file_logging_handler)
     loggers.append(logger)
