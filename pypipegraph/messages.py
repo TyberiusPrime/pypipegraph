@@ -1,10 +1,12 @@
 from twisted.protocols import amp
 
+
 class TransmitPipegraph(amp.Command):
     arguments = [
             ('jobs', amp.String())
             ]
     response = [('ok', amp.Boolean()), ('exception', amp.String())]
+
 
 class StartJob(amp.Command):
     arguments = [
@@ -12,9 +14,11 @@ class StartJob(amp.Command):
             ]
     response = []
 
+
 class ShutDown(amp.Command):
     arguments = []
     response = []
+
 
 class JobEnded(amp.Command):
     arguments = [
@@ -22,10 +26,8 @@ class JobEnded(amp.Command):
             ]
     response = [('ok', amp.Boolean())]
 
-class MagicKey(amp.Command): 
+
+class MagicKey(amp.Command):
     """A command to verify we have the right client"""
     arguments = []
     response = [('key', amp.String())]
-            
-
-
