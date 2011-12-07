@@ -1,10 +1,11 @@
 pypipegraph
 =============
 
-pypipegraph is a library for constructing a workflow piece by piece and 
-executing just the parts of it that need to be (re-)done.
-It supports using multiple cores (SMP) and machines (cluster) and is
-a hybrid between a dependency tracker (think 'make') and a cluster engine.
+pypipegraph is a library for constructing a workflow piece by piece and
+executing just the parts of it that need to be (re-)done.  It supports using
+multiple cores (SMP) and (eventually, alpha code right now) machines (cluster)
+and is a hybrid between a dependency tracker (think 'make') and a cluster
+engine.
 
 More specifically, you construct Jobs_, which encapsulate output (i.e. stuff that
 needs to be done), invariants (which force re-evaluation of output jobs if 
@@ -14,47 +15,33 @@ From your point of view, you create a pypipegraph, you create jobs, chain
 them together, then ask the pypipegraph to run.
 It examines all jobs for their need to run (either because the have not been
 finished, or because they have been invalidated), 
-distributes them across multiple cores and machines (if available), and get's
+distributes them across multiple python instances, and get's
 them executed in a sensible order.
 
 It is robust against jobs dying for whatever reason (only the failed job and 
 everything 'downstream' will be affected, independend jobs will continue running),
 allows you to resume at any point 'in between' jobs, and isolates jobs against each other.
 
-Executing structure
------------------------
-
-You write a 'master control program' (mcp) that creates Jobs_ and at one point,
-you hand over control to the pypipegraph.
-The mcp then talks to a resource-coordinator (either a local instance that says
-'take all of this machine' or a network service that coordinates between multiple
-unning pypipegraphs) and spawns one compute slave (cs) for each machine.
-
-Now each compute slave receives a copy of all jobs (which are just definitions,
-and therefore pretty small).  One by one the mcp (talking to the
-resource-coordinator) asks the cs to execute jobs (while talking to the
-resource-coordinater to share resources with others), collects their feedback, prunes the graph on errors and
-returns control to you once all of them have been done (or failed ;) ).
-
-The mcp knows (thanks to the resource coordinator) about the resources available
-(number of cpu cores, memory) and doesn't overload the nodes (by spawning more
-processes than there are cores or by spawning too many memory hungry jobs at once).
-
-
 30 second summary
 ------------------
 ::
 
     pypipegraph.new_pipeline()
-    output_filename = 'sample.txt'
+    output_filenameA = 'sampleA.txt'
     def do_the_work():
-        op = open(output_filename, 'wb')
-        op.write("hello world")
-        op.close()
-    jobA = pypipegraph.FileGeneratingJob(output_filename, do_the_work)
+        op = open(output_filename, 'wb').write("hello world")
+    jobA = pypipegraph.FileGeneratingJob(output_filenameA, do_the_work)
+    output_filenameB = 'sampleB.txt'
+    def do_the_work():
+         op = open(output_filenameB, 'wb').write(open(output_filenameA, 'rb').read() + ",  once again")
+    jobB = pypipegraph.FileGeneratingJob(output_filenameB, do_the_work)
+    jobB.depends_on(jobA)
     pypipegraph.run()
     print 'the pipegraph is done and has returned control to you.'
-    
+    print 'sampleA.txt contains "hello world"'
+    print 'sampleB.txt contains "hello world, once again"
+
+
 
 Jobs
 -------------
@@ -228,24 +215,41 @@ The calc function does not get run if there are no dependencies.
 It also has an implicit FunctionInvariant_ on it's calc function (supress just like a FileGeneratingJob_ with ignore_code_changes())
 
 
-Notes
---------
-* A pipeline and it's jobs can only be run once.
-* It is an error to create jobs before new_pipeline has been called.
-* Jobs magically associated with the currently running pipeline.
-* Invariant status is kept in a magic .pypipegraph_status file.
-* Jobs are singletonized on their id. Little harm is done in defining a job multiple times. 
-  There is a bit of error checking, but it's not perfect.
-* All jobs creating files assume a shared file system.
-* Adding jobs gives you an iterable of jobs (which depends_on also takes). Adding a job and an iterable also gives you an iterable. So does adding an iterable and a job or an iterable and an iterable...
-* Executing jobs (all `Output jobs`_) have resource attributes: cores_needed (default 1, -1 means 'all you can get'), memory_needed (default = -1, means don't worry about it, just start one per core, assume memory / cores. If you specify something above memory/core it's treated as if you need (your_memory_specification / (memory/core)) cores). memory_needed is in bytes!
-
-
 Exceptions
 -----------
 pypipegraph has a small set of exceptions (all descending from PyPipelineGraphError).
 * RuntimeError get's thrown by pypipegraph.run if a job raised an exception, communication lines were broken etc
 * JobContractError is stored in a job's .exception if the job's callback did not comply with it's requirements (e.g. a FileGeneratingJob did not actually create the file)
-* CycleError: you have fabricated a cycle in your dependencies. Unfortunatly it's currently not reported where the cycle is (todo)
+* CycleError: you have fabricated a cycle in your dependencies. Unfortunatly it's currently not reported where the cycle is (though some simple circles are reported early on)
+
+Executing structure
+-----------------------
+
+You write a 'master control program' (mcp) that creates Jobs and at one point,
+you hand over control to the pypipegraph.
+The mcp then talks to a resource-coordinator (either a local instance that says
+'take all of this machine' or a network service that coordinates between multiple
+unning pypipegraphs) and spawns one compute slave (cs) for each machine.
+
+Now each compute slave receives a copy of all jobs (which are just definitions,
+and therefore pretty small).  One by one the mcp (talking to the
+resource-coordinator) asks the cs to execute jobs (while talking to the
+resource-coordinater to share resources with others), collects their feedback, prunes the graph on errors and
+returns control to you once all of them have been done (or failed ;) ).
+
+The mcp knows (thanks to the resource coordinator) about the resources available
+(number of cpu cores, memory) and doesn't overload the nodes (by spawning more
+processes than there are cores or by spawning too many memory hungry jobs at once).
+
+Notes
+--------
+* A pipegraph and it's jobs can only be run once (but you can create multiple pipegraphs serially).
+* It is an error to create jobs before new_pipegraph() has been called.
+* Jobs magically associated with the currently existing pipegraph.
+* Invariant status is kept in a magic .pypipegraph_status file.
+* Jobs are singletonized on their id (within the existance of one pipegraph). 
+  Little harm is done in defining a job multiple times. 
+* Adding jobs gives you an iterable of jobs (which depends_on also takes). Adding a job and an iterable also gives you an iterable. So does adding an iterable and a job or an iterable and an iterable...
+* Executing jobs (all `Output jobs`_) have resource attributes: cores_needed (default 1, -1 means 'all you can get'), memory_needed (default = -1, means don't worry about it, just start one per core, assume memory / cores. If you specify something above memory/core it's treated as if you need (your_memory_specification / (memory/core)) cores). memory_needed is in bytes!
 
 
