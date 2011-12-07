@@ -81,6 +81,17 @@ class SimpleTests(unittest.TestCase):
             ppg.run_pipegraph()
         self.assertRaises(ValueError, inner)
 
+    def test_non_default_status_filename(self):
+        try:
+            ppg.forget_job_status('shu.dat')
+            ppg.forget_job_status()
+            ppg.new_pipegraph(quiet=True, invariant_status_filename = 'shu.dat')
+            jobA = ppg.FileGeneratingJob('out/A', lambda: write('out/A','A'))
+            ppg.run_pipegraph()
+            self.assertTrue(os.path.exists('shu.dat'))
+            self.assertFalse(os.path.exists(ppg.graph.invariant_status_filename_default))
+        finally:
+            ppg.forget_job_status('shu.dat')
 
 
 class CycleTests(unittest.TestCase):
@@ -156,8 +167,6 @@ class JobTests(unittest.TestCase):
         def inner():
             job_dl = ppg.DataLoadingJob(of, job)
         self.assertRaises(ValueError, inner)
-
-
 
     def test_addition(self):
         def write_func(of):
@@ -1511,6 +1520,32 @@ class FunctionInvariantTests(PPGPerTest):
             jobC = ppg.FunctionInvariant('A', lambda: 'b') #raises ValueError
         self.assertRaises(ppg.JobContractError, inner)
 
+    def test_instance_functions_raise(self):
+        class shu:
+            def __init__(self, letter):
+                self.letter = letter
+
+            def get_job(self):
+                job = ppg.FileGeneratingJob('out/' + self.letter,lambda: append('out/' + self.letter, 'A'))
+                job.depends_on(ppg.FunctionInvariant('shu.sha', self.sha))
+                return job
+
+            def sha(self):
+                return 55 * 23
+
+        x = shu('A')
+        x.get_job()
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/A'), 'A')
+        append('out/A', 'A')
+
+        ppg.new_pipegraph()
+        x.get_job()
+        y = shu('B')
+        def inner():
+            y.get_job()
+        self.assertRaises(ppg.JobContractError, inner)
+
 class DependencyTests(PPGPerTest):
 
 
@@ -2704,9 +2739,7 @@ class NotYetImplementedTests(unittest.TestCase):
         #now requires it, even if both C and E have already been done.
     
         #what a conundrum
-
-
-        pass
+        raise NotImplementedError()
 
 
 

@@ -9,8 +9,8 @@ import util
 import sys
 logger = util.start_logging('graph')
 
-invariant_status_filename_old = '.pypipegraph_status'
-invariant_status_filename_new = '.pypipegraph_status_robust'
+invariant_status_filename_old = '.pypipegraph_status'  # earlier on, we had a different pickling scheme, and that's what the files were called.
+invariant_status_filename_default = '.pypipegraph_status_robust'
 
 
 def run_pipegraph():
@@ -19,19 +19,20 @@ def run_pipegraph():
     util.global_pipegraph.run()
 
 
-def new_pipegraph(resource_coordinator=None, quiet=False):
+def new_pipegraph(resource_coordinator=None, quiet=False, invariant_status_filename=invariant_status_filename_default):
     if resource_coordinator is None:
         resource_coordinator = resource_coordinators.LocalSystem()
-    util.global_pipegraph = Pipegraph(resource_coordinator, quiet=quiet)
+    util.global_pipegraph = Pipegraph(resource_coordinator, quiet=quiet, invariant_status_filename=invariant_status_filename)
     util.job_uniquifier = {}
     util.func_hashes = {}
     logger.info("\n\n")
     logger.info("New Pipegraph")
 
 
-def forget_job_status():
+def forget_job_status(invariant_status_filename=invariant_status_filename_default ):
+    """Delete the job status file"""
     try:
-        os.unlink(invariant_status_filename_new)
+        os.unlink(invariant_status_filename)
     except OSError:
         pass
     try:
@@ -44,13 +45,9 @@ def destroy_global_pipegraph():
     util.global_pipegraph = None
 
 
-def get_running_job_count():
-    return util.global_pipegraph.get_running_job_count()
-
-
 class Pipegraph(object):
 
-    def __init__(self, resource_coordinator, quiet=False):
+    def __init__(self, resource_coordinator, quiet=False, invariant_status_filename=invariant_status_filename_default ):
         self.rc = resource_coordinator
         self.rc.pipegraph = self
         self.jobs = {}
@@ -60,6 +57,7 @@ class Pipegraph(object):
         self.quiet = quiet
         self.object_uniquifier = {}  # used by util.assert_uniqueness_of_object to enforce pseudo-singletons
         self.invariant_loading_issues = {}  # jobs whose invariant could not be unpickled for some reason - and the exception.
+        self.invariant_status_filename = invariant_status_filename
 
     def __del__(self):
         self.rc.pipegraph = None
@@ -230,13 +228,15 @@ class Pipegraph(object):
         self.possible_execution_order = L
 
     def load_invariant_status(self):
+        # this is support code for the late invariant status filename layout.
+        # probably can be thrown out 'soonish'. Also remove the reference in forget_job_status
         if os.path.exists(invariant_status_filename_old):
             op = open(invariant_status_filename_old, 'rb')
             self.invariant_status = cPickle.load(op)
             op.close()
             os.unlink(invariant_status_filename_old)  # throw away the old file
-        elif os.path.exists(invariant_status_filename_new):
-            op = open(invariant_status_filename_new, 'rb')
+        elif os.path.exists(self.invariant_status_filename):
+            op = open(self.invariant_status_filename, 'rb')
             all = op.read()
             op.seek(0, os.SEEK_SET)
             self.invariant_status = collections.defaultdict(bool)
@@ -268,7 +268,7 @@ class Pipegraph(object):
         finished = False
         while not finished:
             try:
-                op = open(invariant_status_filename_new, 'wb')
+                op = open(self.invariant_status_filename, 'wb')
                 for key, value in self.invariant_status.items():
                     cPickle.dump(key, op, cPickle.HIGHEST_PROTOCOL)
                     cPickle.dump(value, op, cPickle.HIGHEST_PROTOCOL)
@@ -341,6 +341,7 @@ class Pipegraph(object):
         logger.info(" possible execution order %s" % [str(x) for x in self.possible_execution_order])
 
     def spawn_slaves(self):
+        """Tell the resource coordinator to get the slaves ready"""
         logger.info("Spawning slaves")
         self.slaves = self.rc.spawn_slaves()
         self.check_all_jobs_can_be_executed()
@@ -376,12 +377,13 @@ class Pipegraph(object):
             logger.info("Control returned from ResourceCoordinator")
 
     def cleanup_jobs_that_requested_it(self):
-        """Temporary* generating jobs that don't get run (because their downstream is done) might still attempt to clean up their output. They register by setting do_cleanup_if_was_never_run = True"""
+        """Temporary* generating jobs that don't get run (because their downstream is done) might still attempt to clean up their output. They register by job.setting do_cleanup_if_was_never_run = True"""
         for job in self.jobs.values():
             if job.do_cleanup_if_was_never_run and not job.was_run:
                 job.cleanup()
 
     def start_jobs(self):  # I really don't like this function... and I also have the strong inkling it should acttually sit in the resource coordinatora
+        """Instruct slaves to start as many jobs as possible"""
          # first, check what we actually have some resources...
         resources = self.rc.get_resources()  # a dict of slave name > {cores: y, memory: x}
         for slave in resources:
@@ -506,6 +508,7 @@ class Pipegraph(object):
         logger.info("can't start any more jobs. either there are no more, or resources all utilized. There are currently %i jobs remaining" % len(self.possible_execution_order))
 
     def prune_job(self, job):
+        """Remove job (and its descendands) from the list of jobs to run"""
         try:
             self.possible_execution_order.remove(job)
         except ValueError:  # might occur sereval times when following the graph...
@@ -516,7 +519,7 @@ class Pipegraph(object):
             self.prune_job(dep)
 
     def job_executed(self, job):
-        """A job was done. Return whether there are more jobs read run"""
+        """A job was done. Returns whether there are more jobs read run"""
         logger.info("job_executed %s failed: %s" % (job, job.failed))
         if job.failed:
             self.prune_job(job)
@@ -540,7 +543,7 @@ class Pipegraph(object):
         return bool(self.running_jobs) or bool(self.possible_execution_order)
 
     def new_jobs_generated_during_runtime(self, new_jobs):
-        """Received jobs from one of the generators.
+        """Received jobs from one of the job generating Jobs.
         We'll integrate them into the graph, and add them to the possible_execution_order.
         Beauty of the job-singeltonization is that all dependands that are not new are caught..."""
         logger.info('new_jobs_generated_during_runtime')
@@ -612,6 +615,7 @@ class Pipegraph(object):
             self.jobs[job_id] = self.new_jobs[job_id]
 
     def print_failed_job(self, job, file_handle):
+        """Pretty print failure information"""
         print >> file_handle, '-' * 75
         print >> file_handle, '%s failed. Reason:' % (job, )
         if job.exception:
@@ -623,6 +627,7 @@ class Pipegraph(object):
         print >>file_handle, ''
 
     def print_running_jobs(self):
+        """When the user presses enter, print the jobs that are currently being executed"""
         print 'Running jobs:'
         now = time.time()
         for job in self.running_jobs:
