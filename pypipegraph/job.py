@@ -53,7 +53,7 @@ class Job(object):
     def __new__(cls, job_id, *args, **kwargs):
         #logger.info("New for %s %s" % (cls, job_id))
         if not isinstance(job_id, str):
-            raise ValueError("Job_id must be a string")
+            raise ValueError("Job_id must be a string, was %s" % repr(job_id))
         if not job_id in util.job_uniquifier:
             util.job_uniquifier[job_id] = object.__new__(cls)
             util.job_uniquifier[job_id].job_id = job_id #doing it later will fail because hash apperantly might be called before init has run?
