@@ -88,6 +88,7 @@ class Job(object):
             self.was_done_on = set() #on which slave(s) was this job run?
             self.was_loaded = False
             self.was_invalidated = False
+            self.invalidation_count = 0 #used to save some time in graph.distribute_invariant_changes 
             self.was_cleaned_up = False
             self.always_runs = False
             self.start_time = None
@@ -164,8 +165,12 @@ class Job(object):
     def invalidated(self, reason = ''):
         logger.info("%s invalidated called, reason: %s" % (self, reason))
         self.was_invalidated = True
+        self.distribute_invalidation()
+
+    def distribute_invalidation(self):
         for dep in self.dependants:
-            dep.invalidated(reason = 'preq invalidated %s' % self)
+            if not dep.was_invalidated:
+                dep.invalidated(reason = 'preq invalidated %s' % self)
 
     def can_run_now(self):
         #logger.info("can_run_now %s" % self)

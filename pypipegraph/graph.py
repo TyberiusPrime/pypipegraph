@@ -56,6 +56,7 @@ class Pipegraph(object):
         self.quiet = quiet
         self.object_uniquifier = {} #used by util.assert_uniqueness_of_object to enforce pseudo-singletons
         self.invariant_loading_issues = {} #jobs whose invariant could not be unpickled for some reason - and the exception.
+        self._distribute_invariant_changes_count = 0
 
     def __del__(self):
         self.rc.pipegraph = None
@@ -276,10 +277,14 @@ class Pipegraph(object):
     def distribute_invariant_changes(self):
         """check each job for whether it's invariance has changed,
         and propagate the invalidation by calling job.invalidated()"""
-
+        self._distribute_invariant_changes_count += 1
         for job in self.jobs.values():
             if job.was_invalidated: #don't redo it just because we're calling this again after having received new jobs.
-                continue
+                if job.invalidation_count == self._distribute_invariant_changes_count:
+                    continue
+                else:
+                    job.distribute_invalidation() 
+                    job.invalidation_count = self._distribute_invariant_changes_count
             old = self.invariant_status[job.job_id]
             try:
                 inv = job.get_invariant(old)
@@ -297,6 +302,7 @@ class Pipegraph(object):
                         for line in difflib.unified_diff(old.split("\n"), inv.split("\n"), n=5):
                             logger.info(line)
                 job.invalidated(reason = 'invariant')
+                job.invalidation_count = self._distribute_invariant_changes_count
                 self.invariant_status[job.job_id] = inv # for now, it is the dependant job's job to clean up so they get reinvalidated if the executing is terminated before they are reubild (ie. filegenjobs delete their outputfiles)
 
     def build_todo_list(self):
