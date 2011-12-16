@@ -30,6 +30,10 @@ def append(filename, string):
     op.write(string)
     op.close()
 
+def writeappend(filename_write, filename_append, string):
+    write(filename_write, string)
+    append(filename_append, string)
+
 def magic(filename):
     """See what linux 'file' commando says about that file"""
     if not os.path.exists(filename):
@@ -1986,6 +1990,31 @@ class JobGeneratingJobTests(PPGPerTest):
         self.assertEqual(read('out/C'), 'Ashu')
         self.assertEqual(read('out/D'), 'Bshu')
 
+    def test_filegen_invalidated_jobgen_created_filegen_later_also_invalidated(self):
+        a = ppg.FileGeneratingJob('out/A', lambda : writeappend("out/A", 'out/Ax', "A"))
+        p = ppg.ParameterInvariant('p', 'p')
+        a.depends_on(p)
+        def gen():
+            c = ppg.FileGeneratingJob('out/C', lambda: writeappend("out/C", 'out/Cx', "C"))
+            c.depends_on(a)
+        b = ppg.JobGeneratingJob('b', gen)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/A'), 'A')
+        self.assertEqual(read('out/Ax'), 'A')
+        self.assertEqual(read('out/C'), 'C')
+        self.assertEqual(read('out/Cx'), 'C')
+        ppg.new_pipegraph(rc_gen(), quiet=True)
+
+        a = ppg.FileGeneratingJob('out/A', lambda : writeappend("out/A", 'out/Ax', "A"))
+        p = ppg.ParameterInvariant('p', 'p2')
+        a.depends_on(p)
+        b = ppg.JobGeneratingJob('b', gen)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/Ax'), 'AA')
+        self.assertEqual(read('out/Cx'), 'CC')
+
+
+
 import exptools # i really don't like this, but it seems to be the only way to test this
 exptools.load_software('pyggplot')
 
@@ -2707,7 +2736,6 @@ class NotYetImplementedTests(unittest.TestCase):
 
 
         pass
-
 
 
 
