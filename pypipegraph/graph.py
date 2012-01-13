@@ -97,7 +97,6 @@ class Pipegraph(object):
         self.distribute_invariant_changes()
         self.build_todo_list()
         self.dump_graph()
-        sys.exit()
 
         #make us some computational engines and put them to work.
         logger.info("now executing")
