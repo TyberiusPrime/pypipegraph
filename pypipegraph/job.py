@@ -772,8 +772,8 @@ class PlotJob(FileGeneratingJob):
     def __init__(self, output_filename, calc_function, plot_function, render_args = None, skip_table = False):
         if not isinstance(output_filename , str) or isinstance(output_filename , unicode):
             raise ValueError("output_filename was not a string or unicode")
-        if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):
-            raise ValueError("Don't know how to create this file %s, must end on .png or .pdf" % output_filename)
+        if not (output_filename.endswith('.png') or output_filename.endswith('.pdf') or output_filename.endswith('.svg')):
+            raise ValueError("Don't know how to create this file %s, must end on .png or .pdf or .svg" % output_filename)
 
         self.output_filename = output_filename
         self.table_filename = self.output_filename + '.tsv'
