@@ -96,6 +96,8 @@ class Pipegraph(object):
         self.load_invariant_status()
         self.distribute_invariant_changes()
         self.build_todo_list()
+        self.dump_graph()
+        sys.exit()
 
         #make us some computational engines and put them to work.
         logger.info("now executing")
@@ -649,5 +651,14 @@ class Pipegraph(object):
                 op.write("<p>")
                 op.write(job.job_id + " was ok")
             op.write("</p>")
+        op.close()
+
+    def dump_graph(self):
+        op = open("logs/ppg_graph.txt",'wb')
+        for job in self.jobs.values():
+            op.write("%s - done: %s\n" % (job, job.is_done()))
+            for preq in job.prerequisites:
+                op.write("\t%s - done: %s\n" % (preq, preq.is_done()))
+            op.write("\n")
         op.close()
 
