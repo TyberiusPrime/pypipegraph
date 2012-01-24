@@ -255,7 +255,10 @@ class Job(object):
         yield self
 
     def __str__(self):
-        return "%s (job_id=%s,id=%s)" % (self.__class__.__name__, self.job_id, id(self))
+        if hasattr(self, 'callback'):
+            return "%s (job_id=%s,id=%s\n Callback: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.callback.func_code.co_filename, self.callback.func_code.co_firstlineno)
+        else:
+            return "%s (job_id=%s,id=%s)" % (self.__class__.__name__, self.job_id, id(self))
 
     def __repr__(self):
         return str(self)
