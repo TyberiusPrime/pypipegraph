@@ -3,10 +3,10 @@ pypipegraph
 
 pypipegraph is a library for constructing a workflow piece by piece and 
 executing just the parts of it that need to be (re-)done.
-It supports using multiple cores (SMP) and machines (cluster) and is
+It supports using multiple cores (SMP) and machines (cluster, alpha stage) and is
 a hybrid between a dependency tracker (think 'make') and a cluster engine.
 
-More specifically, you construct Jobs_, which encapsulate output (i.e. stuff that
+More specifically, you construct Jobs, which encapsulate output (i.e. stuff that
 needs to be done), invariants (which force re-evaluation of output jobs if 
 they change), and stuff inbetween (e.g. load data from disk).
 
