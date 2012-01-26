@@ -7,7 +7,7 @@ multiple cores (SMP) and (eventually, alpha code right now) machines (cluster)
 and is a hybrid between a dependency tracker (think 'make') and a cluster
 engine.
 
-More specifically, you construct Jobs_, which encapsulate output (i.e. stuff that
+More specifically, you construct Jobs, which encapsulate output (i.e. stuff that
 needs to be done), invariants (which force re-evaluation of output jobs if 
 they change), and stuff inbetween (e.g. load data from disk).
 

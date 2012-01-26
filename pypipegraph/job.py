@@ -56,7 +56,7 @@ class Job(object):
     def __new__(cls, job_id, *args, **kwargs):
         #logger.info("New for %s %s" % (cls, job_id))
         if not isinstance(job_id, str):
-            raise ValueError("Job_id must be a string")
+            raise ValueError("Job_id must be a string, was %s" % repr(job_id))
         if not job_id in util.job_uniquifier:
             util.job_uniquifier[job_id] = object.__new__(cls)
             util.job_uniquifier[job_id].job_id = job_id  # doing it later will fail because hash apperantly might be called before init has run?
@@ -88,6 +88,7 @@ class Job(object):
             self.was_done_on = set()  # on which slave(s) was this job run?
             self.was_loaded = False
             self.was_invalidated = False
+            self.invalidation_count = 0 #used to save some time in graph.distribute_invariant_changes 
             self.was_cleaned_up = False
             self.always_runs = False
             self.start_time = None
@@ -170,8 +171,12 @@ class Job(object):
     def invalidated(self, reason=''):
         logger.info("%s invalidated called, reason: %s" % (self, reason))
         self.was_invalidated = True
+        self.distribute_invalidation()
+
+    def distribute_invalidation(self):
         for dep in self.dependants:
-            dep.invalidated(reason='preq invalidated %s' % self)
+            if not dep.was_invalidated:
+                dep.invalidated(reason = 'preq invalidated %s' % self)
 
     def can_run_now(self):
         #logger.info("can_run_now %s" % self)
@@ -256,7 +261,10 @@ class Job(object):
         yield self
 
     def __str__(self):
-        return "%s (job_id=%s,id=%s)" % (self.__class__.__name__, self.job_id, id(self))
+        if hasattr(self, 'callback'):
+            return "%s (job_id=%s,id=%s\n Callback: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.callback.func_code.co_filename, self.callback.func_code.co_firstlineno)
+        else:
+            return "%s (job_id=%s,id=%s)" % (self.__class__.__name__, self.job_id, id(self))
 
     def __repr__(self):
         return str(self)
@@ -777,16 +785,17 @@ class PlotJob(FileGeneratingJob):
 
     To use these jobs, you need to have pyggplot available
     """
-    def __init__(self, output_filename, calc_function, plot_function, render_args=None, skip_table=False):
+    def __init__(self, output_filename, calc_function, plot_function, render_args = None, skip_table = False, skip_caching = False):
         if not isinstance(output_filename, str) or isinstance(output_filename, unicode):
             raise ValueError("output_filename was not a string or unicode")
-        if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):
-            raise ValueError("Don't know how to create this file %s, must end on .png or .pdf" % output_filename)
+        if not (output_filename.endswith('.png') or output_filename.endswith('.pdf') or output_filename.endswith('.svg')):
+            raise ValueError("Don't know how to create this file %s, must end on .png or .pdf or .svg" % output_filename)
 
         self.output_filename = output_filename
         self.table_filename = self.output_filename + '.tsv'
         self.calc_function = calc_function
         self.plot_function = plot_function
+        self.skip_caching = skip_caching
         if render_args is None:
             render_args = {}
         self.render_args = render_args
@@ -794,27 +803,28 @@ class PlotJob(FileGeneratingJob):
 
         import pydataframe
         import pyggplot
-        self.cache_filename = os.path.join('cache', output_filename)
+        if not self.skip_caching:
+            self.cache_filename = os.path.join('cache', output_filename)
 
-        def run_calc():
-            df = calc_function()
-            if not isinstance(df, pydataframe.DataFrame):
-                do_raise = True
-                if isinstance(df, dict):  # might be a list dfs...
-                    do_raise = False
-                    for x in df.values():
-                        if not isinstance(x, pydataframe.DataFrame):
-                            do_raise = True
-                            break
-                if do_raise:
-                    raise ppg_exceptions.JobContractError("%s.calc_function did not return a DataFrame (or dict of such), was %s " % (output_filename, df.__class__))
-            try:
-                os.makedirs(os.path.dirname(self.cache_filename))
-            except OSError:
-                pass
-            of = open(self.cache_filename, 'wb')
-            cPickle.dump(df, of, cPickle.HIGHEST_PROTOCOL)
-            of.close()
+            def run_calc():
+                df = calc_function()
+                if not isinstance(df, pydataframe.DataFrame):
+                    do_raise = True
+                    if isinstance(df, dict): #might be a list dfs...
+                        do_raise = False
+                        for x in df.values():
+                            if not isinstance(x, pydataframe.DataFrame):
+                                do_raise = True
+                                break
+                    if do_raise:
+                        raise ppg_exceptions.JobContractError("%s.calc_function did not return a DataFrame (or dict of such), was %s " % (output_filename, df.__class__))
+                try:
+                    os.makedirs(os.path.dirname(self.cache_filename))
+                except OSError:
+                    pass
+                of = open(self.cache_filename, 'wb')
+                cPickle.dump(df, of, cPickle.HIGHEST_PROTOCOL)
+                of.close()
 
         def run_plot():
             df = self.get_data()
@@ -832,9 +842,10 @@ class PlotJob(FileGeneratingJob):
         FileGeneratingJob.__init__(self, output_filename, run_plot)
         Job.depends_on(self, ParameterInvariant(self.output_filename + '_params', render_args))
 
-        cache_job = FileGeneratingJob(self.cache_filename, run_calc)
-        Job.depends_on(self, cache_job)
-        self.cache_job = cache_job
+        if not self.skip_caching:
+            cache_job = FileGeneratingJob(self.cache_filename, run_calc)
+            Job.depends_on(self, cache_job)
+            self.cache_job = cache_job
 
         if not skip_table:
             def dump_table():
@@ -880,20 +891,26 @@ class PlotJob(FileGeneratingJob):
 
     def depends_on(self, other_job):
         #FileGeneratingJob.depends_on(self, other_job)  # just like the cached jobs, the plotting does not depend on the loading of prerequisites
-        if hasattr(self, 'cache_job') and not other_job is self.cache_job:  # activate this after we have added the invariants...
+        if self.skip_caching:
+            Job.depends_on(self, other_job)
+        elif hasattr(self, 'cache_job') and not other_job is self.cache_job: #activate this after we have added the invariants...
             self.cache_job.depends_on(other_job)
         return self
 
     def inject_auto_invariants(self):
         if not self.do_ignore_code_changes:
-            self.cache_job.depends_on(FunctionInvariant(self.job_id + '.calcfunc', self.calc_function))
+            if not self.skip_caching:
+                self.cache_job.depends_on(FunctionInvariant(self.job_id + '.calcfunc', self.calc_function))
             FileGeneratingJob.depends_on(self, FunctionInvariant(self.job_id + '.plotfunc', self.plot_function))
 
     def get_data(self):
-        of = open(self.cache_filename, 'rb')
-        df = cPickle.load(of)
-        of.close()
-        return df
+        if self.skip_caching:
+            return self.calc_function()
+        else:
+            of = open(self.cache_filename, 'rb')
+            df = cPickle.load(of)
+            of.close()
+            return df
 
 
 def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args=None):
