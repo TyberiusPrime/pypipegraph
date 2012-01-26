@@ -640,7 +640,6 @@ class Pipegraph(object):
         for job in self.running_jobs:
             print job, 'running for %i seconds' % (now - job.start_time)
 
-        op.close()
 
     def dump_graph(self):
         op = open("logs/ppg_graph.txt",'wb')
@@ -649,3 +648,5 @@ class Pipegraph(object):
             for preq in job.prerequisites:
                 op.write("\t%s - done: %s\n" % (preq, preq.is_done()))
             op.write("\n")
+        op.close()
+
