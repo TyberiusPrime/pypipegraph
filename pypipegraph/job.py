@@ -745,7 +745,7 @@ class FinalJob(Job):
     Use these sparringly - they really only make sense for things where you really want to hook
     'after the pipeline has run', everything else realy is better of if you depend on the appropriate job
 
-    FinalJobs are also run on each run - but only iff no other job died
+    FinalJobs are also run on each run - but only if no other job died
     """
 
     def __init__(self, jobid, callback):
@@ -774,6 +774,8 @@ class FinalJob(Job):
 class PlotJob(FileGeneratingJob):
     """Calculate some data for plotting, cache it in cache/output_filename, and plot from there.
     creates two jobs, a plot_job (this one) and a cache_job (FileGeneratingJob, in self.cache_job),
+
+    To use these jobs, you need to have pyggplot available
     """
     def __init__(self, output_filename, calc_function, plot_function, render_args=None, skip_table=False):
         if not isinstance(output_filename, str) or isinstance(output_filename, unicode):
@@ -895,6 +897,7 @@ class PlotJob(FileGeneratingJob):
 
 
 def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args=None):
+    """Combine multiple PlotJobs into a common (faceted) output plot"""
     if not isinstance(output_filename, str) or isinstance(output_filename, unicode):
         raise ValueError("output_filename was not a string or unicode")
     if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):
