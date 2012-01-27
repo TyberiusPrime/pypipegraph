@@ -642,11 +642,12 @@ class Pipegraph(object):
 
 
     def dump_graph(self):
-        op = open("logs/ppg_graph.txt",'wb')
-        for job in self.jobs.values():
-            op.write("%s - done: %s\n" % (job, job.is_done()))
-            for preq in job.prerequisites:
-                op.write("\t%s - done: %s\n" % (preq, preq.is_done()))
-            op.write("\n")
+        if os.path.exists('logs') and os.path.isdir('logs'):
+            op = open("logs/ppg_graph.txt",'wb')
+            for job in self.jobs.values():
+                op.write("%s - done: %s\n" % (job, job.is_done()))
+                for preq in job.prerequisites:
+                    op.write("\t%s - done: %s\n" % (preq, preq.is_done()))
+                op.write("\n")
         op.close()
 
