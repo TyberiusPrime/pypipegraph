@@ -222,6 +222,13 @@ pypipegraph has a small set of exceptions (all descending from PyPipelineGraphEr
 * JobContractError is stored in a job's .exception if the job's callback did not comply with it's requirements (e.g. a FileGeneratingJob did not actually create the file)
 * CycleError: you have fabricated a cycle in your dependencies. Unfortunatly it's currently not reported where the cycle is (though some simple circles are reported early on)
 
+
+Runtime
+----------
+While the pypipegraph is running, you can terminate it with CTRL-C, and query it about which jobs are running 
+by pressing Enter (that might take up to 5 seconds though, which incidentially is the 'check on slaves' timeout)
+
+
 Executing structure
 -----------------------
 
