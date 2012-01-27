@@ -1,4 +1,7 @@
-"""
+PyPipegraph is under the MIT License.
+cloudpickle.py and xrange_helper.py from PiCloud are redistributed in their original forms and under the GNU Lesser General Public License.
+
+---
 The MIT License (MIT)
 
 Copyright (c) 2012, Florian Finkernagel <finkernagel@imt.uni-marburg.de>
@@ -20,38 +23,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-"""
-
-from twisted.protocols import amp
-
-
-class TransmitPipegraph(amp.Command):
-    arguments = [
-            ('jobs', amp.String())
-            ]
-    response = [('ok', amp.Boolean()), ('exception', amp.String())]
-
-
-class StartJob(amp.Command):
-    arguments = [
-            ('job_id', amp.String())
-            ]
-    response = []
-
-
-class ShutDown(amp.Command):
-    arguments = []
-    response = []
-
-
-class JobEnded(amp.Command):
-    arguments = [
-            ('arg_tuple_pickle', amp.String())
-            ]
-    response = [('ok', amp.Boolean())]
-
-
-class MagicKey(amp.Command):
-    """A command to verify we have the right client"""
-    arguments = []
-    response = [('key', amp.String())]

@@ -1,7 +1,7 @@
 pypipegraph
 =============
 
-pypipegraph is a library for constructing a workflow piece by piece and
+pypipegraph is an MIT-licensed library for constructing a workflow piece by piece and
 executing just the parts of it that need to be (re-)done.  It supports using
 multiple cores (SMP) and (eventually, alpha code right now) machines (cluster)
 and is a hybrid between a dependency tracker (think 'make') and a cluster
