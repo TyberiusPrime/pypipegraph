@@ -241,6 +241,17 @@ The mcp knows (thanks to the resource coordinator) about the resources available
 (number of cpu cores, memory) and doesn't overload the nodes (by spawning more
 processes than there are cores or by spawning too many memory hungry jobs at once).
 
+
+Generated Files
+-----------------------
+Besides your output files, a pipegraph creates some auxillary files:
+* ./.pypipegraph_status_robust - stores the invariant data of all jobs
+* ./logs/ppg_run.txt  - the chattery debug output of every decision the pipegraph makes (only if logs exists). All logging is also send to localhost 5005, and you can listen with util/log_listener.py
+* ./logs/ppg_errors.txt - a log of all failed jobs and their exception/stdout/stderr (only if logs exists and the file is writable)
+* ./logs/ppg_graph.txt - a dump of the connected graph structure (which job depends on which) (only if logs exists)
+
+
+
 Notes
 --------
 * A pipegraph and it's jobs can only be run once (but you can create multiple pipegraphs serially).
