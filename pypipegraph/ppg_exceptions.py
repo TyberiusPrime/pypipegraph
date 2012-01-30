@@ -22,40 +22,42 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-class PyPipelineGraphError(ValueError):
+class PyPipeGraphError(ValueError):
     """Base class for all PyPipelineGraph exceptions"""
     pass
 
 
-class CycleError(PyPipelineGraphError):
+class CycleError(PyPipeGraphError):
     """You created a cycle in your pipegraph,
     this is not supported"""
     pass
 
 
-class RuntimeError(PyPipelineGraphError):
-    """A job died"""
+class RuntimeError(PyPipeGraphError):
+    """A job died for whatever reason. All unaffected jobs will have been done."""
     pass
 
 
-class RuntimeException(PyPipelineGraphError):
-    """Something went wrong with the pipegraph, a bug"""
+class RuntimeException(PyPipeGraphError):
+    """Something went wrong with the pipegraph, a bug
+    (A poorly named exception in light of RuntimeError)
+    """
 
 
-class JobContractError(PyPipelineGraphError):
+class JobContractError(PyPipeGraphError):
     """One of the jobs did not confirm to it's supposed behaviour"""
     pass
 
 
-class JobDiedException(PyPipelineGraphError):
+class JobDiedException(PyPipeGraphError):
     """A job went away without signing off"""
 
     def __init__(self, exit_code):
         self.exit_code = exit_code
         msg = "Exitcode was %s" % self.exit_code
-        PyPipelineGraphError.__init__(self, msg)
+        PyPipeGraphError.__init__(self, msg)
 
 
-class CommunicationFailure(PyPipelineGraphError):
+class CommunicationFailure(PyPipeGraphError):
     """something went wrong talking to a slave"""
     pass

@@ -1,4 +1,13 @@
 """
+A pipegraph models jobs depending on other jobs in a directed acyclic graph
+- basically a branching pipeline of things to be done. It keeps track of what's
+been already done and of what's changed. It automatically executes jobs in
+parallel if possible.
+"""
+
+license = """
+
+
 The MIT License (MIT)
 
 Copyright (c) 2012, Florian Finkernagel <finkernagel@imt.uni-marburg.de>
@@ -32,28 +41,37 @@ import util
 import sys
 logger = util.start_logging('graph')
 
-invariant_status_filename_old = '.pypipegraph_status'  # earlier on, we had a different pickling scheme, and that's what the files were called.
+# earlier on, we had a different pickling scheme,
+# and that's what the files were called.
+invariant_status_filename_old = '.pypipegraph_status'
 invariant_status_filename_default = '.pypipegraph_status_robust'
 
 
 def run_pipegraph():
+    """Run the current global pipegraph"""
     if util.global_pipegraph is None:
         raise ValueError("You need to call new_pipegraph first")
     util.global_pipegraph.run()
 
 
-def new_pipegraph(resource_coordinator=None, quiet=False, invariant_status_filename=invariant_status_filename_default):
+def new_pipegraph(resource_coordinator=None, quiet=False,
+        invariant_status_filename=invariant_status_filename_default):
+    """Create a new global pipegraph.
+    New jobs will automagically be attached to this pipegraph.
+    Default ResourceCoordinator is L{LocalSystem}
+    """
     if resource_coordinator is None:
         resource_coordinator = resource_coordinators.LocalSystem()
-    util.global_pipegraph = Pipegraph(resource_coordinator, quiet=quiet, invariant_status_filename=invariant_status_filename)
+    util.global_pipegraph = Pipegraph(resource_coordinator, quiet=quiet, 
+            invariant_status_filename=invariant_status_filename)
     util.job_uniquifier = {}
     util.func_hashes = {}
     logger.info("\n\n")
     logger.info("New Pipegraph")
 
 
-def forget_job_status(invariant_status_filename=invariant_status_filename_default ):
-    """Delete the job status file"""
+def forget_job_status(invariant_status_filename=invariant_status_filename_default):
+    """Delete the job status file - usually only useful for testing"""
     try:
         os.unlink(invariant_status_filename)
     except OSError:
@@ -65,12 +83,26 @@ def forget_job_status(invariant_status_filename=invariant_status_filename_defaul
 
 
 def destroy_global_pipegraph():
+    """Free the current global pipegraph - usually only useful for testing"""
     util.global_pipegraph = None
 
 
 class Pipegraph(object):
+    """A pipegraph collects Jobs and runs them in a valid order on request (pipegraph.run).
 
-    def __init__(self, resource_coordinator, quiet=False, invariant_status_filename=invariant_status_filename_default ):
+    Do not instanciate directly, use new_pipegraph(...) instead
+
+    It dumps some logging if the folder './logs' exists.
+
+    If any of the jobs failse, run() will print their output and raise a RuntimeException.
+    It will chatter about failed jobs on stderr if you don't set graph.quiet = True.
+
+    Depending on the L{ResourceCoordinator} used, pressing enter (and waiting a few seconds)
+    will list the current jobs.
+    (Default ResourceCoordinator does so).
+    Abort run with ctrl-c.
+    """
+    def __init__(self, resource_coordinator, quiet=False, invariant_status_filename=invariant_status_filename_default):
         self.rc = resource_coordinator
         self.rc.pipegraph = self
         self.jobs = {}
@@ -84,9 +116,13 @@ class Pipegraph(object):
         self.invariant_status_filename = invariant_status_filename
 
     def __del__(self):
+        # remove circle link between rc and pipegraph
         self.rc.pipegraph = None
 
     def add_job(self, job):
+        """Add a job to a Pipegraph.
+        Usually automagically called when instanciating one of the Job classes
+        """
         #logger.info("Adding job %s" % job)
         if not self.running:
             if self.was_run:
@@ -106,6 +142,14 @@ class Pipegraph(object):
                 #logger.info("Already knew the job %s, not keeping it as new" % job)
 
     def run(self):
+        """Run the Pipegraph. Gives control to the graph until all jobs have run (or failed).
+        May fail right away if a JobContractError occurs - for example if you've built a cycle
+        of dependencies.
+
+        If any job does not complete (exception, segfault, failed to produce output), RuntimeError
+        will be thrown, and the job's exception (if available) be stored in job.exception
+
+        """
         if self.was_run:
             raise ValueError("Each pipegraph may be run only once.")
         logger.info("MCP pid: %i" % os.getpid())
@@ -253,9 +297,11 @@ class Pipegraph(object):
         self.possible_execution_order = L
 
     def load_invariant_status(self):
-        # this is support code for the late invariant status filename layout.
-        # probably can be thrown out 'soonish'. Also remove the reference in forget_job_status
+        """Load Job invariant status from disk (and self.invariant_status_filename)
+        """
         if os.path.exists(invariant_status_filename_old):
+            # this is support code for the late invariant status filename layout.
+            # probably can be thrown out 'soonish'. Also remove the reference in forget_job_status
             op = open(invariant_status_filename_old, 'rb')
             self.invariant_status = cPickle.load(op)
             op.close()
@@ -290,6 +336,7 @@ class Pipegraph(object):
             self.invariant_status = collections.defaultdict(bool)
 
     def dump_invariant_status(self):
+        """Store Job invariant status into a file named by self.invariant_status_filename"""
         finished = False
         while not finished:
             try:
@@ -303,7 +350,7 @@ class Pipegraph(object):
                 pass
 
     def distribute_invariant_changes(self):
-        """check each job for whether it's invariance has changed,
+        """Check each job for whether it's invariance has changed,
         and propagate the invalidation by calling job.invalidated()"""
         self._distribute_invariant_changes_count += 1
         for job in self.jobs.values():
@@ -311,7 +358,7 @@ class Pipegraph(object):
                 if job.invalidation_count == self._distribute_invariant_changes_count:
                     continue
                 else:
-                    job.distribute_invalidation() 
+                    job.distribute_invalidation()
                     job.invalidation_count = self._distribute_invariant_changes_count
             old = self.invariant_status[job.job_id]
             try:
@@ -412,9 +459,9 @@ class Pipegraph(object):
             if job.do_cleanup_if_was_never_run and not job.was_run:
                 job.cleanup()
 
-    def start_jobs(self):  # I really don't like this function... and I also have the strong inkling it should acttually sit in the resource coordinatora
-        """Instruct slaves to start as many jobs as possible"""
-         # first, check what we actually have some resources...
+    def start_jobs(self):  
+        """Instruct slaves to start as many jobs as we can currently spawn under our memory/cpu restrictions"""
+        # I really don't like this function... and I also have the strong inkling it should acttually sit in the resource coordinatora         # first, check what we actually have some resources...
         resources = self.rc.get_resources()  # a dict of slave name > {cores: y, memory: x}
         for slave in resources:
             resources[slave]['memory/core'] = resources[slave]['physical_memory'] / resources[slave]['cores']
@@ -663,14 +710,13 @@ class Pipegraph(object):
         for job in self.running_jobs:
             print job, 'running for %i seconds' % (now - job.start_time)
 
-
     def dump_graph(self):
+        """Dump the current graph in text format into logs/ppg_graph.txt if logs exists"""
         if os.path.exists('logs') and os.path.isdir('logs'):
-            op = open("logs/ppg_graph.txt",'wb')
+            op = open("logs/ppg_graph.txt", 'wb')
             for job in self.jobs.values():
                 op.write("%s - done: %s\n" % (job, job.is_done()))
                 for preq in job.prerequisites:
                     op.write("\t%s - done: %s\n" % (preq, preq.is_done()))
                 op.write("\n")
-        op.close()
-
+            op.close()

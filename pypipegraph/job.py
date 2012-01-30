@@ -1,4 +1,7 @@
 """
+"""
+
+License = """
 The MIT License (MIT)
 
 Copyright (c) 2012, Florian Finkernagel <finkernagel@imt.uni-marburg.de>
@@ -39,7 +42,8 @@ import traceback
 
 
 class JobList(object):
-    """For when you want to return a list of jobs that mostly behaves like a single Job
+    """For when you want to return a list of jobs that mostly behaves like a single Job.
+    (Ie. when it must have a depends_on() method. Otherwise, a regular list will do fine).
     """
     def __init__(self, jobs):
         jobs = list(jobs)
@@ -76,8 +80,15 @@ class JobList(object):
 
 
 class Job(object):
+    """Base class for all Jobs - never instanciated itself.
+
+    This class also provides the pipegraph-lifetime singletonizing of Jobs - ie.
+    jobs with the same job_id (=name) will be the same object as long as no new pipegraph
+    is generated via new_pipegraph()
+    """
 
     def __new__(cls, job_id, *args, **kwargs):
+        """Handles the singletonization on the job_id"""
         #logger.info("New for %s %s" % (cls, job_id))
         if not isinstance(job_id, str):
             raise ValueError("Job_id must be a string, was %s" % repr(job_id))
@@ -91,7 +102,8 @@ class Job(object):
             raise ValueError("You must first instanciate a pypipegraph before creating jobs""")
         return util.job_uniquifier[job_id]
 
-    def __getnewargs__(self):  # so that unpickling works
+    def __getnewargs__(self):
+        """Provides unpickeling support"""
         return (self.job_id, )
 
     def __init__(self, job_id):
@@ -112,7 +124,7 @@ class Job(object):
             self.was_done_on = set()  # on which slave(s) was this job run?
             self.was_loaded = False
             self.was_invalidated = False
-            self.invalidation_count = 0 #used to save some time in graph.distribute_invariant_changes 
+            self.invalidation_count = 0  # used to save some time in graph.distribute_invariant_changes
             self.was_cleaned_up = False
             self.always_runs = False
             self.start_time = None
@@ -124,6 +136,9 @@ class Job(object):
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
 
     def depends_on(self, job_joblist_or_list_of_jobs):
+        """Declare that this job depends on the ones passed in (which must be Jobs, JobLists or iterables of tsuch).
+        This means that this job can only run, if all previous ones have been done sucessfully.
+        """
         #if isinstance(job_joblist_or_list_of_jobs, Job):
             #job_joblist_or_list_of_jobs = [job_joblist_or_list_of_jobs]
         if job_joblist_or_list_of_jobs is self:
@@ -150,7 +165,7 @@ class Job(object):
         """check wether the other job is in this job's dependency chain.
         We check at most @max_depth levels, starting with this job (ie.
         max_depth = 2 means this job and it's children).
-        Use a -1 for 'unlimited' (up to the maximum recursion depth) ;))
+        Use a -1 for 'unlimited' (up to the maximum recursion depth of python ;))
         """
         if max_depth == 0:
             return False
@@ -163,46 +178,72 @@ class Job(object):
         return False
 
     def ignore_code_changes(self):
+        """Tell the job not to autogenerate a FunctionInvariant for it's callback(s)"""
         raise ValueError("This job does not support ignore_code_changes")
 
     def inject_auto_invariants(self):
+        """Create the automagically generated FunctionInvariants if applicable"""
         pass
 
     def get_invariant(self, old):
+        """Retrieve the invariant 'magic cookie' we should store for this Job.
+        The job (and it's descendands) will be invalidated if you return anything
+        but @old. You may escape this and raise a NothingChanged(new_value) exception,
+        then the new_value will be stored, but no invalidation will occur.
+        (Example: FileChecksumInvariant jobs test the filetime first. Only if that differs,
+        they check the checksum. If that stayed the same, raising NothingChanged((new_filentime, checksum))
+        allows us to not check the file again next time
+
+        Invariant return values are cached by this function, please overwrite
+        _get_invariant(old) in subclasses.
+        """
         if self.invariant_cache is None or self.invariant_cache[0] != old:
             self.invariant_cache = (old, self._get_invariant(old))
         return self.invariant_cache[1]
 
     def _get_invariant(self, old):
+        """The actual workhorse/sub class specific function for get_invariant
+        """
         return False
 
     def is_done(self, depth=0):
+        """Is this Job done ( ie. does it need to be in the execution order)"""
         return True
 
     def is_loadable(self):
+        """Is this a job that's modifies the in memory data of our process?"""
         return False
 
     def load(self):
+        """Actually modify the in memory data"""
         if not self.is_loadable():
             raise ValueError("Called load() on a job that was not loadable")
         raise ValueError("Called load() on a j'ob that had is_loadable, but did not overwrite load() as it should")
 
-        pass
-
     def runs_in_slave(self):
+        """Is this a job that runs in our slave, ie. in a spawned job"""
         return True
 
+    def modifies_jobgraph(self):
+        """Is this a job that can modify the jobgraph at runtime?
+        """
+        return False
+
     def invalidated(self, reason=''):
+        """This job was invalidated - throw away any existing output for recalculation"""
         logger.info("%s invalidated called, reason: %s" % (self, reason))
         self.was_invalidated = True
         self.distribute_invalidation()
 
     def distribute_invalidation(self):
+        """Depth first descend to pass invalidated into all Jobs that dependend on this one"""
         for dep in self.dependants:
             if not dep.was_invalidated:
-                dep.invalidated(reason = 'preq invalidated %s' % self)
+                dep.invalidated(reason='preq invalidated %s' % self)
 
     def can_run_now(self):
+        """Can this job run right now?
+        """
         #logger.info("can_run_now %s" % self)
         for preq in self.prerequisites:
             #logger.info("checking preq %s" % preq)
@@ -246,9 +287,13 @@ class Job(object):
         return res
 
     def run(self):
+        """Do the actual work"""
         pass
 
     def check_prerequisites_for_cleanup(self):
+        """If for one of our prerequisites, all dependands have run, we can 
+        call it's cleanup function (unload data, remove tempfile...)
+        """
         for preq in self.prerequisites:
             logger.info("check_prerequisites_for_cleanup %s" % preq)
             all_done = True
@@ -263,18 +308,20 @@ class Job(object):
                 preq.was_cleaned_up = True
 
     def cleanup(self):
+        """Cleanup after all your direct dependands have finished running"""
         pass
 
-    def modifies_jobgraph(self):
-        return False
-
     def __eq__(self, other):
+        """Jobs are only equal if they are the same object"""
         return other is self
 
     def __hash__(self):
+        """We can simply hash on our job_id"""
         return hash(self.job_id)
 
     def __add__(self, other_job):
+        """Creates JobLists from two jobs
+        """
         def iter():
             yield self
             for job in other_job:
@@ -295,7 +342,7 @@ class Job(object):
 
 
 class _InvariantJob(Job):
-     # common code for all invariant jobs
+    """common code for all invariant jobs"""
 
     def depends_on(self, job_joblist_or_list_of_jobs):
         raise ppg_exceptions.JobContractError("Invariants can't have dependencies")
@@ -305,6 +352,8 @@ class _InvariantJob(Job):
 
 
 class FunctionInvariant(_InvariantJob):
+    """FunctionInvariant detects (bytecode) changes in a python function,
+    currently via disassembly"""
     def __init__(self, job_id, function):
         if not hasattr(function, '__call__') and function is not None:
             raise ValueError("function was not a callable (or None)")
@@ -326,10 +375,10 @@ class FunctionInvariant(_InvariantJob):
 
     inner_code_object_re = re.compile('<code	object	<[^>]+>	at	0x[a-f0-9]+[^>]+')
 
-    def dis_code(self, code):  # TODO: replace with bytecode based smarter variant
+    def dis_code(self, code):  
         """'dissassemble' python code.
-
         Strips lambdas (they change address every execution otherwise)"""
+        # TODO: replace with bytecode based smarter variant
         out = cStringIO.StringIO()
         old_stdout = sys.stdout
         try:
@@ -353,6 +402,12 @@ class FunctionInvariant(_InvariantJob):
 
 
 class ParameterInvariant(_InvariantJob):
+    """ParameterInvariants encapsulate smalling parameters, thresholds etc. that your work-jobs
+    depend on. They prefix their job_id with 'PI' so given 
+    a = FileGeneratingJob("A")
+    you can simply say
+    a.depends_on(pypipegraph.ParameterInvariant('A', (my_threshold_value)))
+    """
 
     def __new__(cls, job_id, *parameters, **kwargs):
         job_id = 'PI' + job_id
@@ -368,6 +423,7 @@ class ParameterInvariant(_InvariantJob):
 
 
 class FileTimeInvariant(_InvariantJob):
+    """Check if the modification time on a file changed"""
 
     def __init__(self, filename):
         Job.__init__(self, filename)
@@ -379,6 +435,9 @@ class FileTimeInvariant(_InvariantJob):
 
 
 class FileChecksumInvariant(_InvariantJob):
+    """Invalidates when the (md5) checksum of a file changed.
+    Checksum only get's recalculated if the file modification time changed.
+    """
 
     def __init__(self, filename):
         Job.__init__(self, filename)
@@ -412,8 +471,13 @@ class FileChecksumInvariant(_InvariantJob):
 
 
 class FileGeneratingJob(Job):
+    """Create a single output file of more than 0 bytes."""
 
     def __init__(self, output_filename, function, rename_broken=False):
+        """If @rename_broken is set, any eventual outputfile that exists
+        when the job crashes will be renamed to output_filename + '.broken'
+        (overwriting whatever was there before)
+        """
         if not hasattr(function, '__call__'):
             raise ValueError("function was not a callable")
         Job.__init__(self, output_filename)
@@ -463,6 +527,8 @@ class FileGeneratingJob(Job):
 
 
 class MultiFileGeneratingJob(FileGeneratingJob):
+    """Create multiple files - recreate all of them if at least one is missing.
+    """
 
     def __new__(cls, filenames, *args, **kwargs):
         job_id = ":".join(sorted(str(x) for x in filenames))
@@ -472,6 +538,10 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         return (self.filenames, )
 
     def __init__(self, filenames, function, rename_broken=False):
+        """If @rename_broken is set, any eventual outputfile that exists
+        when the job crashes will be renamed to output_filename + '.broken'
+        (overwriting whatever was there before)
+        """
         if not hasattr(function, '__call__'):
             raise ValueError("function was not a callable")
         if not hasattr(filenames, '__iter__'):
@@ -533,6 +603,8 @@ class MultiFileGeneratingJob(FileGeneratingJob):
 
 
 class TempFileGeneratingJob(FileGeneratingJob):
+    """Create a temporary file that is removed once all direct dependands have
+    been executed sucessfully"""
 
     def cleanup(self):
         logger.info("%s cleanup" % self)
@@ -560,6 +632,8 @@ class TempFileGeneratingJob(FileGeneratingJob):
 
 
 class DataLoadingJob(Job):
+    """Modify the current (system local) master process with a callback function.
+    No cleanup is performed - use AttributeLoadingJob if you want your data to be unloaded"""
     def __init__(self, job_id, callback):
         if not hasattr(callback, '__call__'):
             raise ValueError("callback was not a callable")
@@ -600,6 +674,11 @@ class DataLoadingJob(Job):
 
 
 class AttributeLoadingJob(DataLoadingJob):
+    """Modify the current master process by loading the return value of a callback
+    into an object attribute.
+
+    On cleanup, the attribute is deleted via del
+    """
 
     def __init__(self, job_id, object, attribute_name, callback):
         if not hasattr(callback, '__call__'):
@@ -658,6 +737,7 @@ class AttributeLoadingJob(DataLoadingJob):
 
 
 class _GraphModifyingJob(Job):
+    """Baseclass for jobs that modify the pipegraph during runtime"""
 
     def modifies_jobgraph(self):
         return True
@@ -667,7 +747,22 @@ class _GraphModifyingJob(Job):
 
 
 class DependencyInjectionJob(_GraphModifyingJob):
+    """Inject additional dependencies into a Job (B) that depends on the DependencyInjectionJob (A).
+    B can not run before A, and once A has run, B has additional dependencies.
+    For example if you have an aggregation job, but the generating jobs are not known until you have
+    queried a webservice. Then your aggregation job would be B, and A would create all the generating
+    jobs.
+    The callback should report back the jobs it has created - B will automagically depend on those 
+    after A has run (you don't need to do this yourself).
+
+    The DependencyInjectionJob does it's very best to check wheter you're doing something stupid and 
+    will raise JobContractErrors if you do.
+    """
+
     def __init__(self, job_id, callback, check_for_dependency_injections=True):
+        """@check_for_dependency_injections - by default, we check whether you injected correctly,
+        but some of these checks are costly so you might wish to optimize by setting check_for_dependency_injections=False, but injecting into already run jobs and so on might create invisible (non exception raising) bugs.
+        """
         if not hasattr(callback, '__call__'):
             raise ValueError("callback was not a callable")
         Job.__init__(self, job_id)
@@ -739,6 +834,9 @@ class DependencyInjectionJob(_GraphModifyingJob):
 
 
 class JobGeneratingJob(_GraphModifyingJob):
+    """A Job generating new jobs. The new jobs must be leaves in the sense that no job that existed
+    before may depend on them. If that's what you want, see L{DependencyInjectionJob}.
+    """
     def __init__(self, job_id, callback):
         if not hasattr(callback, '__call__'):
             raise ValueError("callback was not a callable")
@@ -777,7 +875,7 @@ class FinalJob(Job):
     Use these sparringly - they really only make sense for things where you really want to hook
     'after the pipeline has run', everything else realy is better of if you depend on the appropriate job
 
-    FinalJobs are also run on each run - but only if no other job died
+    FinalJobs are also run on each run - but only if no other job died.
     """
 
     def __init__(self, jobid, callback):
@@ -807,9 +905,9 @@ class PlotJob(FileGeneratingJob):
     """Calculate some data for plotting, cache it in cache/output_filename, and plot from there.
     creates two jobs, a plot_job (this one) and a cache_job (FileGeneratingJob, in self.cache_job),
 
-    To use these jobs, you need to have pyggplot available
+    To use these jobs, you need to have pyggplot available.
     """
-    def __init__(self, output_filename, calc_function, plot_function, render_args = None, skip_table = False, skip_caching = False):
+    def __init__(self, output_filename, calc_function, plot_function, render_args=None, skip_table=False, skip_caching=False):
         if not isinstance(output_filename, str) or isinstance(output_filename, unicode):
             raise ValueError("output_filename was not a string or unicode")
         if not (output_filename.endswith('.png') or output_filename.endswith('.pdf') or output_filename.endswith('.svg')):
@@ -834,7 +932,7 @@ class PlotJob(FileGeneratingJob):
                 df = calc_function()
                 if not isinstance(df, pydataframe.DataFrame):
                     do_raise = True
-                    if isinstance(df, dict): #might be a list dfs...
+                    if isinstance(df, dict):  # might be a list dfs...
                         do_raise = False
                         for x in df.values():
                             if not isinstance(x, pydataframe.DataFrame):
@@ -917,7 +1015,7 @@ class PlotJob(FileGeneratingJob):
         #FileGeneratingJob.depends_on(self, other_job)  # just like the cached jobs, the plotting does not depend on the loading of prerequisites
         if self.skip_caching:
             Job.depends_on(self, other_job)
-        elif hasattr(self, 'cache_job') and not other_job is self.cache_job: #activate this after we have added the invariants...
+        elif hasattr(self, 'cache_job') and not other_job is self.cache_job:  # activate this after we have added the invariants...
             self.cache_job.depends_on(other_job)
         return self
 
@@ -938,7 +1036,10 @@ class PlotJob(FileGeneratingJob):
 
 
 def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args=None):
-    """Combine multiple PlotJobs into a common (faceted) output plot"""
+    """Combine multiple PlotJobs into a common (faceted) output plot
+    
+    To use these jobs, you need to have pyggplot available.
+    """
     if not isinstance(output_filename, str) or isinstance(output_filename, unicode):
         raise ValueError("output_filename was not a string or unicode")
     if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):
@@ -1011,6 +1112,8 @@ class _CacheFileGeneratingJob(FileGeneratingJob):
 
 
 class CachedAttributeLoadingJob(AttributeLoadingJob):
+    """Like an AttributeLoadingJob, except that the callback value is pickled into 
+    a file called job_id and reread on the next run"""
 
     def __new__(cls, job_id, *args, **kwargs):
         if not isinstance(job_id, str) and not isinstance(job_id, unicode):
@@ -1063,6 +1166,8 @@ class CachedAttributeLoadingJob(AttributeLoadingJob):
 
 
 class CachedDataLoadingJob(DataLoadingJob):
+    """Like a DataLoadingJob, except that the callback value is pickled into 
+    a file called job_id and reread on the next run"""
 
     def __new__(cls, job_id, *args, **kwargs):
         if not isinstance(job_id, str) and not isinstance(job_id, unicode):
