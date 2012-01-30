@@ -12,7 +12,11 @@ from ppg_exceptions import (
         PyPipeGraphError,
         JobDiedException
         )
-import twisted_fork
+try:
+    import twisted_fork
+    twisted_available = True
+except ImportError:
+    pass
 import util
 
 from job import (
@@ -48,7 +52,7 @@ all = [
         JobGeneratingJob, DependencyInjectionJob,
         FinalJob,
 
-        util, twisted_fork
-
-
+        util
         ]
+if twisted_available:
+    all.append(twisted_fork)
