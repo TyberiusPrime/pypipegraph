@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import logging
 import time
 import util
 logger = util.start_logging('RC')
@@ -34,17 +33,16 @@ import sys
 import cPickle
 import exceptions
 import ppg_exceptions
-import subprocess
 import tempfile
 
-import messages
 try:
     from twisted.internet import reactor
     from twisted.internet.protocol import ClientCreator, ProcessProtocol
     from twisted.protocols import amp
+    import messages
     twisted_available = True
 except ImportError:
-    twisted_available = False
+        twisted_available = False
 
 
 
