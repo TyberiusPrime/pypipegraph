@@ -272,6 +272,25 @@ Notes
 * Beware of passing instance functions to FunctionInvariants - if the job creation code is done again for a different instance, it will raise an exception, because the bound function from before is not the same function you pass in now. Pass in class.function instead of self.function
 
 
+Python function gotchas
+-------------------------
+Please keep in mind that in python functions by default bind to the name of variables in their scope, no to their values.
+This means that ::
+
+    for filename in ('A', 'B', 'C'):
+       def shu():
+           write_to_file(filename=filename, text='hello world')
+       job = pypipegraph.FileGeneratingJob(i, shu)
+
+will not do what you want - you'll end up with three jobs, all writing to the same file (and the appropriate JobContractExceptions because two of them did not create their output files).
+What you need to do is rebind the variable::
+
+    for filename in ('A', 'B', 'C'):
+       def shu(filename=filename):  #that's the magic line. Also works for lambdas
+           write_to_file(filename=filename, text='hello world')
+       job = pypipegraph.FileGeneratingJob(i, shu)
+
+
 Development notes
 ------------------
 * We use nosetest for testing (nosetests test_pypipegraph.py), and create a subdirectory for each test to isolate test cases. 
