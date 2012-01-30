@@ -12,27 +12,31 @@ Please see http://code.google.com/p/pypipegraph for the project's homepage.
 .. toctree::
    :maxdepth: 2
 
-.. automodule:: pypipegraph
-    :members:
+Readme
+======================================
+.. include:: ../README.txt
+
+Api documentation
+===================
 
 Core functionality
-------------------
+---------------------------
 .. autofunction:: pypipegraph.new_pipegraph
 .. autoclass:: pypipegraph.graph.Pipegraph
 .. autofunction:: pypipegraph.graph.run_pipegraph
 
 Jobs
-------------------
+------------------------------
 
 Data loading jobs
-_________________
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 .. autoclass:: pypipegraph.DataLoadingJob
 .. autoclass:: pypipegraph.CachedDataLoadingJob
 .. autoclass:: pypipegraph.AttributeLoadingJob
 .. autoclass:: pypipegraph.CachedAttributeLoadingJob
 
 File generating jobs
-____________________
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 .. autoclass:: pypipegraph.FileGeneratingJob
 .. autoclass:: pypipegraph.MultiFileGeneratingJob
 .. autoclass:: pypipegraph.TempFileGeneratingJob
@@ -40,20 +44,20 @@ ____________________
 .. autoclass:: pypipegraph.CombinedPlotJob
 
 Invariant checking jobs
-_______________________
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 .. autoclass:: pypipegraph.FunctionInvariant
 .. autoclass:: pypipegraph.FileTimeInvariant
 .. autoclass:: pypipegraph.FileChecksumInvariant
 .. autoclass:: pypipegraph.ParameterInvariant
 
 Job graph modifiying jobs
-_________________________
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 .. autoclass:: pypipegraph.DependencyInjectionJob
 .. autoclass:: pypipegraph.JobGeneratingJob
 
 
 Exceptions:
-------------
+------------------------------
 A Pipegraph may throw the following exceptions:
 .. autoclass:: pypipegraph.ppg_exceptions.PyPipeGraphError
 .. autoclass:: pypipegraph.ppg_exceptions.CycleError
@@ -64,7 +68,7 @@ A Pipegraph may throw the following exceptions:
 
 
 Utility functions
-------------------
+------------------------------
 .. autofunction:: pypipegraph.util.change_logging_port
 .. autofunction:: pypipegraph.util.output_file_exists
 
