@@ -14,7 +14,6 @@ from ppg_exceptions import (
         )
 import twisted_fork
 import util
-import cloudpickle
 
 from job import (
     Job, JobList,
@@ -49,7 +48,7 @@ all = [
         JobGeneratingJob, DependencyInjectionJob,
         FinalJob,
 
-        util, twisted_fork, cloudpickle
+        util, twisted_fork
 
 
         ]

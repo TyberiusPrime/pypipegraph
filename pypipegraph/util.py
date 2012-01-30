@@ -25,7 +25,6 @@ import os
 import stat
 import logging
 import logging.handlers
-from twisted.internet import reactor
 
 global_pipegraph = None
 is_remote = False
