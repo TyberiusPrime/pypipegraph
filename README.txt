@@ -1,5 +1,6 @@
-pypipegraph
-=============
+Introduction
+----------------
+
 
 pypipegraph is an MIT-licensed library for constructing a workflow piece by piece and
 executing just the parts of it that need to be (re-)done.  It supports using
@@ -274,5 +275,5 @@ Notes
 
 Development notes
 --------
-*We use nosetest for testing (nosetests test_pypipegraph.py), and create a subdirectory for each test to isolate test cases. 
-*There usually are some test cases not yet implemented. These are expected to raise NotImplementedError()s.
+* We use nosetest for testing (nosetests test_pypipegraph.py), and create a subdirectory for each test to isolate test cases. 
+* There usually are some test cases not yet implemented. These are expected to raise NotImplementedError()s.

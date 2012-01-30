@@ -6,9 +6,10 @@ from graph import (
         )
 from ppg_exceptions import (
         RuntimeError,
+        RuntimeException,
         CycleError,
         JobContractError,
-        PyPipelineGraphError,
+        PyPipeGraphError,
         JobDiedException
         )
 import twisted_fork
@@ -34,8 +35,8 @@ all = [
         run_pipegraph, new_pipegraph, forget_job_status,
         destroy_global_pipegraph,
 
-        RuntimeError, CycleError, JobContractError,
-        PyPipelineGraphError, JobDiedException,
+        RuntimeError, RuntimeException, CycleError, JobContractError,
+        PyPipeGraphError, JobDiedException,
 
         Job, JobList,
         FileGeneratingJob, MultiFileGeneratingJob,
