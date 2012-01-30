@@ -55,6 +55,10 @@ def start_logging(module):
 
 
 def change_logging_port(port):
+    """By default, a running Pipegraph chatters to localhost:5005 via tcp 
+    (use utils/log_listener.py to listen).
+    If you want it to log to another port, use this function before createing the graph.
+    """
     global default_logging_handler
     new_handler = logging.handlers.SocketHandler('127.0.0.1', port)
     for logger in loggers:
