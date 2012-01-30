@@ -270,6 +270,7 @@ Notes
 * Adding jobs gives you an iterable of jobs (which depends_on also takes). Adding a job and an iterable also gives you an iterable. So does adding an iterable and a job or an iterable and an iterable...
 * Executing jobs (all `Output jobs`_) have resource attributes: cores_needed (default 1, -1 means 'all you can get'), memory_needed (default = -1, means don't worry about it, just start one per core, assume memory / cores. If you specify something above memory/core it's treated as if you need (your_memory_specification / (memory/core)) cores). memory_needed is in bytes!
 * Beware of passing instance functions to FunctionInvariants - if the job creation code is done again for a different instance, it will raise an exception, because the bound function from before is not the same function you pass in now. Pass in class.function instead of self.function
+* pypipegraph is developed and tested on Ubuntu. It will not work reasonably on Windows - it's job model makes heavy use of fork() and windows process creating does not implicitly copy-on-write the current process' memory contents.
 
 
 Python function gotchas
