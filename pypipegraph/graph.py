@@ -96,6 +96,7 @@ class Pipegraph(object):
         self.check_cycles()
         self.load_invariant_status()
         self.distribute_invariant_changes()
+        self.dump_invariant_status() # the jobs will have removed their output, so we can safely store the invariant data
         self.build_todo_list()
         self.dump_graph()
 
