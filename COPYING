@@ -1,4 +1,7 @@
-"""
+PyPipegraph is under the MIT License.
+cloudpickle.py and xrange_helper.py from PiCloud are redistributed in their original forms and under the GNU Lesser General Public License.
+
+---
 The MIT License (MIT)
 
 Copyright (c) 2012, Florian Finkernagel <finkernagel@imt.uni-marburg.de>
@@ -20,44 +23,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-"""
-
-class PyPipeGraphError(ValueError):
-    """Base class for all PyPipelineGraph exceptions"""
-    pass
-
-
-class CycleError(PyPipeGraphError):
-    """You created a cycle in your pipegraph,
-    this is not supported"""
-    pass
-
-
-class RuntimeError(PyPipeGraphError):
-    """A job died for whatever reason. All unaffected jobs will have been done."""
-    pass
-
-
-class RuntimeException(PyPipeGraphError):
-    """Something went wrong with the pipegraph, a bug
-    (A poorly named exception in light of RuntimeError)
-    """
-
-
-class JobContractError(PyPipeGraphError):
-    """One of the jobs did not confirm to it's supposed behaviour"""
-    pass
-
-
-class JobDiedException(PyPipeGraphError):
-    """A job went away without signing off"""
-
-    def __init__(self, exit_code):
-        self.exit_code = exit_code
-        msg = "Exitcode was %s" % self.exit_code
-        PyPipeGraphError.__init__(self, msg)
-
-
-class CommunicationFailure(PyPipeGraphError):
-    """something went wrong talking to a slave"""
-    pass

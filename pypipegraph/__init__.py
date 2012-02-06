@@ -6,14 +6,18 @@ from graph import (
         )
 from ppg_exceptions import (
         RuntimeError,
+        RuntimeException,
         CycleError,
         JobContractError,
-        PyPipelineGraphError,
+        PyPipeGraphError,
         JobDiedException
         )
-import twisted_fork
+try:
+    import twisted_fork
+    twisted_available = True
+except ImportError:
+    pass
 import util
-import cloudpickle
 
 from job import (
     Job, JobList,
@@ -34,8 +38,8 @@ all = [
         run_pipegraph, new_pipegraph, forget_job_status,
         destroy_global_pipegraph,
 
-        RuntimeError, CycleError, JobContractError,
-        PyPipelineGraphError, JobDiedException,
+        RuntimeError, RuntimeException, CycleError, JobContractError,
+        PyPipeGraphError, JobDiedException,
 
         Job, JobList,
         FileGeneratingJob, MultiFileGeneratingJob,
@@ -48,7 +52,7 @@ all = [
         JobGeneratingJob, DependencyInjectionJob,
         FinalJob,
 
-        util, twisted_fork, cloudpickle
-
-
+        util
         ]
+if twisted_available:
+    all.append(twisted_fork)

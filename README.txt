@@ -1,7 +1,7 @@
-pypipegraph
-=============
+Introduction
+----------------
 
-pypipegraph is a library for constructing a workflow piece by piece and
+_pypipegraph: http://code.google.com/p/pypipegraph is an MIT-licensed library for constructing a workflow piece by piece and
 executing just the parts of it that need to be (re-)done.  It supports using
 multiple cores (SMP) and (eventually, alpha code right now) machines (cluster)
 and is a hybrid between a dependency tracker (think 'make') and a cluster
@@ -222,6 +222,13 @@ pypipegraph has a small set of exceptions (all descending from PyPipelineGraphEr
 * JobContractError is stored in a job's .exception if the job's callback did not comply with it's requirements (e.g. a FileGeneratingJob did not actually create the file)
 * CycleError: you have fabricated a cycle in your dependencies. Unfortunatly it's currently not reported where the cycle is (though some simple circles are reported early on)
 
+
+Runtime
+----------
+While the pypipegraph is running, you can terminate it with CTRL-C, and query it about which jobs are running 
+by pressing Enter (that might take up to 5 seconds though, which incidentially is the 'check on slaves' timeout)
+
+
 Executing structure
 -----------------------
 
@@ -241,6 +248,17 @@ The mcp knows (thanks to the resource coordinator) about the resources available
 (number of cpu cores, memory) and doesn't overload the nodes (by spawning more
 processes than there are cores or by spawning too many memory hungry jobs at once).
 
+
+Generated Files
+-----------------------
+Besides your output files, a pipegraph creates some auxillary files:
+* ./.pypipegraph_status_robust - stores the invariant data of all jobs
+* ./logs/ppg_run.txt  - the chattery debug output of every decision the pipegraph makes (only if logs exists). All logging is also send to localhost 5005, and you can listen with util/log_listener.py
+* ./logs/ppg_errors.txt - a log of all failed jobs and their exception/stdout/stderr (only if logs exists and the file is writable)
+* ./logs/ppg_graph.txt - a dump of the connected graph structure (which job depends on which) (only if logs exists)
+
+
+
 Notes
 --------
 * A pipegraph and it's jobs can only be run once (but you can create multiple pipegraphs serially).
@@ -252,9 +270,29 @@ Notes
 * Adding jobs gives you an iterable of jobs (which depends_on also takes). Adding a job and an iterable also gives you an iterable. So does adding an iterable and a job or an iterable and an iterable...
 * Executing jobs (all `Output jobs`_) have resource attributes: cores_needed (default 1, -1 means 'all you can get'), memory_needed (default = -1, means don't worry about it, just start one per core, assume memory / cores. If you specify something above memory/core it's treated as if you need (your_memory_specification / (memory/core)) cores). memory_needed is in bytes!
 * Beware of passing instance functions to FunctionInvariants - if the job creation code is done again for a different instance, it will raise an exception, because the bound function from before is not the same function you pass in now. Pass in class.function instead of self.function
+* pypipegraph is developed and tested on Ubuntu. It will not work reasonably on Windows - it's job model makes heavy use of fork() and windows process creating does not implicitly copy-on-write the current process' memory contents.
+
+
+Python function gotchas
+-------------------------
+Please keep in mind that in python functions by default bind to the name of variables in their scope, no to their values.
+This means that ::
+
+    for filename in ('A', 'B', 'C'):
+       def shu():
+           write_to_file(filename=filename, text='hello world')
+       job = pypipegraph.FileGeneratingJob(i, shu)
+
+will not do what you want - you'll end up with three jobs, all writing to the same file (and the appropriate JobContractExceptions because two of them did not create their output files).
+What you need to do is rebind the variable::
+
+    for filename in ('A', 'B', 'C'):
+       def shu(filename=filename):  #that's the magic line. Also works for lambdas
+           write_to_file(filename=filename, text='hello world')
+       job = pypipegraph.FileGeneratingJob(i, shu)
 
 
 Development notes
---------
-*We use nosetest for testing (nosetests test_pypipegraph.py), and create a subdirectory for each test to isolate test cases. 
-*There usually are some test cases not yet implemented. These are expected to raise NotImplementedError()s.
+------------------
+* We use nosetest for testing (nosetests test_pypipegraph.py), and create a subdirectory for each test to isolate test cases. 
+* There usually are some test cases not yet implemented. These are expected to raise NotImplementedError()s.
