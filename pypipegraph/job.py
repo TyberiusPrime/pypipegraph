@@ -912,6 +912,10 @@ class PlotJob(FileGeneratingJob):
             of.close()
             return df
 
+    def __str__(self):
+        return "%s (job_id=%s,id=%s\n Calc_func: %s:%s\nPlot_func: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.calc_function.func_code.co_filename, self.calc_function.func_code.co_firstlineno,
+                self.plot_function.func_code.co_filename, self.plot_function.func_code.co_firstlineno)
+
 
 def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args=None):
     """Combine multiple PlotJobs into a common (faceted) output plot"""
@@ -1066,6 +1070,11 @@ class CachedDataLoadingJob(DataLoadingJob):
         lfg = _CacheFileGeneratingJob(cache_filename, calculating_function, self)
         self.lfg = lfg
         Job.depends_on(self, lfg)
+        self.calculating_function = calculating_function
+        self.loading_function = loading_function
+
+    def __str__(self):
+        return "%s (job_id=%s,id=%s\n Calc calcback: %s:%s\nLoad callback: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.calculating_function.func_code.co_filename, self.calculating_function.func_code.co_firstlineno, self.loading_function.func_code.co_filename, self.loading_function.func_code.co_firstlineno)
 
     def depends_on(self, jobs):
         self.lfg.depends_on(jobs)
