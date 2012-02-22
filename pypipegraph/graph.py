@@ -270,11 +270,12 @@ class Pipegraph(object):
         finished = False
         while not finished:
             try:
-                op = open(self.invariant_status_filename, 'wb')
+                op = open(self.invariant_status_filename + '_temp', 'wb')
                 for key, value in self.invariant_status.items():
                     cPickle.dump(key, op, cPickle.HIGHEST_PROTOCOL)
                     cPickle.dump(value, op, cPickle.HIGHEST_PROTOCOL)
                 op.close()
+                os.rename(self.invariant_status_filename + '_temp', self.invariant_status_filename)
                 finished = True
             except KeyboardInterrupt:
                 pass
