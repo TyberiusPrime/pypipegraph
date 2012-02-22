@@ -912,6 +912,10 @@ class PlotJob(FileGeneratingJob):
             of.close()
             return df
 
+    def __str__(self):
+        return "%s (job_id=%s,id=%s\n Calc function: %s:%s\nPlot function: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.calc_function.func_code.co_filename, self.calc_function.func_code.co_firstlineno,
+                self.plot_function.func_code.co_filename,self.plot_function.func_code.co_firstlineno)
+
 
 def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args=None):
     """Combine multiple PlotJobs into a common (faceted) output plot"""
