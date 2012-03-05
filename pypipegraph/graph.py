@@ -233,7 +233,8 @@ class Pipegraph(object):
         for job in self.jobs.values():
             if job.is_final_job:
                 for jobB in self.jobs.values():
-                    if not jobB.is_final_job and not jobB.dependants:
+                    non_final_dependands = [j for j in jobB.dependants if not j.is_final_job]
+                    if not jobB.is_final_job and not non_final_dependands:
                         job.prerequisites.add(jobB)
                         jobB.dependants.add(job)
 
@@ -652,6 +653,7 @@ class Pipegraph(object):
                     job.invalidated(reason='not done')
         self.connect_graph()
         self.distribute_invariant_changes()
+        self.dump_graph()
         #we not only need to check the jobs we have received, we also need to check their dependands
         #for example there might have been a DependencyInjectionJob than injected a DataLoadingJob
         #that had it's invariant FunctionInvariant changed...
