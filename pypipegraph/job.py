@@ -91,7 +91,7 @@ class Job(object):
         """Handles the singletonization on the job_id"""
         #logger.info("New for %s %s" % (cls, job_id))
         if not isinstance(job_id, str):
-            raise ValueError("Job_id must be a string, was %s" % repr(job_id))
+            raise ValueError("Job_id must be a string, was %s %s" % (job_id, type(job_id)))
         if not job_id in util.job_uniquifier:
             util.job_uniquifier[job_id] = object.__new__(cls)
             util.job_uniquifier[job_id].job_id = job_id  # doing it later will fail because hash apperantly might be called before init has run?
@@ -1192,7 +1192,7 @@ class CachedDataLoadingJob(DataLoadingJob):
             try:
                 data = cPickle.load(op)
             except Exception, e:
-                raise ValueError("Unpickling error in file %s - original error was %s" % (cache_filename, e))
+                raise ValueError("Unpickling error in file %s - original error was %s" % (cache_filename, str(e)))
             op.close()
             loading_function(data)
         DataLoadingJob.__init__(self, cache_filename + '_load', do_load)  # todo: adjust functioninvariant injection
