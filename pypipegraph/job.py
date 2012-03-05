@@ -450,7 +450,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         if not self.is_done():
             missing_files = []
             for f in self.filenames:
-                if not os.path.exists(f):
+                if not util.output_file_exists(f):
                     missing_files.append(f)
             raise ppg_exceptions.JobContractError("%s did not create all of its files.\nMissing were:\n %s" % (self.job_id,"\n".join(missing_files)))
     def runs_in_slave(self):
