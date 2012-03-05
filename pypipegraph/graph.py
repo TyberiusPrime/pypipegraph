@@ -1,4 +1,5 @@
 import os
+import signal
 import time
 import collections
 import resource_coordinators
@@ -98,6 +99,7 @@ class Pipegraph(object):
 
         #make us some computational engines and put them to work.
         logger.info("now executing")
+        self.install_signals()
         try:
             self.spawn_slaves()
             self.execute_jobs()
@@ -105,6 +107,7 @@ class Pipegraph(object):
         finally:
             #clean up
             print 'starting cleanup'
+            self.restore_signals()
             util.flush_logging()
             self.dump_html_status()
             self.dump_invariant_status()
@@ -227,11 +230,13 @@ class Pipegraph(object):
 
     def load_invariant_status(self):
         if os.path.exists(invariant_status_filename_old):
+            logger.info("Loading old status file")
             op = open(invariant_status_filename_old, 'rb')
             self.invariant_status = cPickle.load(op)
             op.close()
             os.unlink(invariant_status_filename_old) #throw away the old file
         elif os.path.exists(invariant_status_filename_new):
+            logger.info("Loading new invariant status file")
             op = open(invariant_status_filename_new, 'rb')
             all = op.read()
             op.seek(0, os.SEEK_SET)
@@ -259,6 +264,7 @@ class Pipegraph(object):
                     leave = True
         else:
             self.invariant_status = collections.defaultdict(bool)
+        logger.info("loaded %i invariant stati" % len(self.invariant_status))
 
     def dump_invariant_status(self):
         finished = False
@@ -644,4 +650,14 @@ class Pipegraph(object):
                 op.write(job.job_id + " was ok")
             op.write("</p>")
         op.close()
+
+    def install_signals(self):
+        """make sure we don't crash just because the user logged of"""
+        def hup():
+            logger.info("user logged off - continuing run")
+        self._old_signal_up = signal.signal(signal.SIGHUP, hup)
+
+    def restore_signals(self):
+        if self._old_signal_up:
+            signal.signal(signal.SIGHUP, self._old_signal_up)
 
