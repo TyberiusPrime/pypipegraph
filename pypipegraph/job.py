@@ -366,6 +366,12 @@ class FunctionInvariant(_InvariantJob):
                 ))
         self.function = function
 
+    def __str__(self):
+        if self.function:
+            return "%s (job_id=%s,id=%s\n Function: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.function.func_code.co_filename, self.function.func_code.co_firstlineno)
+        else:
+            return "%s (job_id=%s,id=%s, Function: None)" % (self.__class__.__name__, self.job_id, id(self))
+
     def _get_invariant(self, old):
         if self.function is None:
             return None  # since the 'default invariant' is False, this will still read 'invalidated the first time it's being used'
