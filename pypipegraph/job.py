@@ -1208,6 +1208,10 @@ class CachedDataLoadingJob(DataLoadingJob):
         self.calculating_function = calculating_function
         self.loading_function = loading_function
 
+    def inject_auto_invariants(self):
+        if not self.do_ignore_code_changes:
+            self.depends_on(FunctionInvariant(self.job_id + '_func', self.loading_function)) # we don't want to depend on 'callback', that's our tiny wrapper, but on the loading_function instead.
+
     def __str__(self):
         return "%s (job_id=%s,id=%s\n Calc calcback: %s:%s\nLoad callback: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.calculating_function.func_code.co_filename, self.calculating_function.func_code.co_firstlineno, self.loading_function.func_code.co_filename, self.loading_function.func_code.co_firstlineno)
 
