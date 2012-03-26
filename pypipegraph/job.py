@@ -985,7 +985,8 @@ class PlotJob(FileGeneratingJob):
     def add_another_plot(self, output_filename, plot_function, render_args=None):
         """Add another plot job that runs on the same data as the original one (calc only done once)"""
         import pyggplot
-
+        if render_args is None:
+            render_args = {}
         def run_plot():
             df = self.get_data()
             plot = plot_function(df)
