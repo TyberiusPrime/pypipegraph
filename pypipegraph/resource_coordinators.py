@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 """
 The MIT License (MIT)
 
@@ -23,23 +25,30 @@ SOFTWARE.
 """
 
 import time
-import util
+from . import util
 logger = util.start_logging('RC')
 import os
 import traceback
 import multiprocessing
-import Queue
+try: 
+    import Queue
+    queue = Queue
+except ImportError:
+    import queue
 import sys
-import cPickle
-import exceptions
-import ppg_exceptions
+try:
+    import cPickle
+    pickle = cPickle
+except ImportError:
+    import pickle
+from . import ppg_exceptions
 import tempfile
 
 try:
     from twisted.internet import reactor
     from twisted.internet.protocol import ClientCreator, ProcessProtocol
     from twisted.protocols import amp
-    import messages
+    from . import messages
     twisted_available = True
 except ImportError:
         twisted_available = False
@@ -51,7 +60,7 @@ class DummyResourceCoordinator:
 
 
 def get_memory_available():
-    op = open("/proc/meminfo", 'rb')
+    op = open("/proc/meminfo", 'r')
     d = op.read()
     op.close()
     mem_total = d[d.find('MemTotal:') + len('MemTotal:'):]
@@ -116,14 +125,14 @@ class LocalSystem:
                 job.stop_time = time.time()
                 if job.failed:
                     try:
-                        if job.exception.startswith('STR'):
+                        if job.exception.startswith('STR'.encode('UTF-8')):
                             job.exception = job.exception[3:]
-                            raise cPickle.UnpicklingError("String Transmission")  # what an ugly control flow...
+                            raise pickle.UnpicklingError("String Transmission")  # what an ugly control flow...
                         logger.info("Before depickle %s" % type(exception))
-                        job.exception = cPickle.loads(exception)
+                        job.exception = pickle.loads(exception)
                         logger.info("After depickle %s" % type(job.exception))
                         logger.info("exception stored at %s" % (job))
-                    except cPickle.UnpicklingError:  # some exceptions can't be pickled, so we send a string instead
+                    except pickle.UnpicklingError:  # some exceptions can't be pickled, so we send a string instead
                         pass
                     if job.exception:
                         logger.info("Exception: %s" % repr(exception))
@@ -135,7 +144,7 @@ class LocalSystem:
                         job.exception = ppg_exceptions.JobContractError("%s created jobs, but was not a job with modifies_jobgraph() returning True" % job)
                         job.failed = True
                     else:
-                        new_jobs = cPickle.loads(new_jobs)
+                        new_jobs = pickle.loads(new_jobs)
                         logger.info("We retrieved %i new jobs from %s" % (len(new_jobs), job))
                         self.pipegraph.new_jobs_generated_during_runtime(new_jobs)
 
@@ -148,7 +157,7 @@ class LocalSystem:
                     break
                 self.pipegraph.start_jobs()
 
-            except Queue.Empty, IOError:  # either timeout, or the que failed
+            except (queue.Empty, IOError):  # either timeout, or the que failed
                 #logger.info("Timout")
                 #for job in self.pipegraph.running_jobs:
                     #logger.info('running %s' % (job, ))
@@ -197,7 +206,7 @@ class LocalSlave:
                         job.job_id,  # id...
                         '',  # output
                         '',  # output
-                        'Prerequsite failed',
+                        'Prerequsite failed'.encode('UTF-8'),
                         '',
                         False,
                     ))
@@ -215,8 +224,8 @@ class LocalSlave:
                 logger.info("Slave, returning to start_jobs")
 
     def load_job(self, job):  # this executes a load job returns false if an error occured
-        stdout = tempfile.SpooledTemporaryFile()
-        stderr = tempfile.SpooledTemporaryFile()
+        stdout = tempfile.SpooledTemporaryFile(mode='w')
+        stderr = tempfile.SpooledTemporaryFile(mode='w')
         old_stdout = sys.stdout
         old_stderr = sys.stderr
         sys.stdout = stdout
@@ -227,13 +236,13 @@ class LocalSlave:
             job.load()
             was_ok = True
             exception = None
-        except Exception, e:
+        except Exception as e:
             trace = traceback.format_exc()
             was_ok = False
             exception = e
             try:
-                exception = cPickle.dumps(exception)
-            except Exception, e:  # some exceptions can't be pickled, so we send a string instead
+                exception = pickle.dumps(exception)
+            except Exception as e:  # some exceptions can't be pickled, so we send a string instead
                 exception = str(exception)
         stdout.seek(0, os.SEEK_SET)
         stdout_text = stdout.read()
@@ -258,8 +267,8 @@ class LocalSlave:
         return was_ok
 
     def run_a_job(self, job, is_local=True):  # this runs in the spawned processes, except for job.modifies_jobgraph()==True jobs
-        stdout = tempfile.SpooledTemporaryFile()
-        stderr = tempfile.SpooledTemporaryFile()
+        stdout = tempfile.SpooledTemporaryFile(mode='w')
+        stderr = tempfile.SpooledTemporaryFile(mode='w')
         old_stdout = sys.stdout
         old_stderr = sys.stderr
         sys.stdout = stdout
@@ -275,14 +284,14 @@ class LocalSlave:
                 new_jobs = self.prepare_jobs_for_transfer(temp)
             elif temp:
                 raise ppg_exceptions.JobContractError("Job returned a value (which should be new jobs generated here) without having modifies_jobgraph() returning True")
-        except Exception, e:
+        except Exception as e:
             trace = traceback.format_exc()
             was_ok = False
             exception = e
             try:
-                exception = cPickle.dumps(exception)
-            except Exception, e:  # some exceptions can't be pickled, so we send a string instead
-                exception = "STR" + str(exception)
+                exception = pickle.dumps(e)
+            except Exception as e:  # some exceptions can't be pickled, so we send a string instead
+                exception = bytes("STR", 'UTF-8') + bytes(e)
         stdout.seek(0, os.SEEK_SET)
         stdout_text = stdout.read()
         stdout.close()
@@ -316,7 +325,7 @@ class LocalSlave:
             job.dependants = [dep.job_id for dep in job.dependants]
          # unpackanging is don in new_jobs_generated_during_runtime
         self.rc.pipegraph.new_jobs_generated_during_runtime(job_dict)
-        return cPickle.dumps({})  # The LocalSlave does not need to serialize back the jobs, it already is running in the space of the MCP
+        return pickle.dumps({})  # The LocalSlave does not need to serialize back the jobs, it already is running in the space of the MCP
 
     def check_for_dead_jobs(self):
         remove = []
@@ -332,7 +341,7 @@ class LocalSlave:
                             job.job_id,
                             'no stdout available',
                             'no stderr available',
-                            cPickle.dumps(ppg_exceptions.JobDiedException(proc.exitcode)),
+                            pickle.dumps(ppg_exceptions.JobDiedException(proc.exitcode)),
                             '',
                             False  # no new jobs
                             ))
@@ -372,9 +381,9 @@ if twisted_available:
         def enter_twisted(self, pipe):
              # this happens in a spawned process...
             reactor.run()
-            print 'exception in spawned', repr(self.pipegraph.jobs['out/a'].exception)
-            import cloudpickle
-            pipe.send((cloudpickle.dumps(self.pipegraph.jobs), cPickle.dumps(self.pipegraph.invariant_status)))
+            print(('exception in spawned', repr(self.pipegraph.jobs['out/a'].exception)))
+            from . import cloudpickle
+            pipe.send((cloudpickle.dumps(self.pipegraph.jobs), pickle.dumps(self.pipegraph.invariant_status)))
 
         def enter_loop(self):
             self.slaves_ready_count = 0
@@ -386,8 +395,8 @@ if twisted_available:
             p.start()
             jobs_str, invariant_str = parent_conn.recv()
             p.join()
-            cPickle.loads(jobs_str)  # which should automatically fill in the existing jobs...
-            self.pipegraph.invariant_status = cPickle.loads(invariant_str)
+            pickle.loads(jobs_str)  # which should automatically fill in the existing jobs...
+            self.pipegraph.invariant_status = pickle.loads(invariant_str)
             #p.start()
             #p.join()
             #if p.exitcode != 0:
@@ -437,10 +446,10 @@ if twisted_available:
             if job.failed:
                 try:
                     logger.info("Before depickle %s" % type(exception))
-                    job.exception = cPickle.loads(exception)
+                    job.exception = pickle.loads(exception)
                     logger.info("After depickle %s" % type(job.exception))
                     logger.info("exception stored at %s" % (job))
-                except (cPickle.UnpicklingError, exceptions.EOFError):  # some exceptions can't be pickled, so we send a string instead
+                except (pickle.UnpicklingError, EOFError):  # some exceptions can't be pickled, so we send a string instead
                     pass
                 if job.exception:
                     logger.info("Exception: %s" % repr(exception))
@@ -449,11 +458,11 @@ if twisted_available:
                 logger.info("stderr: %s" % stderr)
             if new_jobs is not False:
                 if not job.modifies_jobgraph():
-                    job.exception = exceptions.JobContractError("%s created jobs, but was not a job with modifies_jobgraph() returning True" % job)
+                    job.exception = ppg_exceptions.JobContractError("%s created jobs, but was not a job with modifies_jobgraph() returning True" % job)
                     job.failed = True
                 else:
                     logger.info("now unpickling new jbos")
-                    new_jobs = cPickle.loads(new_jobs)
+                    new_jobs = pickle.loads(new_jobs)
                     logger.info("We retrieved %i new jobs from %s" % (len(new_jobs), job))
                     if new_jobs:  # the local system sends back and empty list, because it has called new_jobs_generated_during_runtime itself (without serializing)
                         self.pipegraph.new_jobs_generated_during_runtime(new_jobs)
@@ -498,14 +507,14 @@ if twisted_available:
             #self.slave.connected()
 
         def outReceived(self, data):
-            print 'received stdout from slave', data
+            print(( 'received stdout from slave', data))
             if not self.called_back:
                 self.called_back = True
                 self.connectionMade_callback()
-            print data
+            print(data)
 
         def errReceived(self, data):
-            print 'received sttderr from slave', data
+            print(('received sttderr from slave', data))
 
         def processExited(self, status):
             logger.info("Slave process ended, exit code %s" % status.value.exitCode)
@@ -611,7 +620,7 @@ if twisted_available:
 
         def job_returned(self, encoded_argument):
             logger.info("job_returned")
-            args = cPickle.loads(encoded_argument)
+            args = pickle.loads(encoded_argument)
             self.rc.job_ended(self.slave_id, *args)
 
         def job_failed_to_start(self, job_id):

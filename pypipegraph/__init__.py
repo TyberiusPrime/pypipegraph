@@ -1,10 +1,10 @@
-from graph import (
+from .graph import (
         run_pipegraph,
         new_pipegraph,
         forget_job_status,
         destroy_global_pipegraph
         )
-from ppg_exceptions import (
+from .ppg_exceptions import (
         RuntimeError,
         RuntimeException,
         CycleError,
@@ -13,13 +13,13 @@ from ppg_exceptions import (
         JobDiedException
         )
 try:
-    import twisted_fork
+    from . import twisted_fork
     twisted_available = True
 except ImportError:
-    pass
-import util
+    twisted_available = False
+from . import util
 
-from job import (
+from .job import (
     Job, JobList,
     FileGeneratingJob, MultiFileGeneratingJob,
     DataLoadingJob, AttributeLoadingJob,
