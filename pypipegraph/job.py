@@ -1,3 +1,4 @@
+from __future__ import print_function
 """
 """
 
@@ -25,21 +26,28 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import ppg_exceptions
-import util
+from . import ppg_exceptions
+from . import util
 logger = util.start_logging('job')
 import re
-import cStringIO
+try:
+    import cStringIO
+    io = cStringIO
+except ImportError:
+    import io
 import os
 import stat
-import util
+from . import util
 import sys
 import dis
 import shutil
 import hashlib
-import cPickle
+try:
+    import cPickle
+    pickle = cPickle
+except ImportError:
+    import pickle
 import traceback
-
 
 class JobList(object):
     """For when you want to return a list of jobs that mostly behaves like a single Job.
@@ -76,7 +84,8 @@ class JobList(object):
 
     def depends_on(self, other_job):
         for job in self.jobs:
-            job.depends_on(other_job)
+           job.depends_on(other_job)
+
 
 
 class Job(object):
@@ -333,7 +342,7 @@ class Job(object):
 
     def __str__(self):
         if hasattr(self, 'callback'):
-            return "%s (job_id=%s,id=%s\n Callback: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.callback.func_code.co_filename, self.callback.func_code.co_firstlineno)
+            return "%s (job_id=%s,id=%s\n Callback: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.callback.__code__.co_filename, self.callback.__code__.co_firstlineno)
         else:
             return "%s (job_id=%s,id=%s)" % (self.__class__.__name__, self.job_id, id(self))
 
@@ -361,23 +370,23 @@ class FunctionInvariant(_InvariantJob):
         if hasattr(self, 'function') and function != self.function:
             raise ppg_exceptions.JobContractError("FunctionInvariant %s created twice with different functions: \n%s %i\n%s %i" % (
                 job_id,
-                self.function.func_code.co_filename, self.function.func_code.co_firstlineno,
-                function.func_code.co_filename, function.func_code.co_firstlineno,
+                self.function.__code__.co_filename, self.function.__code__.co_firstlineno,
+                function.__code__.co_filename, function.__code__.co_firstlineno,
                 ))
         self.function = function
 
     def __str__(self):
         if self.function:
-            return "%s (job_id=%s,id=%s\n Function: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.function.func_code.co_filename, self.function.func_code.co_firstlineno)
+            return "%s (job_id=%s,id=%s\n Function: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.function.__code__.co_filename, self.function.__code__.co_firstlineno)
         else:
             return "%s (job_id=%s,id=%s, Function: None)" % (self.__class__.__name__, self.job_id, id(self))
 
     def _get_invariant(self, old):
         if self.function is None:
             return None  # since the 'default invariant' is False, this will still read 'invalidated the first time it's being used'
-        if not id(self.function.func_code) in util.func_hashes:
-            util.func_hashes[id(self.function.func_code)] = self.dis_code(self.function.__code__)
-        return util.func_hashes[id(self.function.func_code)]
+        if not id(self.function.__code__) in util.func_hashes:
+            util.func_hashes[id(self.function.__code__)] = self.dis_code(self.function.__code__)
+        return util.func_hashes[id(self.function.__code__)]
 
     inner_code_object_re = re.compile('<code	object	<[^>]+>	at	0x[a-f0-9]+[^>]+')
 
@@ -385,7 +394,7 @@ class FunctionInvariant(_InvariantJob):
         """'dissassemble' python code.
         Strips lambdas (they change address every execution otherwise)"""
         # TODO: replace with bytecode based smarter variant
-        out = cStringIO.StringIO()
+        out = io.StringIO()
         old_stdout = sys.stdout
         try:
             sys.stdout = out
@@ -516,9 +525,9 @@ class FileGeneratingJob(Job):
     def run(self):
         try:
             self.callback()
-        except Exception, e:
+        except Exception as e:
             exc_info = sys.exc_info()
-            sys.stderr.write(traceback.format_exc())
+            print(traceback.format_exc, file=sys.stderr)
             try:
                 if self.rename_broken:
                     shutil.move(self.job_id, self.job_id + '.broken')
@@ -527,7 +536,8 @@ class FileGeneratingJob(Job):
                     os.unlink(self.job_id)
             except (OSError, IOError):
                 pass
-            raise exc_info[1], None, exc_info[2]  # so we reraise as if in the original place
+            print (exc_info[1], None, exc_info[2])
+            util.reraise(exc_info[1], None, exc_info[2])
         if not util.output_file_exists(self.job_id):
             raise ppg_exceptions.JobContractError("%s did not create its file" % (self.job_id, ))
 
@@ -537,6 +547,8 @@ class MultiFileGeneratingJob(FileGeneratingJob):
     """
 
     def __new__(cls, filenames, *args, **kwargs):
+        if isinstance(filenames, str):
+            raise ValueError("Filenames must be a list (or at least an iterable), not a single string")
         job_id = ":".join(sorted(str(x) for x in filenames))
         return Job.__new__(cls, job_id)
 
@@ -554,7 +566,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
             raise ValueError("filenames was not iterable")
         sorted_filenames = list(sorted(x for x in filenames))
         for x in sorted_filenames:
-            if not isinstance(x, str) and not isinstance(x, unicode):
+            if not isinstance(x, str) and not isinstance(x, str): #FIXME
                 raise ValueError("Not all filenames passed to MultiFileGeneratingJob were str or unicode objects")
         job_id = ":".join(sorted_filenames)
         Job.__init__(self, job_id)
@@ -581,7 +593,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
     def run(self):
         try:
             self.callback()
-        except Exception, e:
+        except Exception as e:
             exc_info = sys.exc_info()
             if self.rename_broken:
                 for fn in self.filenames:
@@ -596,7 +608,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
                         os.unlink(fn)
                     except OSError:
                         pass
-            raise exc_info[1], None, exc_info[2]  # so we reraise as if in the original place
+            util.reraise(exc_info[1], None, exc_info[2])
         if not self.is_done():
             missing_files = []
             for f in self.filenames:
@@ -792,7 +804,7 @@ class DependencyInjectionJob(_GraphModifyingJob):
         reported_jobs = self.callback()
         logger.info("DependencyInjectionJob.dependants after callback = %s %s" % (", ".join(str(x) for x in self.dependants), id(self.dependants)))
         logger.info("new_jobs count: %i, id %s" % (len(util.global_pipegraph.new_jobs), id(util.global_pipegraph.new_jobs)))
-        for new_job in util.global_pipegraph.new_jobs.values():
+        for new_job in list(util.global_pipegraph.new_jobs.values()):
             new_job.inject_auto_invariants()
         if reported_jobs:
             for new_job in reported_jobs:
@@ -861,7 +873,7 @@ class JobGeneratingJob(_GraphModifyingJob):
         logger.info("Storing new jobs in %s" % id(util.global_pipegraph))
         util.global_pipegraph.new_jobs = {}
         self.callback()
-        for new_job in util.global_pipegraph.new_jobs.values():
+        for new_job in list(util.global_pipegraph.new_jobs.values()):
             new_job.inject_auto_invariants()
          # I need to check: All new jobs are now prereqs of my dependands
          # I also need to check that none of the jobs that ain't dependand on me have been injected
@@ -951,7 +963,7 @@ class PlotJob(FileGeneratingJob):
                 except OSError:
                     pass
                 of = open(self.cache_filename, 'wb')
-                cPickle.dump(df, of, cPickle.HIGHEST_PROTOCOL)
+                pickle.dump(df, of, pickle.HIGHEST_PROTOCOL)
                 of.close()
 
         def run_plot():
@@ -1037,13 +1049,13 @@ class PlotJob(FileGeneratingJob):
             return self.calc_function()
         else:
             of = open(self.cache_filename, 'rb')
-            df = cPickle.load(of)
+            df = pickle.load(of)
             of.close()
             return df
 
     def __str__(self):
-        return "%s (job_id=%s,id=%s\n Calc function: %s:%s\nPlot function: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.calc_function.func_code.co_filename, self.calc_function.func_code.co_firstlineno,
-                self.plot_function.func_code.co_filename,self.plot_function.func_code.co_firstlineno)
+        return "%s (job_id=%s,id=%s\n Calc function: %s:%s\nPlot function: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.calc_function.__code__.co_filename, self.calc_function.__code__.co_firstlineno,
+                self.plot_function.__code__.co_filename,self.plot_function.__code__.co_firstlineno)
 
 
 def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args=None):
@@ -1051,7 +1063,7 @@ def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args=Non
     
     To use these jobs, you need to have pyggplot available.
     """
-    if not isinstance(output_filename, str) or isinstance(output_filename, unicode):
+    if not isinstance(output_filename, str) or isinstance(output_filename, str):#FIXME
         raise ValueError("output_filename was not a string or unicode")
     if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):
         raise ValueError("Don't know how to create this file %s, must end on .png or .pdf" % output_filename)
@@ -1118,7 +1130,7 @@ class _CacheFileGeneratingJob(FileGeneratingJob):
     def run(self):
         data = self.callback()
         op = open(self.cache_filename, 'wb')
-        cPickle.dump(data, op, cPickle.HIGHEST_PROTOCOL)
+        pickle.dump(data, op, pickle.HIGHEST_PROTOCOL)
         op.close()
 
 
@@ -1127,13 +1139,13 @@ class CachedAttributeLoadingJob(AttributeLoadingJob):
     a file called job_id and reread on the next run"""
 
     def __new__(cls, job_id, *args, **kwargs):
-        if not isinstance(job_id, str) and not isinstance(job_id, unicode):
+        if not isinstance(job_id, str) and not isinstance(job_id, str): #FIXME
             raise ValueError("cache_filename/job_id was not a str/unicode jobect")
 
         return Job.__new__(cls, job_id + '_load')
 
     def __init__(self, cache_filename, target_object, target_attribute, calculating_function):
-        if not isinstance(cache_filename, str) and not isinstance(cache_filename, unicode):
+        if not isinstance(cache_filename, str) and not isinstance(cache_filename, str): #FIXME
             raise ValueError("cache_filename/job_id was not a str/unicode jobect")
         if not hasattr(calculating_function, '__call__'):
             raise ValueError("calculating_function was not a callable")
@@ -1143,7 +1155,7 @@ class CachedAttributeLoadingJob(AttributeLoadingJob):
 
         def do_load(cache_filename=abs_cache_filename):
             op = open(cache_filename, 'rb')
-            data = cPickle.load(op)
+            data = pickle.load(op)
             op.close()
             return data
 
@@ -1181,12 +1193,12 @@ class CachedDataLoadingJob(DataLoadingJob):
     a file called job_id and reread on the next run"""
 
     def __new__(cls, job_id, *args, **kwargs):
-        if not isinstance(job_id, str) and not isinstance(job_id, unicode):
+        if not isinstance(job_id, str) and not isinstance(job_id, str): #FIXME
             raise ValueError("cache_filename/job_id was not a str/unicode jobect")
         return Job.__new__(cls, job_id + '_load')  # plus load, so that the cached data goes into the cache_filename passed to the constructor...
 
     def __init__(self, cache_filename, calculating_function, loading_function):
-        if not isinstance(cache_filename, str) and not isinstance(cache_filename, unicode):
+        if not isinstance(cache_filename, str) and not isinstance(cache_filename, str): #FIXME
             raise ValueError("cache_filename/job_id was not a str/unicode jobect")
         if not hasattr(calculating_function, '__call__'):
             raise ValueError("calculating_function was not a callable")
@@ -1197,8 +1209,8 @@ class CachedDataLoadingJob(DataLoadingJob):
         def do_load(cache_filename=abs_cache_filename):
             op = open(cache_filename, 'rb')
             try:
-                data = cPickle.load(op)
-            except Exception, e:
+                data = pickle.load(op)
+            except Exception as e:
                 raise ValueError("Unpickling error in file %s - original error was %s" % (cache_filename, str(e)))
             op.close()
             loading_function(data)
@@ -1214,7 +1226,7 @@ class CachedDataLoadingJob(DataLoadingJob):
             self.depends_on(FunctionInvariant(self.job_id + '_func', self.loading_function)) # we don't want to depend on 'callback', that's our tiny wrapper, but on the loading_function instead.
 
     def __str__(self):
-        return "%s (job_id=%s,id=%s\n Calc calcback: %s:%s\nLoad callback: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.calculating_function.func_code.co_filename, self.calculating_function.func_code.co_firstlineno, self.loading_function.func_code.co_filename, self.loading_function.func_code.co_firstlineno)
+        return "%s (job_id=%s,id=%s\n Calc calcback: %s:%s\nLoad callback: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.calculating_function.__code__.co_filename, self.calculating_function.__code__.co_firstlineno, self.loading_function.__code__.co_filename, self.loading_function.__code__.co_firstlineno)
 
     def depends_on(self, jobs):
         self.lfg.depends_on(jobs)

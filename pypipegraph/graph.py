@@ -1,3 +1,4 @@
+from __future__ import print_function
 """
 A pipegraph models jobs depending on other jobs in a directed acyclic graph
 - basically a branching pipeline of things to be done. It keeps track of what's
@@ -34,11 +35,17 @@ import os
 import signal
 import time
 import collections
-import resource_coordinators
-import cPickle
-import pickle
-import ppg_exceptions
-import util
+from . import resource_coordinators
+try:
+    import cPickle
+    import pickle
+    pickle_stop = pickle.STOP
+    pickle = cPickle
+except ImportError:
+    import pickle
+    pickle_stop = pickle.STOP
+from . import ppg_exceptions
+from . import util
 import sys
 logger = util.start_logging('graph')
 
@@ -188,38 +195,41 @@ class Pipegraph(object):
         try:
             any_failed = False
             try:
-                error_log = open("logs/ppg_errors.txt", 'wb')
-            except:
-                error_log = open("/dev/null", 'wb')
-            for job in self.jobs.values():
-                if job.failed or job in self.invariant_loading_issues:
-                    if not any_failed and not self.quiet:
-                        print >>sys.stderr, '\n------Pipegraph error-----'
-                        print >>error_log, '\n------Pipegraph error-----'
-                    any_failed = True
-                    if job.error_reason != 'Indirect' and not self.quiet:
-                        self.print_failed_job(job, sys.stderr)
-                        self.print_failed_job(job, error_log)
-                    if job in self.invariant_loading_issues:
-                        print >>error_log, 'Could not unpickle invariant for %s - exception was %s' % (job, self.invariant_loading_issues[job])
-                        print >>sys.stderr, 'Could not unpickle invariant for %s - exception was %s' % (job, self.invariant_loading_issues[job])
-            if any_failed:
-                if not self.quiet:
-                    print >>sys.stderr, '\n------Pipegraph output end-----'
-                    print >>error_log, '\n------Pipegraph output end-----'
-                    if error_log.name != '/dev/null':
-                        print >>sys.stderr, '\n failed job log in logs/ppg_erros'
-                raise ppg_exceptions.RuntimeError()
-            else:
-                self.cleanup_jobs_that_requested_it()
+                try:
+                    error_log = open("logs/ppg_errors.txt", 'w')
+                except:
+                    error_log = open("/dev/null", 'w')
+                for job in self.jobs.values():
+                    if job.failed or job in self.invariant_loading_issues:
+                        if not any_failed and not self.quiet:
+                            print('\n------Pipegraph error-----', file=sys.stderr)
+                            print('\n------Pipegraph error-----', file=error_log)
+                        any_failed = True
+                        if job.error_reason != 'Indirect' and not self.quiet:
+                            self.print_failed_job(job, sys.stderr)
+                            self.print_failed_job(job, error_log)
+                        if job in self.invariant_loading_issues:
+                            print('Could not unpickle invariant for %s - exception was %s' % (job, self.invariant_loading_issues[job]), file=error_log)
+                            print('Could not unpickle invariant for %s - exception was %s' % (job, self.invariant_loading_issues[job]), file=sys.stderr)
+                if any_failed:
+                    if not self.quiet:
+                        print('\n------Pipegraph output end-----', file=sys.stderr)
+                        print('\n------Pipegraph output end-----', file=error_log)
+                        if error_log.name != '/dev/null':
+                            print('\n failed job log in logs/ppg_erros', file=sys.stderr)
+                    raise ppg_exceptions.RuntimeError()
+                else:
+                    self.cleanup_jobs_that_requested_it()
+            finally:
+                error_log.close()
         finally:
             if not self.quiet:
-                print 'Pipegraph done. Executed %i jobs. %i failed' % (len([x for x in self.jobs.values() if x.was_run]), len([x for x in self.jobs.values() if x.failed]))
+                print('Pipegraph done. Executed %i jobs. %i failed' % (len([x for x in list(self.jobs.values()) if x.was_run]), len([x for x in list(self.jobs.values()) if x.failed])))
 
     def inject_auto_invariants(self):
         """Go through each job and ask it to create the invariants it might need.
         Why is this not done by the jobs on init? So the user can prevent them from doing it (job.do_ignore_code_changes()...)"""
-        for job in self.jobs.values():
+        for job in list(self.jobs.values()):
             job.inject_auto_invariants()
 
     def connect_graph(self):
@@ -308,7 +318,7 @@ class Pipegraph(object):
             # this is support code for the late invariant status filename layout.
             # probably can be thrown out 'soonish'. Also remove the reference in forget_job_status
             op = open(invariant_status_filename_old, 'rb')
-            self.invariant_status = cPickle.load(op)
+            self.invariant_status = pickle.load(op)
             op.close()
             os.unlink(invariant_status_filename_old)  # throw away the old file
         elif os.path.exists(self.invariant_status_filename):
@@ -320,23 +330,24 @@ class Pipegraph(object):
             while not leave:
                 try:
                     key = None
-                    key = cPickle.load(op)
-                    value = cPickle.load(op)
+                    key = pickle.load(op)
+                    value = pickle.load(op)
                     self.invariant_status[key] = value
-                except TypeError, e:
-                    print e
+                except TypeError as e:
+                    print(e)
                     if key is None:
                         raise ValueError("Could not depickle invariants - even in the robust implementation (key not found")
                     logger.error("Could not depickle invariant for %s - check code for depickling bugs. Job will rerun, probably until the (de)pickling bug is fixed.\n Exception: %s" % (key, e))
                     self.invariant_loading_issues[key] = e
                     letter = op.read(1)
                     #at least try to find the end of the pickle... this might fail horribly though
-                    while letter and letter != pickle.STOP:
+                    while letter and letter != pickle_stop:
                         letter = op.read(1)
                     if not letter:
                         leave = True
                 except EOFError:
                     leave = True
+            op.close()
         else:
             self.invariant_status = collections.defaultdict(bool)
         logger.info("loaded %i invariant stati" % len(self.invariant_status))
@@ -348,8 +359,8 @@ class Pipegraph(object):
             try:
                 op = open(self.invariant_status_filename + '.temp', 'wb')
                 for key, value in self.invariant_status.items():
-                    cPickle.dump(key, op, cPickle.HIGHEST_PROTOCOL)
-                    cPickle.dump(value, op, cPickle.HIGHEST_PROTOCOL)
+                    pickle.dump(key, op, pickle.HIGHEST_PROTOCOL)
+                    pickle.dump(value, op, pickle.HIGHEST_PROTOCOL)
                 op.close()
                 if os.path.exists(self.invariant_status_filename):
                     os.unlink(self.invariant_status_filename)
@@ -373,7 +384,7 @@ class Pipegraph(object):
             try:
                 inv = job.get_invariant(old)
                 #logger.info("%s invariant was %s, is now %s" % (job, old,inv))
-            except util.NothingChanged, e:
+            except util.NothingChanged as e:
                 #logger.info("Invariant difference, but NothingChanged")
                 inv = e.new_value
                 old = inv  # so no change...
@@ -703,27 +714,27 @@ class Pipegraph(object):
 
     def print_failed_job(self, job, file_handle):
         """Pretty print failure information"""
-        print >> file_handle, '-' * 75
-        print >> file_handle, '%s failed. Reason:' % (job, )
+        print('-' * 75, file=file_handle)
+        print('%s failed. Reason:' % (job, ), file=file_handle)
         if job.exception:
-            print >>file_handle, '\tThrew an exception %s' % (job.exception,)
-            print >>file_handle, '\tTraceback: %s' % (job.trace,)
+            print('\tThrew an exception %s' % (job.exception,), file=file_handle)
+            print('\tTraceback: %s' % (job.trace,), file=file_handle)
 
-        print >>file_handle, '\t stdout was %s' % (job.stdout,)
-        print >>file_handle, '\t stderr was %s' % (job.stderr,)
-        print >>file_handle, ''
+        print('\t stdout was %s' % (job.stdout,), file=file_handle)
+        print('\t stderr was %s' % (job.stderr,), file=file_handle)
+        print('', file=file_handle)
 
     def print_running_jobs(self):
         """When the user presses enter, print the jobs that are currently being executed"""
-        print 'Running jobs:'
+        print('Running jobs:')
         now = time.time()
         for job in self.running_jobs:
-            print job, 'running for %i seconds' % (now - job.start_time)
+            print(job, 'running for %i seconds' % (now - job.start_time))
 
     def dump_graph(self):
         """Dump the current graph in text format into logs/ppg_graph.txt if logs exists"""
         if os.path.exists('logs') and os.path.isdir('logs'):
-            op = open("logs/ppg_graph.txt", 'wb')
+            op = open("logs/ppg_graph.txt", 'w')
             for job in self.jobs.values():
                 op.write("%s - done: %s\n" % (job, job.is_done()))
                 for preq in job.prerequisites:

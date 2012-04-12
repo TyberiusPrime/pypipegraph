@@ -59,7 +59,7 @@ class ForkedProcess(process.Process):
         #so... go for it
         try:
             callback()
-        except SystemExit, e:
+        except SystemExit as e:
             sys.stdout.flush()
             sys.stderr.flush()
             os._exit(e.code)

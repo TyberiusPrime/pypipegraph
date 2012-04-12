@@ -44,13 +44,13 @@ def read(filename):
 
 def write(filename, string):
     """open file for writing, dump string, close file"""
-    op = open(filename, 'wb')
+    op = open(filename, 'w')
     op.write(string)
     op.close()
 
 def append(filename, string):
     """open file for appending, dump string, close file"""
-    op = open(filename, 'ab')
+    op = open(filename, 'a')
     op.write(string)
     op.close()
 
@@ -264,14 +264,14 @@ class FileGeneratingJobTests(PPGPerTest):
         of = "out/a"
         data_to_write = "hello"
         def do_write():
-            print 'do_write was called'
+            print('do_write was called')
             write(of, data_to_write)
         job = ppg.FileGeneratingJob(of, do_write)
         job.ignore_code_changes()
         ppg.run_pipegraph()
         self.assertFalse(job.failed)
         self.assertTrue(os.path.exists(of))
-        op = open(of, 'rb')
+        op = open(of, 'r')
         data = op.read()
         op.close()
         self.assertEqual(data, data_to_write)
@@ -281,14 +281,14 @@ class FileGeneratingJobTests(PPGPerTest):
         of = "out/a"
         data_to_write = "hello"
         def do_write():
-            print 'do_write was called'
+            print('do_write was called')
             write(of, data_to_write)
         job = ppg.FileGeneratingJob(of, do_write)
         #job.ignore_code_changes() this would be the magic line to remove the function dependency
         ppg.run_pipegraph()
         self.assertFalse(job.failed)
         self.assertTrue(os.path.exists(of))
-        op = open(of, 'rb')
+        op = open(of, 'r')
         data = op.read()
         op.close()
         self.assertEqual(data, data_to_write)
@@ -344,16 +344,16 @@ class FileGeneratingJobTests(PPGPerTest):
         of = "out/a"
         data_to_write = "hello"
         def do_write():
-            op = open(of,'wb')
+            op = open(of,'w')
             op.write(data_to_write)
             op.close()
-            print 'stdout is cool'
+            print('stdout is cool')
             sys.stderr.write("I am stderr")
         job = ppg.FileGeneratingJob(of, do_write)
         ppg.run_pipegraph()
         self.assertFalse(job.failed)
         self.assertTrue(os.path.exists(of))
-        op = open(of, 'rb')
+        op = open(of, 'r')
         data = op.read()
         op.close()
         self.assertEqual(data, data_to_write)
@@ -381,8 +381,8 @@ class FileGeneratingJobTests(PPGPerTest):
         jobA = ppg.FileGeneratingJob(ofA, writeA)
         ofB = 'out/b'
         def writeB():
-            op = open(ofB, 'wb')
-            ip = open(ofA, 'rb')
+            op = open(ofB, 'w')
+            ip = open(ofA, 'r')
             op.write(ip.read()[::-1])
             op.close()
             ip.close()
@@ -449,6 +449,7 @@ class FileGeneratingJobTests(PPGPerTest):
         def inner():
             ppg.run_pipegraph()
         self.assertRaises(ppg.RuntimeError, inner)
+        print (jobA.exception)
         self.assertTrue(isinstance(jobA.exception, IndexError))
         self.assertFalse(os.path.exists('out/A')) #should clobber the resulting files in this case - just a double check to test_invaliding_removes_file
         self.assertEqual(read('out/Ax'), 'ax') #but the job did run, right?
@@ -869,7 +870,7 @@ class AttributeJobTests(PPGPerTest):
 
     def test_no_swapping_attributes_for_one_job(self):
         def cache():
-            return range(0, 100)
+            return list(range(0, 100))
         o = Dummy()
         jobA = ppg.AttributeLoadingJob('out/A', o, 'a', cache)
         def inner():
@@ -890,7 +891,7 @@ class AttributeJobTests(PPGPerTest):
 
     def test_no_swapping_objects_for_one_job(self):
         def cache():
-            return range(0, 100)
+            return list(range(0, 100))
         o = Dummy()
         o2 = Dummy()
         jobA = ppg.CachedAttributeLoadingJob('out/A', o, 'a', cache)
@@ -1166,12 +1167,12 @@ class InvariantTests(PPGPerTest):
     def sentinel_count(self):
         sentinel = 'out/sentinel'
         try:
-            op = open(sentinel, 'rb')
+            op = open(sentinel, 'r')
             count = int(op.read())
             op.close()
         except:
             count = 1
-        op = open(sentinel, 'wb')
+        op = open(sentinel, 'w')
         op.write("%i" % (count + 1))
         op.close()
         return count
@@ -2088,7 +2089,7 @@ if pyggplot_available:
         def test_basic(self):
             import pydataframe
             def calc():
-                return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
+                return pydataframe.DataFrame({"X": list(range(0, 100)), 'Y': list(range(50, 150))})
             def plot(df):
                 return pyggplot.Plot(df).add_scatter('X','Y')
             of = 'out/test.png'
@@ -2099,7 +2100,7 @@ if pyggplot_available:
         def test_pdf(self):
             import pydataframe
             def calc():
-                return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
+                return pydataframe.DataFrame({"X": list(range(0, 100)), 'Y': list(range(50, 150))})
             def plot(df):
                 return pyggplot.Plot(df).add_scatter('X','Y')
             of = 'out/test.pdf'
@@ -2110,7 +2111,7 @@ if pyggplot_available:
         def test_raises_on_invalid_filename(self):
             import pydataframe
             def calc():
-                return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
+                return pydataframe.DataFrame({"X": list(range(0, 100)), 'Y': list(range(50, 150))})
             def plot(df):
                 return pyggplot.Plot(df).add_scatter('X','Y')
             of = 'out/test.shu'
@@ -2123,7 +2124,7 @@ if pyggplot_available:
             import pydataframe
             def calc():
                 append('out/calc', 'A')
-                return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
+                return pydataframe.DataFrame({"X": list(range(0, 100)), 'Y': list(range(50, 150))})
             def plot(df):
                 append('out/plot', 'B')
                 return pyggplot.Plot(df).add_scatter('X','Y')
@@ -2148,7 +2149,7 @@ if pyggplot_available:
             import pydataframe
             def calc():
                 append('out/calc', 'A')
-                return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
+                return pydataframe.DataFrame({"X": list(range(0, 100)), 'Y': list(range(50, 150))})
             def plot(df):
                 append('out/plot', 'B')
                 return pyggplot.Plot(df).add_scatter('X','Y')
@@ -2175,7 +2176,7 @@ if pyggplot_available:
             import pydataframe
             def calc():
                 append('out/calc', 'A')
-                return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
+                return pydataframe.DataFrame({"X": list(range(0, 100)), 'Y': list(range(50, 150))})
             def plot(df):
                 append('out/plot', 'B')
                 return pyggplot.Plot(df).add_scatter('X','Y')
@@ -2190,7 +2191,7 @@ if pyggplot_available:
             def calc2():
                 append('out/calc', 'A')
                 x = 5
-                return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
+                return pydataframe.DataFrame({"X": list(range(0, 100)), 'Y': list(range(50, 150))})
             job = ppg.PlotJob(of, calc2, plot)
             ppg.run_pipegraph()
             self.assertTrue(magic(of).find('PNG image') != -1)
@@ -2201,7 +2202,7 @@ if pyggplot_available:
             import pydataframe
             def calc():
                 append('out/calc', 'A')
-                return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
+                return pydataframe.DataFrame({"X": list(range(0, 100)), 'Y': list(range(50, 150))})
             def plot(df):
                 append('out/plot', 'B')
                 return pyggplot.Plot(df).add_scatter('X','Y')
@@ -2216,7 +2217,7 @@ if pyggplot_available:
             def calc2():
                 append('out/calc', 'A')
                 x = 5
-                return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
+                return pydataframe.DataFrame({"X": list(range(0, 100)), 'Y': list(range(50, 150))})
             job = ppg.PlotJob(of, calc2, plot)
             job.ignore_code_changes()
             ppg.run_pipegraph()
@@ -2228,7 +2229,7 @@ if pyggplot_available:
             import pydataframe
 
             def calc():
-                return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
+                return pydataframe.DataFrame({"X": list(range(0, 100)), 'Y': list(range(50, 150))})
             def plot(df):
                 return pyggplot.Plot(df).add_scatter('X','Y')
             of = 'out/test.png'
@@ -2258,7 +2259,7 @@ if pyggplot_available:
             import pydataframe
             #import pyggplot
             def calc():
-                return pydataframe.DataFrame({"X": range(0, 100), 'Y': range(50, 150)})
+                return pydataframe.DataFrame({"X": list(range(0, 100)), 'Y': list(range(50, 150))})
             def plot(df):
                 return None
             of = 'out/test.png'
@@ -2425,7 +2426,7 @@ class CachedAttributeJobTests(PPGPerTest):
 
     def test_no_swapping_attributes_for_one_job(self):
         def cache():
-            return range(0, 100)
+            return list(range(0, 100))
         o = Dummy()
         jobA = ppg.CachedAttributeLoadingJob('out/A', o, 'a', cache)
         def inner():
@@ -2434,7 +2435,7 @@ class CachedAttributeJobTests(PPGPerTest):
 
     def test_no_swapping_objects_for_one_job(self):
         def cache():
-            return range(0, 100)
+            return list(range(0, 100))
         o = Dummy()
         o2 = Dummy()
         jobA = ppg.CachedAttributeLoadingJob('out/A', o, 'a', cache)
@@ -2445,7 +2446,7 @@ class CachedAttributeJobTests(PPGPerTest):
     def test_cached_jobs_get_depencies_only_on_the_lazy_filegenerator_not_on_the_loading_job(self):
         o = Dummy()
         def calc():
-            return range(0, o.b)
+            return list(range(0, o.b))
         job = ppg.CachedAttributeLoadingJob('a',o, 'a', calc)
         def do_b():
             return 100
@@ -2599,7 +2600,7 @@ class CachedDataLoadingJobTests(PPGPerTest):
     def test_cached_jobs_get_depencies_only_on_the_lazy_filegenerator_not_on_the_loading_job(self):
         o = Dummy()
         def calc():
-            return range(0, o.b)
+            return list(range(0, o.b))
         def load(value):
             o.a = value
         job = ppg.CachedDataLoadingJob('a', calc, load)
@@ -2665,7 +2666,7 @@ class TestResourceCoordinator(PPGPerTest):
         else:
             first_job = jobB
             second_job = jobA
-        print 'times', first_job.start_time, first_job.stop_time, second_job.start_time, second_job.stop_time
+        print('times', first_job.start_time, first_job.stop_time, second_job.start_time, second_job.stop_time)
         if jobA.start_time is None:
             raise ValueError("JobA did not run")
         self.assertTrue(
@@ -2687,7 +2688,7 @@ class TestResourceCoordinator(PPGPerTest):
         else:
             first_job = jobB
             second_job = jobA
-        print 'times', first_job.start_time, first_job.stop_time, second_job.start_time, second_job.stop_time
+        print('times', first_job.start_time, first_job.stop_time, second_job.start_time, second_job.stop_time)
         if jobA.start_time is None:
             raise ValueError("JobA did not run")
         self.assertTrue(
@@ -2701,7 +2702,7 @@ class CantDepickle():
         return ['5']
 
     def __setstate__(self, state):
-        print state
+        print(state)
         raise TypeError("I can be pickled, but not unpickled")
 
 class TestingTheUnexpectedTests(PPGPerTest):
@@ -2783,4 +2784,4 @@ class NotYetImplementedTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-    print' left unittest.main()'
+    print(' left unittest.main()')

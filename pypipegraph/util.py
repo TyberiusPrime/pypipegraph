@@ -25,6 +25,8 @@ import os
 import stat
 import logging
 import logging.handlers
+import sys
+import atexit
 
 global_pipegraph = None
 is_remote = False
@@ -32,25 +34,29 @@ job_uniquifier = {}  # to singletonize jobs on job_id
 func_hashes = {}  # to calculate invarionts on functions in a slightly more efficent manner
 reactor_was_started = False
 
+#import gc
+#gc.set_debug(gc.DEBUG_UNCOLLECTABLE)
+
 default_logging_handler = logging.handlers.SocketHandler('localhost', 5005)
 if os.path.exists('logs'):
     file_logging_handler = logging.FileHandler("logs/ppg_run.txt", mode="w")
 else:
     file_logging_handler = None
-loggers = []
+loggers = {}
 
 
 def start_logging(module):
     key = 'rem' if is_remote else 'ppg'
     name = "%s.%s" % (key, module)
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
-    if default_logging_handler:
-        logger.addHandler(default_logging_handler)
-    if file_logging_handler is not None:
-        logger.addHandler(file_logging_handler)
-    loggers.append(logger)
-    return logger
+    if not name in loggers:
+        logger = logging.getLogger(name)
+        logger.setLevel(logging.INFO)
+        if default_logging_handler:
+            logger.addHandler(default_logging_handler)
+        if file_logging_handler is not None:
+            logger.addHandler(file_logging_handler)
+        loggers[name] = logger
+    return loggers[name]
 
 
 def change_logging_port(port):
@@ -60,7 +66,7 @@ def change_logging_port(port):
     """
     global default_logging_handler
     new_handler = logging.handlers.SocketHandler('127.0.0.1', port)
-    for logger in loggers:
+    for logger in list(loggers.values()):
         logger.removeHandler(default_logging_handler)
         logger.addHandler(new_handler)
     default_logging_handler = new_handler
@@ -141,3 +147,47 @@ def CPUs():
             if ncpus > 0:
                 cpu_count = ncpus
     return cpu_count
+
+
+#Compatibility shims from six
+"""Copyright (c) 2010-2011 Benjamin Peterson
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."""
+PY3 = sys.version_info[0] == 3
+if PY3:
+    def reraise(tp, value, tb=None):
+        if tb:
+            raise tp.with_traceback(tb)
+        raise value
+else:
+    def exec_(code, globs=None, locs=None):
+        """Execute code in a namespace."""
+        if globs is None:
+            frame = sys._getframe(1)
+            globs = frame.f_globals
+            if locs is None:
+                locs = frame.f_locals
+            del frame
+        elif locs is None:
+            locs = globs
+        exec("""exec code in globs, locs""")
+
+    exec_("""def reraise(tp, value, tb=None):
+    raise tp, value, tb
+""")
+#end shims from six
