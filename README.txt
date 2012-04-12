@@ -22,6 +22,8 @@ It is robust against jobs dying for whatever reason (only the failed job and
 everything 'downstream' will be affected, independend jobs will continue running),
 allows you to resume at any point 'in between' jobs, and isolates jobs against each other.
 
+pypipegraph supports Python 3.
+
 30 second summary
 ------------------
 ::
