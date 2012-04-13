@@ -1005,6 +1005,7 @@ class PlotJob(FileGeneratingJob):
             plot.render(output_filename, **render_args)
         job = FileGeneratingJob(output_filename, run_plot)
         job.depends_on(ParameterInvariant(self.output_filename + '_params', render_args))
+        job.depends_on(FunctionInvariant(self.output_filename + '_func', plot_function))
         job.depends_on(self.cache_job)
         return job
 
