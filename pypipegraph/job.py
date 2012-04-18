@@ -527,7 +527,7 @@ class FileGeneratingJob(Job):
             self.callback()
         except Exception as e:
             exc_info = sys.exc_info()
-            print(traceback.format_exc, file=sys.stderr)
+            print(traceback.format_exc(), file=sys.stderr)
             try:
                 if self.rename_broken:
                     shutil.move(self.job_id, self.job_id + '.broken')
@@ -536,7 +536,6 @@ class FileGeneratingJob(Job):
                     os.unlink(self.job_id)
             except (OSError, IOError):
                 pass
-            print (exc_info[1], None, exc_info[2])
             util.reraise(exc_info[1], None, exc_info[2])
         if not util.output_file_exists(self.job_id):
             raise ppg_exceptions.JobContractError("%s did not create its file" % (self.job_id, ))
@@ -1064,7 +1063,7 @@ def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args=Non
     
     To use these jobs, you need to have pyggplot available.
     """
-    if not isinstance(output_filename, str) or isinstance(output_filename, str):#FIXME
+    if not isinstance(output_filename, str) or isinstance(output_filename, unicode):#FIXME
         raise ValueError("output_filename was not a string or unicode")
     if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):
         raise ValueError("Don't know how to create this file %s, must end on .png or .pdf" % output_filename)
