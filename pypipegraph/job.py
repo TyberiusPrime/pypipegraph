@@ -370,8 +370,8 @@ class FunctionInvariant(_InvariantJob):
         if hasattr(self, 'function') and function != self.function:
             raise ppg_exceptions.JobContractError("FunctionInvariant %s created twice with different functions: \n%s %i\n%s %i" % (
                 job_id,
-                self.function.__code__.co_filename, self.function.__code__.co_firstlineno,
-                function.__code__.co_filename, function.__code__.co_firstlineno,
+                self.function.__code__.co_filename if self.function else 'None', self.function.__code__.co_firstlineno if self.function else 0,
+                function.__code__.co_filename if function else 'None', function.__code__.co_firstlineno if function else 0
                 ))
         self.function = function
 
