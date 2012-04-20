@@ -173,7 +173,7 @@ if PY3:
     def reraise(tp, value, tb=None):
         if tb:
             raise tp.with_traceback(tb)
-        raise value
+        raise tp
 else:
     def exec_(code, globs=None, locs=None):
         """Execute code in a namespace."""

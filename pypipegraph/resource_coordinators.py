@@ -267,8 +267,8 @@ class LocalSlave:
         return was_ok
 
     def run_a_job(self, job, is_local=True):  # this runs in the spawned processes, except for job.modifies_jobgraph()==True jobs
-        stdout = tempfile.SpooledTemporaryFile(mode='w')
-        stderr = tempfile.SpooledTemporaryFile(mode='w')
+        stdout = tempfile.SpooledTemporaryFile(mode='w+')
+        stderr = tempfile.SpooledTemporaryFile(mode='w+')
         old_stdout = sys.stdout
         old_stderr = sys.stderr
         sys.stdout = stdout
