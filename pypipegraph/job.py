@@ -376,7 +376,7 @@ class FunctionInvariant(_InvariantJob):
         self.function = function
 
     def __str__(self):
-        if self.function:
+        if hasattr(self, 'function') and self.function: # during creating, __str__ migth be called by a debug function before function is set...
             return "%s (job_id=%s,id=%s\n Function: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.function.__code__.co_filename, self.function.__code__.co_firstlineno)
         else:
             return "%s (job_id=%s,id=%s, Function: None)" % (self.__class__.__name__, self.job_id, id(self))
