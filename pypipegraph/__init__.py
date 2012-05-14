@@ -29,7 +29,8 @@ from .job import (
         FunctionInvariant, ParameterInvariant,
         FileTimeInvariant, FileChecksumInvariant,
     JobGeneratingJob, DependencyInjectionJob,
-    FinalJob
+    FinalJob, 
+    MemMappedDataLoadingJob,
         )
 
 assert_uniqueness_of_object = util.assert_uniqueness_of_object
@@ -51,7 +52,7 @@ all = [
         FileTimeInvariant, FileChecksumInvariant,
         JobGeneratingJob, DependencyInjectionJob,
         FinalJob,
-
+        MemMappedDataLoadingJob,
         util
         ]
 if twisted_available:
