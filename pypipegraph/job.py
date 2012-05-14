@@ -376,14 +376,19 @@ class FunctionInvariant(_InvariantJob):
         self.function = function
 
     def __str__(self):
-        if hasattr(self, 'function') and self.function: # during creating, __str__ migth be called by a debug function before function is set...
+        if hasattr(self, 'function') and self.function and hasattr(self.function, '__code__'): # during creating, __str__ migth be called by a debug function before function is set...
             return "%s (job_id=%s,id=%s\n Function: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.function.__code__.co_filename, self.function.__code__.co_firstlineno)
+        elif str(self.function).startswith('<built-in function'):
+            return "%s (job_id=%s,id=%s, Function: %s)" % (self.__class__.__name__, self.job_id, id(self), self.function)
         else:
             return "%s (job_id=%s,id=%s, Function: None)" % (self.__class__.__name__, self.job_id, id(self))
 
     def _get_invariant(self, old):
         if self.function is None:
             return None  # since the 'default invariant' is False, this will still read 'invalidated the first time it's being used'
+        if not hasattr(self.function, '__code__'):
+            if str(self.function).startswith('<built-in function'):
+                return str(self.function)
         if not id(self.function.__code__) in util.func_hashes:
             util.func_hashes[id(self.function.__code__)] = self.dis_code(self.function.__code__)
         return util.func_hashes[id(self.function.__code__)]
@@ -1252,3 +1257,66 @@ class CachedDataLoadingJob(DataLoadingJob):
         if not self.lfg.was_invalidated:
             self.lfg.invalidated(reason)
         Job.invalidated(self, reason)
+
+class MemMappedDataLoadingJob(DataLoadingJob):
+    """Like a DataLoadingJob that returns a numpy array. That array get's stored to a file, and memmapped back in later on."""
+    def __new__(cls, job_id, *args, **kwargs):
+        if not isinstance(job_id, str) and not isinstance(job_id, str): #FIXME
+            raise ValueError("cache_filename/job_id was not a str/unicode jobect")
+        return Job.__new__(cls, job_id + '_load')  # plus load, so that the cached data goes into the cache_filename passed to the constructor...
+
+    def __init__(self, cache_filename, calculating_function, loading_function, dtype):
+        if not isinstance(cache_filename, str) and not isinstance(cache_filename, str): #FIXME
+            raise ValueError("cache_filename/job_id was not a str/unicode jobect")
+        if not hasattr(calculating_function, '__call__'):
+            raise ValueError("calculating_function was not a callable")
+        if not hasattr(loading_function, '__call__'):
+            raise ValueError("loading_function was not a callable")
+        abs_cache_filename = os.path.abspath(cache_filename)
+        self.dtype = dtype
+        def do_load(cache_filename=abs_cache_filename):
+            import numpy
+            data = numpy.memmap(cache_filename, self.dtype, mode='r')
+            loading_function(data)
+        DataLoadingJob.__init__(self, cache_filename + '_load', do_load)  # 
+        def do_calc(cache_filename=abs_cache_filename):
+            import numpy
+            data = calculating_function()
+            if not isinstance(data, numpy.ndarray):
+                raise ppg_exceptions.JobContractError("Data must be a numpy array")
+            if data.dtype != self.dtype:
+                raise ppg_exceptions.JobContractError("Data had wrong dtype. Expected %s, was %s" % (self.dtype, data.dtype))
+            mmap = numpy.memmap(cache_filename, self.dtype, 'w+', shape=data.shape)
+            mmap[:] = data
+            mmap.flush()
+            del data
+            del mmap
+        lfg = FileGeneratingJob(cache_filename, do_calc)
+        self.lfg = lfg
+        Job.depends_on(self, lfg)
+        self.calculating_function = calculating_function
+        self.loading_function = loading_function
+
+    def inject_auto_invariants(self):
+        if not self.do_ignore_code_changes:
+            self.depends_on(FunctionInvariant(self.job_id + '_func', self.loading_function)) # we don't want to depend on 'callback', that's our tiny wrapper, but on the loading_function instead.
+            self.lfg.depends_on(FunctionInvariant(self.job_id + '_calc_func', self.calculating_function))
+
+    def __str__(self):
+        return "%s (job_id=%s,id=%s\n Calc calcback: %s:%s\nLoad callback: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.calculating_function.__code__.co_filename, self.calculating_function.__code__.co_firstlineno, self.loading_function.__code__.co_filename, self.loading_function.__code__.co_firstlineno)
+
+    def depends_on(self, jobs):
+        self.lfg.depends_on(jobs)
+        return self
+    def ignore_code_changes(self):
+        self.lfg.ignore_code_changes()
+        self.do_ignore_code_changes = True
+
+    def __del__(self):
+        self.lfg = None
+
+    def invalidated(self, reason=''):
+        if not self.lfg.was_invalidated:
+            self.lfg.invalidated(reason)
+        Job.invalidated(self, reason)
+
