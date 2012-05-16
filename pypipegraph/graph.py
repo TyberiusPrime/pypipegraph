@@ -648,7 +648,7 @@ class Pipegraph(object):
         def check_preqs(job):
             for preq_job_id in job.prerequisites:
                 if not preq_job_id in self.jobs and not preq_job_id in new_jobs:
-                    raise ppg_exceptions.JobContractError("New job depends on job that is not in the job list but also not in the new jobs")
+                    raise ppg_exceptions.JobContractError("New job depends on job that is not in the job list but also not in the new jobs: %s" % preq_job_id)
             for dep_job_id in job.dependants:
                 if not dep_job_id in self.jobs and not dep_job_id in new_jobs:
                     raise ppg_exceptions.JobContractError("New job was dependency for is not in the job list but also not in the new jobs")
