@@ -819,11 +819,12 @@ class DependencyInjectionJob(_GraphModifyingJob):
          # but still could use some improvements
          # but at least for the first one, I don't see how to remove the remaining loops.
         logger.info("Now checking first step for dependency injection violations")
-        new_job_set = set(util.global_pipegraph.new_jobs.values())
+        new_job_set = set(util.global_pipegraph.new_jobs.keys())
         if True:
             for job in util.global_pipegraph.jobs.values():
-                for nw in new_job_set.intersection(job.prerequisites):
+                for nw_jobid in new_job_set.intersection([x.job_id for x in job.prerequisites]):
                     #logger.info("Checking %s against %s - %s" % (nw, job, job in self.dependants))
+                    nw = util.global_pipegraph.new_jobs[nw_jobid]
                     if not job in self.dependants:
                         raise ppg_exceptions.JobContractError("DependencyInjectionJob %s tried to inject %s into %s, but %s was not dependand on the DependencyInjectionJob. It was dependand on %s though" % (self, nw, job, job, nw.prerequisites))
                     nw.dependants.add(job)
@@ -840,10 +841,10 @@ class DependencyInjectionJob(_GraphModifyingJob):
                         if not job.is_in_dependency_chain(new_job, 5):  # 1 for the job, 2 for auto dependencies, 3 for load jobs, 4 for the dependencies of load jobs... 5 seems to work in pratice.
                             raise ppg_exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was not added to the prerequisites of %s" % (self.job_id, new_job.job_id, job.job_id))
                 else:
-                    preq_intersection = job.prerequisites.intersection(new_job_set)
+                    preq_intersection = set(job.prerequisites).intersection(new_job_set)
                     if preq_intersection:
                             raise ppg_exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was added to the prerequisites of %s, but was not dependant on the DependencyInjectionJob" % (self.job_id, preq_intersection, job.job_id))
-                    dep_intersection = job.prerequisites.intersection(new_job_set)
+                    dep_intersection = set(job.prerequisites).intersection(new_job_set)
                     if dep_intersection:
                             raise ppg_exceptions.JobContractError("DependencyInjectionJob %s created a job %s that was added to the dependants of %s, but was not dependant on the DependencyInjectionJob" % (self.job_id, dep_intersection, job.job_id))
 
