@@ -1260,7 +1260,9 @@ class CachedDataLoadingJob(DataLoadingJob):
         Job.invalidated(self, reason)
 
 class MemMappedDataLoadingJob(DataLoadingJob):
-    """Like a DataLoadingJob that returns a numpy array. That array get's stored to a file, and memmapped back in later on."""
+    """Like a DataLoadingJob that returns a numpy array. That array get's stored to a file, and memmapped back in later on.
+    Note that it's your job to del your memmapped reference to get it garbage collectable...
+    """
     def __new__(cls, job_id, *args, **kwargs):
         if not isinstance(job_id, str) and not isinstance(job_id, str): #FIXME
             raise ValueError("cache_filename/job_id was not a str/unicode jobect")
