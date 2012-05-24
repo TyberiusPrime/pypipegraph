@@ -60,16 +60,24 @@ class DummyResourceCoordinator:
 
 
 def get_memory_available():
-    op = open("/proc/meminfo", 'r')
-    d = op.read()
-    op.close()
-    mem_total = d[d.find('MemTotal:') + len('MemTotal:'):]
-    mem_total = mem_total[:mem_total.find("kB")].strip()
-    swap_total = d[d.find('SwapTotal:') + len('SwapTotal:'):]
-    swap_total = swap_total[:swap_total.find("kB")].strip()
-    physical_memory = int(mem_total) * 1024
-    swap_memory = int(swap_total) * 1024
-    return physical_memory, swap_memory
+    if hasattr(os, "sysconf"):
+        if "SC_NPROCESSORS_ONLN" in os.sysconf_names: # a linux or unix system
+            op = open("/proc/meminfo", 'r')
+            d = op.read()
+            op.close()
+            mem_total = d[d.find('MemTotal:') + len('MemTotal:'):]
+            mem_total = mem_total[:mem_total.find("kB")].strip()
+            swap_total = d[d.find('SwapTotal:') + len('SwapTotal:'):]
+            swap_total = swap_total[:swap_total.find("kB")].strip()
+            physical_memory = int(mem_total) * 1024
+            swap_memory = int(swap_total) * 1024
+            return physical_memory, swap_memory
+        else: #assume it's mac os x
+            physical_memory = int(os.popen2("sysctl -n hw.memsize")[1].read())
+            swap_memory = physical_memory * 10 # mac os x virtual memory system uses *all* available boot device size, so a heuristic should work well enough
+            return physical_memory, swap_memory
+    else:
+        raise ValueError("get_memory_available() does not know how to get available memory on your system.")
 
 
 class LocalSystem:
