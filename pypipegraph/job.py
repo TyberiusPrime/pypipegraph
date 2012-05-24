@@ -1058,7 +1058,7 @@ class PlotJob(FileGeneratingJob):
                 self.plot_function.__code__.co_filename,self.plot_function.__code__.co_firstlineno)
 
 
-def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args=None):
+def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args=None, fiddle = None):
     """Combine multiple PlotJobs into a common (faceted) output plot
     
     To use these jobs, you need to have pyggplot available.
@@ -1088,6 +1088,8 @@ def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args=Non
         path = os.path.dirname(output_filename)
         if not os.path.exists(path):
             os.makedirs(path)
+        if fiddle:
+            fiddle(plot)
         plot.render(output_filename, **render_args)
 
     job = FileGeneratingJob(output_filename, plot)
@@ -1097,6 +1099,7 @@ def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args=Non
             render_args,
             facet_arguments
         )))
+    job.depends_on(FunctionInvariant(output_filename + '_fiddle', fiddle))
     job.depends_on([plot_job.cache_job for plot_job in plot_jobs])
     return job
 
