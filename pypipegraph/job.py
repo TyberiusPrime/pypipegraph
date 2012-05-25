@@ -681,12 +681,12 @@ class DataLoadingJob(Job):
         self.was_loaded = True
 
     def is_done(self, depth=0):  # delegate to preqs... passthrough of 'not yet done'
-        logger.info("\t" * depth + "Checking is done on %s" % self)
+        #logger.info("\t" * depth + "Checking is done on %s" % self)
         for preq in self.prerequisites:
             if not preq.is_done(depth=depth + 1):
-                logger.info("\t" * depth + "failed on %s" % preq)
+                #logger.info("\t" * depth + "failed on %s" % preq)
                 return False
-        logger.info("\t" * depth + "Passed")
+        #logger.info("\t" * depth + "Passed")
         return True
 
 
