@@ -1153,6 +1153,46 @@ class TempFileGeneratingJobTest(PPGPerTest):
         self.assertFalse(os.path.exists('out/A'))
         self.assertFalse(os.path.exists('out/B'))
         self.assertFalse(os.path.exists('out/C'))
+         
+    def test_rerun_because_of_new_dependency_does_not_rerun_old_chained(self):
+        jobA = ppg.TempFileGeneratingJob("out/A", lambda: write('out/A', 'A'))
+        jobB = ppg.TempFileGeneratingJob("out/B", lambda: write('out/B', read('out/A') + 'B'))
+        jobC = ppg.FileGeneratingJob('out/C', lambda: write('out/C',  read('out/B') + "C") or append('out/Cx','1'))
+        jobB.depends_on(jobA)
+        jobC.depends_on(jobB)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/C'), 'ABC')
+        self.assertEqual(read('out/Cx'), '1')
+
+        ppg.new_pipegraph(rc_gen(), quiet=True)
+        jobA = ppg.TempFileGeneratingJob("out/A", lambda: write('out/A', 'A'))
+        jobB = ppg.TempFileGeneratingJob("out/B", lambda: write('out/B', read('out/A') + 'B'))
+        jobC = ppg.FileGeneratingJob('out/C', lambda: write('out/C',  read('out/B') + "C") or append('out/Cx','1'))
+        jobD = ppg.FileGeneratingJob('out/D', lambda: write('out/D', read('out/A') + "D") or append('out/Dx','1'))
+        jobB.depends_on(jobA)
+        jobC.depends_on(jobB)
+        jobD.depends_on(jobA)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/D'), 'AD')
+        self.assertEqual(read('out/Dx'), '1') 
+        self.assertEqual(read('out/C'), 'ABC')
+        self.assertEqual(read('out/Cx'), '1')
+
+        ppg.new_pipegraph(rc_gen(), quiet=True)
+        jobA = ppg.TempFileGeneratingJob("out/A", lambda: write('out/A', 'a')) # note changing function code!
+        jobB = ppg.TempFileGeneratingJob("out/B", lambda: write('out/B', read('out/A') + 'B'))
+        jobC = ppg.FileGeneratingJob('out/C', lambda: write('out/C',  read('out/B') + "C") or append('out/Cx','1'))
+        jobD = ppg.FileGeneratingJob('out/D', lambda: write('out/D', read('out/A') + "D") or append('out/Dx','1'))
+        jobB.depends_on(jobA)
+        jobC.depends_on(jobB)
+        jobD.depends_on(jobA)
+        ppg.run_pipegraph()
+        self.assertEqual(read('out/D'), 'aD')
+        self.assertEqual(read('out/Dx'), '11')  #both get rerun
+        self.assertEqual(read('out/C'), 'aBC')
+        self.assertEqual(read('out/Cx'), '11')
+
+
 
 
 class InvariantTests(PPGPerTest):
