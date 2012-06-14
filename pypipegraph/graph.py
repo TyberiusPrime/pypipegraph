@@ -413,9 +413,11 @@ class Pipegraph(object):
                     logger.info("and is not loadable")
                     needs_to_be_run.add(job.job_id)
                     if not job.always_runs:  # there is no need for the job injecting jobs to invalidate just because they need to be run.
-                        job.invalidated('not done')
-                        if not job.was_invalidated:  # paranoia
-                            raise ppg_exceptions.RuntimeException("job.invalidated called, but was_invalidated was false")
+                        if not job.is_temp_job:
+                            logger.info(job.is_temp_job)
+                            job.invalidated('not done')
+                            if not job.was_invalidated:  # paranoia
+                                raise ppg_exceptions.RuntimeException("job.invalidated called, but was_invalidated was false")
                 #for preq in job.prerequisites:
                     #preq.require_loading() #think I can get away with  lettinng the slaves what they need to execute a given job...
             else:

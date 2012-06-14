@@ -141,6 +141,7 @@ class Job(object):
             self.is_final_job = False
             self.do_cleanup_if_was_never_run = False
             self.invariant_cache = None
+            self.is_temp_job = False
         #logger.info("adding self %s to %s" % (job_id, id(util.global_pipegraph)))
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
 
@@ -627,6 +628,11 @@ class MultiFileGeneratingJob(FileGeneratingJob):
 class TempFileGeneratingJob(FileGeneratingJob):
     """Create a temporary file that is removed once all direct dependands have
     been executed sucessfully"""
+
+    def __init__(self, output_filename, function, rename_broken=False):
+        FileGeneratingJob.__init__(self, output_filename, function, rename_broken)
+        self.is_temp_job = True
+
 
     def cleanup(self):
         logger.info("%s cleanup" % self)
