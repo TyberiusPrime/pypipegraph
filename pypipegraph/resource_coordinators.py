@@ -131,6 +131,7 @@ class LocalSystem:
                 job.trace = trace
                 job.failed = not was_ok
                 job.stop_time = time.time()
+                logger.info("%s runtime: %is" % (job_id_done, job.stop_time - job.start_time))
                 if job.failed:
                     try:
                         if job.exception.startswith('STR'.encode('UTF-8')):
