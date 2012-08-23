@@ -552,8 +552,12 @@ class Pipegraph(object):
                                 resources[slave]['cores'] = 0  # since the job modifying blocks the Slave-Process (runs in it), no point in spawning further ones till it has returned.
                             break
                         else:
-                            if (job.cores_needed == -1 and resources[slave]['cores'] == resources[slave]['total cores']
-                                and (job.memory_needed == -1 or
+                            if ((
+                                    (job.cores_needed == -1 and resources[slave]['cores'] >= resources[slave]['total cores']) # -1 (use all cores) jobs also can be started if there's a single other (long running) one core job running
+                                    or
+                                    (job.cores_needed == -2 and resources[slave]['cores'] == resources[slave]['total cores']) # -2 (use all cores for realz) jobs only run if the machine is really empty...
+                                ) and (
+                                    job.memory_needed == -1 or
                                     (
                                         job.memory_needed < resources[slave]['memory']
                                         or (
