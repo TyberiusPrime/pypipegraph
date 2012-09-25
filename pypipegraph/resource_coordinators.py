@@ -223,12 +223,20 @@ class LocalSlave:
         else:
             if job.modifies_jobgraph():
                 logger.info("Slave: Running %s in slave" % job)
-                self.run_a_job(job)
+                stdout = tempfile.SpooledTemporaryFile(mode='w+')
+                stderr = tempfile.SpooledTemporaryFile(mode='w+')
+                self.run_a_job(job, stdout, stderr)
                 logger.info("Slave: returned from %s in slave, data was put" % job)
             else:
                 logger.info("Slave: Forking for %s" % job.job_id)
-                p = multiprocessing.Process(target=self.run_a_job, args=[job, False])
+                stdout = tempfile.TemporaryFile(mode='w+') #no more spooling - it doesn't get passed back
+                stderr = tempfile.TemporaryFile(mode='w+')
+                stdout.fileno()
+                stderr.fileno()
+                p = multiprocessing.Process(target=self.run_a_job, args=[job, stdout, stderr, False])
                 job.run_info = "pid = %s" % (p.pid, )
+                job.stdout_handle = stdout
+                job.stderr_handle = stderr
                 p.start()
                 self.process_to_job[p] = job
                 logger.info("Slave, returning to start_jobs")
@@ -276,9 +284,7 @@ class LocalSlave:
                     ))
         return was_ok
 
-    def run_a_job(self, job, is_local=True):  # this runs in the spawned processes, except for job.modifies_jobgraph()==True jobs
-        stdout = tempfile.SpooledTemporaryFile(mode='w+')
-        stderr = tempfile.SpooledTemporaryFile(mode='w+')
+    def run_a_job(self, job, stdout, stderr, is_local=True):  # this runs in the spawned processes, except for job.modifies_jobgraph()==True jobs
         old_stdout = sys.stdout
         old_stderr = sys.stderr
         sys.stdout = stdout
@@ -345,12 +351,22 @@ class LocalSlave:
                 remove.append(proc)
                 if proc.exitcode != 0:  # 0 means everything ok, we should have an answer via the que from the job itself...
                     job = self.process_to_job[proc]
+                    job.stdout_handle.flush()
+                    job.stderr_handle.flush()
+                    job.stdout_handle.seek(0, os.SEEK_SET)
+                    job.stderr_handle.seek(0, os.SEEK_SET)
+                    stdout = job.stdout_handle.read()
+                    stderr = job.stderr_handle.read()
+                    job.stdout_handle.close()
+                    job.stderr_handle.close()
+                    job.stdout_handle = None
+                    job.stderr_handle = None
                     self.rc.que.put((
                             self.slave_id,
                             False,
                             job.job_id,
-                            'no stdout available',
-                            'no stderr available',
+                            stdout,
+                            stderr,
                             pickle.dumps(ppg_exceptions.JobDiedException(proc.exitcode)),
                             '',
                             False  # no new jobs

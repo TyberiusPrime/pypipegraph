@@ -2863,6 +2863,27 @@ class TestingTheUnexpectedTests(PPGPerTest):
         self.assertTrue(isinstance(fg.exception, ppg.JobDiedException))
         self.assertEqual(fg.exception.exit_code, 5)
 
+    def test_job_killing_python_stdout_stderr_logged(self):
+        def dies():
+            import sys
+            #logging.info("Now terminating child python")
+            print 'hello'
+            sys.stderr.write("I am stderr\n")
+            sys.stdout.flush()
+            sys.exit(5)
+        fg = ppg.FileGeneratingJob('out/A', dies)
+        try:
+            ppg.util.global_pipegraph.rc.timeout = 1
+            ppg.run_pipegraph()
+            raise ValueError("should not be reached")
+        except ppg.RuntimeError:
+            pass
+        self.assertFalse(os.path.exists('out/A'))
+        self.assertTrue(isinstance(fg.exception, ppg.JobDiedException))
+        self.assertEqual(fg.exception.exit_code, 5)
+        self.assertEqual(fg.stdout, 'hello\n')
+        self.assertEqual(fg.stderr, 'I am stderr\n')
+
     def test_unpickle_bug_prevents_single_job_from_unpickling(self):
         def do_a():
             write('out/A', 'A')

@@ -636,6 +636,10 @@ class Pipegraph(object):
             logger.info("Setting %s.was_run to true, returned" % job)
             job.was_run = True
             job.check_prerequisites_for_cleanup()
+        if hasattr(job, 'stdout_handle') and job.stdout_handle:
+            job.stdout_handle.close()
+        if hasattr(job, 'stderr_handle') and job.stderr_handle:
+            job.stderr_handle.close()
         if not job.is_loadable():  # dataloading jobs are not 'seperatly' executed, but still, they may be signaled as failed by a slave.
             logger.info("running_jobs removed :%s" % job)
             self.running_jobs.remove(job)
