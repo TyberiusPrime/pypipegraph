@@ -216,7 +216,7 @@ class LocalSlave:
                         job.job_id,  # id...
                         '',  # output
                         '',  # output
-                        'Prerequsite failed'.encode('UTF-8'),
+                        'STRPrerequsite failed'.encode('UTF-8'),
                         '',
                         False,
                     ))
