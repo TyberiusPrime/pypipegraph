@@ -2682,7 +2682,10 @@ class MemMappedDataLoadingJobTests(PPGPerTest):
     array that get's memmapped in later on"""
 
     def test_simple(self):
-        import numpy
+        try:
+             import numpypy as numpy
+        except ImportError:
+            import numpy
         o = []
         def calc():
             return numpy.array(range(0, 10), dtype=numpy.uint32)
@@ -2701,7 +2704,10 @@ class MemMappedDataLoadingJobTests(PPGPerTest):
         self.assertEqual(read('out/B'), "0,1,2,3,4,5,6,7,8,9")
 
     def test_invalidation(self):
-        import numpy
+        try:
+             import numpypy as numpy
+        except ImportError:
+            import numpy
         o = {}
         def calc():
             return numpy.array(range(0, 10), dtype=numpy.uint32)
@@ -2742,7 +2748,10 @@ class MemMappedDataLoadingJobTests(PPGPerTest):
         self.assertEqual(read('out/C'), "aa")
       
     def test_raises_on_non_array(self):
-        import numpy
+        try:
+             import numpypy as numpy
+        except ImportError:
+            import numpy
         o = []
         def calc():
             return list(range(0, 10))
@@ -2764,7 +2773,10 @@ class MemMappedDataLoadingJobTests(PPGPerTest):
         self.assertTrue(dl.failed)
 
     def test_raises_on_wrong_dtype(self):
-        import numpy
+        try:
+             import numpypy as numpy
+        except ImportError:
+            import numpy
         o = []
         def calc():
             return numpy.array(range(0, 10), dtype=numpy.float)
