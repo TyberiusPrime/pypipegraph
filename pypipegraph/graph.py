@@ -701,15 +701,15 @@ class Pipegraph(object):
                 logger.info("Ignoring %s" % job)
                 pass
             elif not job.is_done():
-                logger.info("Adding %s to possible_execution_order" % job)
+                logger.info("Adding %s to possible_execution_order" % (job,))
                 self.possible_execution_order.append(job)
                 self.jobs_to_run_count += 1
             elif not job.runs_in_slave():
-                logger.info("ignoring invariant - does not need to run " % job)
-                logger.info("Setting %s.was_run to true, generated" % job)
+                logger.info("ignoring invariant - does not need to run " % (job,))
+                logger.info("Setting %s.was_run to true, generated" % (job,))
                 job.was_run = True  # invarites get marked as ran..
             else:
-                logger.info("Not doing anything with %s, was done" % job)
+                logger.info("Not doing anything with %s, was done" % (job,))
                 pass
         #for slave in self.slaves.values():
             #slave.transmit_new_jobs(new_jobs)
