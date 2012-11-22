@@ -2676,127 +2676,134 @@ class CachedDataLoadingJobTests(PPGPerTest):
         self.assertEqual(read('out/A'), 'A') #did not run the dl job
         self.assertEqual(read('out/B'), 'B') #did not run the calc job again
         self.assertEqual(read('out/Cx'), 'CC') #did run the load job again
+import platform;
+is_pypy = platform.python_implementation() == 'PyPy'
+if is_pypy: #right now, pypy not support numpypy.memmap. IF it ever exists, this will raise...
+    class DoesMemMapNowExistOnPyPy(unittest.TestCase):
+        def test_does_not_exist(self):
+            import numpypy
+            self.assertFalse('memmap' in dir(numpypy))
+        def test_memmap_job_creation_raises(self):
+            import numpypy
+            def calc():
+                return numpypy.array(range(0, 10), dtype=numpy.uint32)
+            def store(value):
+                o.append(value)
+            def cleanup():
+                del o[0]
+            def inner():
+                dl = ppg.MemMappedDataLoadingJob('out/A', calc, store, numpypy.uint32)
+            ppg.new_pipegraph(rc_gen())
+            self.assertRaises(NotImplementedError, inner)
+else:
+    class MemMappedDataLoadingJobTests(PPGPerTest):
+        """Similar to a CachedDataLoadingJob, except that the data in question is a numpy
+        array that get's memmapped in later on"""
 
-class MemMappedDataLoadingJobTests(PPGPerTest):
-    """Similar to a CachedDataLoadingJob, except that the data in question is a numpy
-    array that get's memmapped in later on"""
-
-    def test_simple(self):
-        try:
-             import numpypy as numpy
-        except ImportError:
+        def test_simple(self):
+            ppg.new_pipegraph(rc_gen())
             import numpy
-        o = []
-        def calc():
-            return numpy.array(range(0, 10), dtype=numpy.uint32)
-        def store(value):
-            o.append(value)
-        def cleanup():
-            del o[0]
-        dl = ppg.MemMappedDataLoadingJob('out/A', calc, store, numpy.uint32)
-        dl.cleanup = cleanup
-        of = 'out/B'
-        def do_write():
-            self.assertTrue(isinstance(o[0], numpy.core.memmap))
-            write(of, ",".join(str(x) for x in o[0]))
-        jobB = ppg.FileGeneratingJob(of, do_write).depends_on(dl)
-        ppg.run_pipegraph()
-        self.assertEqual(read('out/B'), "0,1,2,3,4,5,6,7,8,9")
-
-    def test_invalidation(self):
-        try:
-             import numpypy as numpy
-        except ImportError:
-            import numpy
-        o = {}
-        def calc():
-            return numpy.array(range(0, 10), dtype=numpy.uint32)
-        def store(value):
-            o[0] = value
-        def cleanup():
-            del o[0]
-        dl = ppg.MemMappedDataLoadingJob('out/A', calc, store, numpy.uint32)
-        dl.cleanup = cleanup
-        of = 'out/B'
-        def do_write():
-            self.assertTrue(isinstance(o[0], numpy.core.memmap))
-            write(of, ",".join(str(x) for x in o[0]))
-            append('out/C', 'a')
-        jobB = ppg.FileGeneratingJob(of, do_write).depends_on(dl)
-        ppg.run_pipegraph()
-        self.assertEqual(read('out/B'), "0,1,2,3,4,5,6,7,8,9")
-        self.assertEqual(read('out/C'), "a")
-        #now, no run...
-        ppg.new_pipegraph(rc_gen(), quiet=True)
-        dl = ppg.MemMappedDataLoadingJob('out/A', calc, store, numpy.uint32)
-        dl.cleanup = cleanup
-        jobB = ppg.FileGeneratingJob(of, do_write).depends_on(dl)
-        ppg.run_pipegraph()
-        self.assertEqual(read('out/C'), "a")
-
-        ppg.new_pipegraph(rc_gen(), quiet=True)
-        def calc2():
-            append('out/D', 'a')
-            return numpy.array(range(0, 12), dtype=numpy.uint32)
-        dl = ppg.MemMappedDataLoadingJob('out/A', calc2, store, numpy.uint32)
-        jobB = ppg.FileGeneratingJob(of, do_write).depends_on(dl)
-        dl.cleanup = cleanup
-
-        ppg.run_pipegraph()
-        self.assertEqual(read('out/D'), "a")
-        self.assertEqual(read('out/B'), "0,1,2,3,4,5,6,7,8,9,10,11")
-        self.assertEqual(read('out/C'), "aa")
-      
-    def test_raises_on_non_array(self):
-        try:
-             import numpypy as numpy
-        except ImportError:
-            import numpy
-        o = []
-        def calc():
-            return list(range(0, 10))
-        def store(value):
-            o.append(value)
-        def cleanup():
-            del o[0]
-        dl = ppg.MemMappedDataLoadingJob('out/A', calc, store, numpy.uint32)
-        dl.cleanup = cleanup
-        of = 'out/B'
-        def do_write():
-            self.assertTrue(isinstance(o[0], numpy.core.memmap))
-            write(of, ",".join(str(x) for x in o[0]))
-        jobB = ppg.FileGeneratingJob(of, do_write).depends_on(dl)
-        def inner():
+            o = []
+            def calc():
+                return numpy.array(range(0, 10), dtype=numpy.uint32)
+            def store(value):
+                o.append(value)
+            def cleanup():
+                del o[0]
+            dl = ppg.MemMappedDataLoadingJob('out/A', calc, store, numpy.uint32)
+            dl.cleanup = cleanup
+            of = 'out/B'
+            def do_write():
+                self.assertTrue(isinstance(o[0], numpy.core.memmap))
+                write(of, ",".join(str(x) for x in o[0]))
+            jobB = ppg.FileGeneratingJob(of, do_write).depends_on(dl)
             ppg.run_pipegraph()
-        self.assertRaises(ppg.RuntimeError, inner)
-        self.assertTrue(isinstance(dl.lfg.exception, ppg.JobContractError))
-        self.assertTrue(dl.failed)
+            self.assertEqual(read('out/B'), "0,1,2,3,4,5,6,7,8,9")
 
-    def test_raises_on_wrong_dtype(self):
-        try:
-             import numpypy as numpy
-        except ImportError:
+        def test_invalidation(self):
             import numpy
-        o = []
-        def calc():
-            return numpy.array(range(0, 10), dtype=numpy.float)
-        def store(value):
-            o.append(value)
-        def cleanup():
-            del o[0]
-        dl = ppg.MemMappedDataLoadingJob('out/A', calc, store, numpy.uint32)
-        dl.cleanup = cleanup
-        of = 'out/B'
-        def do_write():
-            self.assertTrue(isinstance(o[0], numpy.core.memmap))
-            write(of, ",".join(str(x) for x in o[0]))
-        jobB = ppg.FileGeneratingJob(of, do_write).depends_on(dl)
-        def inner():
+            o = {}
+            def calc():
+                return numpy.array(range(0, 10), dtype=numpy.uint32)
+            def store(value):
+                o[0] = value
+            def cleanup():
+                del o[0]
+            dl = ppg.MemMappedDataLoadingJob('out/A', calc, store, numpy.uint32)
+            dl.cleanup = cleanup
+            of = 'out/B'
+            def do_write():
+                self.assertTrue(isinstance(o[0], numpy.core.memmap))
+                write(of, ",".join(str(x) for x in o[0]))
+                append('out/C', 'a')
+            jobB = ppg.FileGeneratingJob(of, do_write).depends_on(dl)
             ppg.run_pipegraph()
-        self.assertRaises(ppg.RuntimeError, inner)
-        self.assertTrue(isinstance(dl.lfg.exception, ppg.JobContractError))
-        self.assertTrue(dl.failed)
+            self.assertEqual(read('out/B'), "0,1,2,3,4,5,6,7,8,9")
+            self.assertEqual(read('out/C'), "a")
+            #now, no run...
+            ppg.new_pipegraph(rc_gen(), quiet=True)
+            dl = ppg.MemMappedDataLoadingJob('out/A', calc, store, numpy.uint32)
+            dl.cleanup = cleanup
+            jobB = ppg.FileGeneratingJob(of, do_write).depends_on(dl)
+            ppg.run_pipegraph()
+            self.assertEqual(read('out/C'), "a")
 
+            ppg.new_pipegraph(rc_gen(), quiet=True)
+            def calc2():
+                append('out/D', 'a')
+                return numpy.array(range(0, 12), dtype=numpy.uint32)
+            dl = ppg.MemMappedDataLoadingJob('out/A', calc2, store, numpy.uint32)
+            jobB = ppg.FileGeneratingJob(of, do_write).depends_on(dl)
+            dl.cleanup = cleanup
+
+            ppg.run_pipegraph()
+            self.assertEqual(read('out/D'), "a")
+            self.assertEqual(read('out/B'), "0,1,2,3,4,5,6,7,8,9,10,11")
+            self.assertEqual(read('out/C'), "aa")
+          
+        def test_raises_on_non_array(self):
+            import numpy
+            o = []
+            def calc():
+                return list(range(0, 10))
+            def store(value):
+                o.append(value)
+            def cleanup():
+                del o[0]
+            dl = ppg.MemMappedDataLoadingJob('out/A', calc, store, numpy.uint32)
+            dl.cleanup = cleanup
+            of = 'out/B'
+            def do_write():
+                self.assertTrue(isinstance(o[0], numpy.core.memmap))
+                write(of, ",".join(str(x) for x in o[0]))
+            jobB = ppg.FileGeneratingJob(of, do_write).depends_on(dl)
+            def inner():
+                ppg.run_pipegraph()
+            self.assertRaises(ppg.RuntimeError, inner)
+            self.assertTrue(isinstance(dl.lfg.exception, ppg.JobContractError))
+            self.assertTrue(dl.failed)
+
+        def test_raises_on_wrong_dtype(self):
+            import numpy
+            o = []
+            def calc():
+                return numpy.array(range(0, 10), dtype=numpy.float)
+            def store(value):
+                o.append(value)
+            def cleanup():
+                del o[0]
+            dl = ppg.MemMappedDataLoadingJob('out/A', calc, store, numpy.uint32)
+            dl.cleanup = cleanup
+            of = 'out/B'
+            def do_write():
+                self.assertTrue(isinstance(o[0], numpy.core.memmap))
+                write(of, ",".join(str(x) for x in o[0]))
+            jobB = ppg.FileGeneratingJob(of, do_write).depends_on(dl)
+            def inner():
+                ppg.run_pipegraph()
+            self.assertRaises(ppg.RuntimeError, inner)
+            self.assertTrue(isinstance(dl.lfg.exception, ppg.JobContractError))
+            self.assertTrue(dl.failed)
 
 
 

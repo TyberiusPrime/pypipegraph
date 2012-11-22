@@ -48,6 +48,9 @@ try:
 except ImportError:
     import pickle
 import traceback
+import platform;
+
+is_pypy = platform.python_implementation() == 'PyPy'
 
 class JobList(object):
     """For when you want to return a list of jobs that mostly behaves like a single Job.
@@ -1277,6 +1280,8 @@ class MemMappedDataLoadingJob(DataLoadingJob):
     Note that it's your job to del your memmapped reference to get it garbage collectable...
     """
     def __new__(cls, job_id, *args, **kwargs):
+        if is_pypy:
+            raise NotImplementedError("Numpypy currently does not support memmap(), there is no support for MemMappedDataLoadingJob using pypy.")
         if not isinstance(job_id, str) and not isinstance(job_id, str): #FIXME
             raise ValueError("cache_filename/job_id was not a str/unicode jobect")
         return Job.__new__(cls, job_id + '_load')  # plus load, so that the cached data goes into the cache_filename passed to the constructor...
