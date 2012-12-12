@@ -451,7 +451,7 @@ class FileTimeInvariant(_InvariantJob):
         self.input_file = filename
 
     def _get_invariant(self, old):
-        st = os.stat(self.input_file)
+        st = util.stat(self.input_file)
         return st[stat.ST_MTIME]
 
 
@@ -465,7 +465,7 @@ class FileChecksumInvariant(_InvariantJob):
         self.input_file = filename
 
     def _get_invariant(self, old):
-        st = os.stat(self.input_file)
+        st = util.stat(self.input_file)
         filetime = st[stat.ST_MTIME]
         filesize = st[stat.ST_SIZE]
         try:
@@ -505,6 +505,16 @@ class FileGeneratingJob(Job):
         self.callback = function
         self.rename_broken = rename_broken
         self.do_ignore_code_changes = False
+        self._is_done_cache = None
+        self._was_run = None
+
+    def get_was_run(self):
+        return self._was_run
+    def set_was_run(self, value):
+        self._was_run = value
+        self._is_done_cache = None
+    was_run = property(get_was_run, set_was_run)
+    
 
     def ignore_code_changes(self):
         self.do_ignore_code_changes = True
@@ -518,12 +528,15 @@ class FileGeneratingJob(Job):
             #logger.info("not Injecting outa invariants %s" % self)
 
     def is_done(self, depth=0):
-        return util.output_file_exists(self.job_id)
+        if self._is_done_cache is None:
+            self._is_done_cache = util.output_file_exists(self.job_id)
+        return self._is_done_cache
 
     def invalidated(self, reason=''):
         try:
             logger.info("unlinking %s" % self.job_id)
             os.unlink(self.job_id)
+            self._is_done_cache = False
         except OSError:
             pass
         Job.invalidated(self, reason)

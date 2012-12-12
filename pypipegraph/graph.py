@@ -408,20 +408,21 @@ class Pipegraph(object):
         needs_to_be_run = set()
         for job in self.jobs.values():
             if not job.is_done():
-                logger.info("Was not done: %s" % job)
+                #logger.info("Was not done: %s" % job)
                 if not job.is_loadable():
-                    logger.info("and is not loadable")
+                    #logger.info("and is not loadable")
                     needs_to_be_run.add(job.job_id)
                     if not job.always_runs:  # there is no need for the job injecting jobs to invalidate just because they need to be run.
                         if not job.is_temp_job:
-                            logger.info(job.is_temp_job)
+                            #logger.info(job.is_temp_job)
                             job.invalidated('not done')
                             if not job.was_invalidated:  # paranoia
                                 raise ppg_exceptions.RuntimeException("job.invalidated called, but was_invalidated was false")
                 #for preq in job.prerequisites:
                     #preq.require_loading() #think I can get away with  lettinng the slaves what they need to execute a given job...
             else:
-                logger.info("was done %s. Invalidation status: %s" % (job, job.was_invalidated))
+                #logger.info("was done %s. Invalidation status: %s" % (job, job.was_invalidated))
+                pass
 
         for job in self.jobs.values():
             if (job.was_invalidated  # this has been invalidated
@@ -520,6 +521,15 @@ class Pipegraph(object):
                 if len(runnable_jobs) == maximal_startable_jobs:
                     break
         if self.possible_execution_order and not runnable_jobs and not self.running_jobs:
+            time.sleep(5) #there might be an interaction with stat caching - filesize being reported as 0 after a job returned, when it really isn't. So we sleep a bit, anfd try again
+            runnable_jobs = []
+            logger.info("maximal_startable_jobs: %i" % maximal_startable_jobs)
+            for job in self.possible_execution_order:
+                if job.can_run_now():
+                    runnable_jobs.append(job)
+                    if len(runnable_jobs) == maximal_startable_jobs:
+                        break
+        if self.possible_execution_order and not runnable_jobs and not self.running_jobs: #ie. the sleeping did not help
             logger.info("Nothing running, nothing runnable, but work left to do")
             logger.info("job\tcan_run_now\tlist_blocks")
             for job in self.possible_execution_order:
