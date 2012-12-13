@@ -508,6 +508,8 @@ class FileGeneratingJob(Job):
         self._is_done_cache = None
         self._was_run = None
 
+    #the motivation for this chaching is that we do a lot of stat calls. Tens of thousands - and the answer can basically only change
+    #when you either run or invalidate the job. This apperantly cuts down about 9/10 of all stat calls
     def get_was_run(self):
         return self._was_run
     def set_was_run(self, value):
