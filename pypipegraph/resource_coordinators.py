@@ -28,6 +28,7 @@ import time
 from . import util
 logger = util.start_logging('RC')
 import os
+import codecs
 import traceback
 import multiprocessing
 try: 
@@ -225,12 +226,16 @@ class LocalSlave:
                 logger.info("Slave: Running %s in slave" % job)
                 stdout = tempfile.SpooledTemporaryFile(mode='w+')
                 stderr = tempfile.SpooledTemporaryFile(mode='w+')
+                stdout = codecs.getwriter('utf8')(stdout)
+                stderr = codecs.getwriter('utf8')(stderr)
                 self.run_a_job(job, stdout, stderr)
                 logger.info("Slave: returned from %s in slave, data was put" % job)
             else:
                 logger.info("Slave: Forking for %s" % job.job_id)
                 stdout = tempfile.TemporaryFile(mode='w+') #no more spooling - it doesn't get passed back
                 stderr = tempfile.TemporaryFile(mode='w+')
+                stdout = codecs.getwriter('utf8')(stdout)
+                stderr = codecs.getwriter('utf8')(stderr)
                 stdout.fileno()
                 stderr.fileno()
                 p = multiprocessing.Process(target=self.run_a_job, args=[job, stdout, stderr, False])
@@ -244,6 +249,9 @@ class LocalSlave:
     def load_job(self, job):  # this executes a load job returns false if an error occured
         stdout = tempfile.SpooledTemporaryFile(mode='w')
         stderr = tempfile.SpooledTemporaryFile(mode='w')
+        stdout = codecs.getwriter('utf8')(stdout)
+        stderr = codecs.getwriter('utf8')(stderr)
+                
         old_stdout = sys.stdout
         old_stderr = sys.stderr
         sys.stdout = stdout
