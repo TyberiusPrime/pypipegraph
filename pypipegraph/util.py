@@ -22,11 +22,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import os
-import stat
+import stat as stat_module
 import logging
 import logging.handlers
 import sys
 import atexit
+import time
 
 global_pipegraph = None
 is_remote = False
@@ -58,6 +59,8 @@ def start_logging(module):
         loggers[name] = logger
     return loggers[name]
 
+util_logger = start_logging('util')
+
 
 def change_logging_port(port):
     """By default, a running Pipegraph chatters to localhost:5005 via tcp 
@@ -80,10 +83,12 @@ def flush_logging():
 
 def output_file_exists(filename):
     """Check if a file exists and its size is > 0"""
-    if not os.path.exists(filename):
+    if not file_exists(filename):
+        util_logger.info('did not exist %s'% filename)
         return False
-    st = os.stat(filename)
-    if st[stat.ST_SIZE] == 0:
+    st = stat(filename)
+    if st[stat_module.ST_SIZE] == 0:
+        util_logger.info('stat size 0 %s'% filename)
         return False
     return True
 
@@ -147,6 +152,60 @@ def CPUs():
             if ncpus > 0:
                 cpu_count = ncpus
     return cpu_count
+
+def file_exists(filename):
+    return os.path.exists(filename)
+
+stat_cache = {}
+def stat(filename):
+    if not filename in stat_cache:
+        stat_cache[filename] = (os.stat(filename), time.time())
+        return stat_cache[filename][0]
+    s, t = stat_cache[filename]
+    if (time.time() - t) > 1:
+        stat_cache[filename] = (os.stat(filename), time.time())
+    s, t = stat_cache[filename]
+    return s
+
+class JobList(object):
+    """For when you want to return a list of jobs that mostly behaves like a single Job.
+    (Ie. when it must have a depends_on() method. Otherwise, a regular list will do fine).
+    """
+    def __init__(self, jobs):
+        jobs = list(jobs)
+        for job in jobs:
+            if not isinstance(job, Job):
+                raise ppg_exceptions.ValueError("%s was not a job object" % job)
+        self.jobs = set(jobs)
+
+    def __iter__(self):
+        for job in self.jobs:
+            yield job
+
+    def __add__(self, other_job):
+        if isinstance(other_job, list):
+            other_job = JobList(other_job)
+
+        def iter():
+            for job in self.jobs:
+                yield job
+            if isinstance(other_job, Job):
+                yield other_job
+            else:
+                for job in other_job:
+                    yield job
+
+        return JobList(iter())
+
+    def __len__(self):
+        return len(self.jobs)
+
+    def depends_on(self, other_job):
+        for job in self.jobs:
+           job.depends_on(other_job)
+
+
+
 
 
 #Compatibility shims from six

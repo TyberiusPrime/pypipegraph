@@ -1351,6 +1351,7 @@ class InvariantTests(PPGPerTest):
 
         #time.sleep(1) #we don't care about the time, size should be enough...
         write(ftfn,'hello world') #different time
+        time.sleep(1) #give the file system a second to realize the change.
 
         ppg.new_pipegraph(rc_gen(), quiet=True)
         job = ppg.FileGeneratingJob(of, do_write)
