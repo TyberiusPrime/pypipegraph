@@ -307,7 +307,10 @@ class LocalSlave:
             try:
                 exception = pickle.dumps(e)
             except Exception as e:  # some exceptions can't be pickled, so we send a string instead
-                exception = bytes("STR", 'UTF-8') + bytes(e)
+                try:
+                    exception = bytes("STR", 'UTF-8') + bytes(e)
+                except TypeError:
+                    exception = str(e)
         stdout.seek(0, os.SEEK_SET)
         stdout_text = stdout.read()
         stdout.close()
