@@ -10,7 +10,8 @@ setup(
     author_email='finkernagel@imt.uni-marburg.de',
     description = "A workflow (job) engine/pipeline for bioinformatics and scientific computing.",
     long_description=open('README.txt').read(),
-    classifirs = [
+    requires = ['kitchen'],
+    classifiers = [
       'Programming Language :: Python',
       'Programming Language :: Python :: 3'
       ]
