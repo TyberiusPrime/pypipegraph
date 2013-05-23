@@ -585,6 +585,13 @@ class MultiFileGeneratingJobTests(PPGPerTest):
             job = ppg.MultiFileGeneratingJob(['one', 2], lambda : write('out/A'))
         self.assertRaises(ValueError, inner)
 
+    def test_raises_on_collision(self):
+        def inner():
+            a = ppg.MultiFileGeneratingJob(['test1','test2'], lambda: 5)
+            a = ppg.MultiFileGeneratingJob(['test2', 'test3'], lambda: 5)
+        self.assertRaises(ValueError, inner)
+
+
 test_modifies_shared_global = []
 class DataLoadingJobTests(PPGPerTest):
 
