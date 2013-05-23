@@ -73,6 +73,7 @@ def new_pipegraph(resource_coordinator=None, quiet=False,
     util.global_pipegraph = Pipegraph(resource_coordinator, quiet=quiet, 
             invariant_status_filename=invariant_status_filename)
     util.job_uniquifier = {}
+    util.filename_collider_check = {}
     util.func_hashes = {}
     logger.info("\n\n")
     logger.info("New Pipegraph")

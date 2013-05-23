@@ -506,6 +506,10 @@ class FileGeneratingJob(Job):
         """
         if not hasattr(function, '__call__'):
             raise ValueError("function was not a callable")
+        if output_filename in util.filename_collider_check and util.filename_collider_check[output_filename] is not self:
+            raise ValueError("Two jobs generating the same file: %s %s%" % (self, util.filename_collider_check[output_filename]))
+        else:
+            util.filename_collider_check[output_filename] = self
         Job.__init__(self, output_filename)
         self.callback = function
         self.rename_broken = rename_broken
@@ -593,6 +597,11 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         for x in sorted_filenames:
             if not isinstance(x, str) and not isinstance(x, str): #FIXME
                 raise ValueError("Not all filenames passed to MultiFileGeneratingJob were str or unicode objects")
+            if x in util.filename_collider_check and util.filename_collider_check[x] is not self:
+                raise ValueError("Two jobs generating the same file: %s %s - %s" % (self, util.filename_collider_check[x], x))
+            else:
+                util.filename_collider_check[x] = self
+        
         job_id = ":".join(sorted_filenames)
         Job.__init__(self, job_id)
         self.filenames = filenames
