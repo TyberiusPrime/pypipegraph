@@ -397,7 +397,7 @@ class FunctionInvariant(_InvariantJob):
             util.func_hashes[id(self.function.__code__)] = self.dis_code(self.function.__code__)
         return util.func_hashes[id(self.function.__code__)]
 
-    inner_code_object_re = re.compile('(<code	object	<[^>]+>	at	0x[a-f0-9]+[^>]+)' + '|' +  #that's the cpython way
+    inner_code_object_re = re.compile('(<code	object	<[^>]+>?	at	0x[a-f0-9]+[^>]+)' + '|' +  #that's the cpython way
                                        '(<code\tobject\t<[^>]+>,\tfile\t\'[^\']+\',\tline\t[0-9]+)' #that's how they look like in pypy. More sensibly, actually
             )
 
