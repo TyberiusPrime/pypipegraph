@@ -647,6 +647,7 @@ class Pipegraph(object):
             logger.info("Setting %s.was_run to true, returned" % job)
             job.was_run = True
             job.check_prerequisites_for_cleanup()
+            logger.info("%s runtime: %s" % (job, time.time() - job.start_time))
         if hasattr(job, 'stdout_handle') and job.stdout_handle:
             job.stdout_handle.close()
         if hasattr(job, 'stderr_handle') and job.stderr_handle:
