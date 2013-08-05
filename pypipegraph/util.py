@@ -109,7 +109,7 @@ class NothingChanged(Exception):
         self.new_value = new_value
 
 
-def assert_uniqueness_of_object(object_with_name_attribute, pipeline=None):
+def assert_uniqueness_of_object(object_with_name_attribute, pipeline=None, also_check = None):
     """Makes certain there is only one object with this class & .name.
 
     This is necesarry so the pipeline jobs assign their data only to the
@@ -124,6 +124,12 @@ def assert_uniqueness_of_object(object_with_name_attribute, pipeline=None):
         pipeline.object_uniquifier[typ] = {}
     if object_with_name_attribute.name in pipeline.object_uniquifier[typ]:
         raise ValueError("Doublicate object: %s, %s" % (typ, object_with_name_attribute.name))
+    if also_check:
+        if not isinstance(also_check, list):
+            also_check = [also_check]
+        for other_typ in also_check:
+            if object_with_name_attribute.name in pipeline.object_uniquifier[other_typ]:
+                raise ValueError("Doublicate object: %s, %s" % (other_typ, object_with_name_attribute.name))
     object_with_name_attribute.unique_id = len(pipeline.object_uniquifier[typ])
     pipeline.object_uniquifier[typ][object_with_name_attribute.name] = True
 
