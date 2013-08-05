@@ -2966,12 +2966,70 @@ class NotYetImplementedTests(unittest.TestCase):
         #very similar to the previous case, this basically directly get's you into the 'Job execution order territory....'
         raise NotImplementedError
 
+class TestUtils(PPGPerTest):
+    def test_assert_uniqueness_simple(self):
+        class Dummy:
+            def __init__(self, name):
+                self.name = name
+                ppg.util.assert_uniqueness_of_object(self) 
+        a = Dummy('shu')
+        def inner():
+            b = Dummy('shu')
+        self.assertRaises(ValueError, inner)
 
+    def test_assert_uniqueness_ok(self):
+        class Dummy:
+            def __init__(self, name):
+                self.name = name
+                ppg.util.assert_uniqueness_of_object(self) 
+        a = Dummy('shu')
+        b = Dummy('sha')
+        def inner():
+            c = Dummy('shu')
+        self.assertRaises(ValueError, inner)
 
+    def test_assert_uniqueness_ok_multi_classes(self):
+        class Dummy:
+            def __init__(self, name):
+                self.name = name
+                ppg.util.assert_uniqueness_of_object(self) 
+        class Dummy2:
+            def __init__(self, name):
+                self.name = name
+                ppg.util.assert_uniqueness_of_object(self) 
+        a = Dummy('shu')
+        b = Dummy2('shu')
+        def inner():
+            c = Dummy('shu')
+        self.assertRaises(ValueError, inner)
 
+    def test_assert_uniqueness_raises_also_check(self):
+        class Dummy:
+            def __init__(self, name):
+                self.name = name
+                ppg.util.assert_uniqueness_of_object(self) 
+        class Dummy2:
+            def __init__(self, name):
+                self.name = name
+                ppg.util.assert_uniqueness_of_object(self, also_check = Dummy) 
+        a = Dummy('shu')
+        def inner():
+            c = Dummy2('shu')
+        self.assertRaises(ValueError, inner)
 
-
-
+    def test_assert_uniqueness_raises_also_check_list(self):
+        class Dummy:
+            def __init__(self, name):
+                self.name = name
+                ppg.util.assert_uniqueness_of_object(self) 
+        class Dummy2:
+            def __init__(self, name):
+                self.name = name
+                ppg.util.assert_uniqueness_of_object(self, also_check = [Dummy]) 
+        a = Dummy('shu')
+        def inner():
+            c = Dummy2('shu')
+        self.assertRaises(ValueError, inner)
 
 
 if __name__ == '__main__':
