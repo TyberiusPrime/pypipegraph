@@ -45,9 +45,10 @@ if os.path.exists('logs'):
 else:
     file_logging_handler = None
 loggers = {}
+file_logging_handlers = {}
 
 
-def start_logging(module):
+def start_logging(module, other_file = None):
     key = 'rem' if is_remote else 'ppg'
     name = "%s.%s" % (key, module)
     if not name in loggers:
@@ -57,6 +58,11 @@ def start_logging(module):
             logger.addHandler(default_logging_handler)
         if file_logging_handler is not None:
             logger.addHandler(file_logging_handler)
+        if other_file:
+            if not other_file in file_logging_handlers:
+                file_logging_handlers[other_file] = logging.FileHandler(os.path.join(logs, other_file), mode = "w")
+            logger.addHandler(file_logging_handlers[other_file])
+
         loggers[name] = logger
     return loggers[name]
 
