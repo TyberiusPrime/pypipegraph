@@ -662,6 +662,40 @@ class TempFileGeneratingJob(FileGeneratingJob):
         FileGeneratingJob.__init__(self, output_filename, function, rename_broken)
         self.is_temp_job = True
 
+    def cleanup(self):
+        logger.info("%s cleanup" % self)
+        try:
+             # the renaming will already have been done when FileGeneratingJob.run(self) was called...
+            #if self.rename_broken:
+                #shutil.move(self.job_id, self.job_id + '.broken')
+            #else:
+            logger.info("unlinking %s" % self.job_id)
+            os.unlink(self.job_id)
+        except (OSError, IOError):
+            pass
+
+    def runs_in_slave(self):
+        return True
+
+    def is_done(self, depth=0):
+        if util.output_file_exists(self.job_id):
+            return True
+        else:
+            for dep in self.dependants:
+                if (not dep.is_done()) and (not dep.is_loadable()):
+                    return False
+            return True
+
+class TempFilePlusGeneratingJob(FileGeneratingJob):
+    """Create a temporary file that is removed once all direct dependands have
+    been executed sucessfully, 
+    but keep a log file (and rerun if the log file is not there)
+    """
+
+    def __init__(self, output_filename, log_file, function, rename_broken=False):
+        FileGeneratingJob.__init__(self, output_filename, function, rename_broken)
+        self.log_file = log_file
+        self.is_temp_job = True
 
     def cleanup(self):
         logger.info("%s cleanup" % self)
@@ -679,6 +713,8 @@ class TempFileGeneratingJob(FileGeneratingJob):
         return True
 
     def is_done(self, depth=0):
+        if not os.path.exists(self.log_file):
+            return False
         if util.output_file_exists(self.job_id):
             return True
         else:
