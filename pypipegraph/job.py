@@ -394,7 +394,11 @@ class FunctionInvariant(_InvariantJob):
             if str(self.function).startswith('<built-in function'):
                 return str(self.function)
         if not id(self.function.__code__) in util.func_hashes:
-            util.func_hashes[id(self.function.__code__)] = self.dis_code(self.function.__code__)
+            if hasattr(self.function, 'im_func') and 'cyfunction' in repr(self.function.im_func):
+                invariant = self.get_cython_source(self.function)
+            else:
+                invariant = self.dis_code(self.function.__code__)
+            util.func_hashes[id(self.function.__code__)] = invariant
         return util.func_hashes[id(self.function.__code__)]
 
     inner_code_object_re = re.compile('(<code	object	<[^>]+>?	at	0x[a-f0-9]+[^>]+)' + '|' +  #that's the cpython way
@@ -425,6 +429,73 @@ class FunctionInvariant(_InvariantJob):
                 res += 'inner no %i' % ii
                 res += self.dis_code(constant)
         return res
+
+    def get_cython_source(self, cython_func):
+        """Attemp to get the cython source for a function.
+        Requires cython code to be compiled with -p or #embed_pos_in_docstring=True in the source file
+
+        Unfortunatly, finding the right module (to get an absolute file path) is not straight forward,
+        we inspect all modules in sys.module, and their children, but we might be missing sub-sublevel modules,
+        in which case we'll need to increase search depth
+        """
+
+        #check there's actually the file and line no documentation
+        first_doc_line = cython_func.__doc__.split("\n")[0]
+        if not first_doc_line.startswith('File:'):
+            raise ValueError("No file/line information in doc string. Make sure your cython is compiled with -p (or #embed_pos_in_docstring=True atop your pyx")
+        line_no = int(first_doc_line[first_doc_line.find('starting at line ') + len('starting at line '):first_doc_line.find(')')])
+
+        #find the right module
+        module_name = cython_func.im_class.__module__
+        found = False
+        for name in sorted(sys.modules):
+            if name == module_name or name.endswith("." + module_name):
+                try:
+                    if getattr(sys.modules[name], cython_func.im_class.__name__) == cython_func.im_class:
+                        found = sys.modules[name]
+                        break
+                except AttributeError:
+                    continue
+            elif hasattr(sys.modules[name], module_name):
+                sub_module = getattr(sys.modules[name], module_name)
+                try:
+                    if getattr(sub_module, cython_func.im_class.__name__) == cython_func.im_class:
+                        found = sys.moduls[name].sub_module
+                        break
+                except AttributeError:
+                    continue
+        if not found:
+            raise ValueError("Could not find module for %s" % cython_func)
+        filename = found.__file__.replace('.so', '.pyx')
+
+        #load the source code
+        op = open(filename, 'rb')
+        d = op.read().split("\n")
+        op.close()
+
+        #extract the function at hand, minus doc string
+        remaining_lines = d[line_no:]
+        first_line = remaining_lines[0]
+        first_line_indent = len(first_line) - len(first_line.lstrip())
+        starts_with_double_quote = first_line.strip().startswith('"""')
+        starts_with_single_quote = first_line.strip().startswith("'''")
+        if starts_with_single_quote or starts_with_double_quote:  # there is a docstring
+            text = "\n".join(remaining_lines).strip()
+            text = text[3:]  # cut of initial ###
+            if starts_with_single_quote:
+                text = text[text.find("'''") + 3:]
+            else:
+                text = text[text.find('"""') + 3:]
+            remaining_lines = text.split("\n")
+        last_line = len(remaining_lines)
+        for ii, line in enumerate(remaining_lines):
+            line_strip = line.strip()
+            if line_strip:
+                indent = len(line) - len(line_strip)
+                if indent < first_line_indent:
+                    last_line = ii
+                    break
+        return "\n".join(remaining_lines[:last_line]).strip()
 
 
 class ParameterInvariant(_InvariantJob):
@@ -714,6 +785,7 @@ class TempFilePlusGeneratingJob(FileGeneratingJob):
 
     def is_done(self, depth=0):
         if not os.path.exists(self.log_file):
+            print ('could not find log file', self.log_file)
             return False
         if util.output_file_exists(self.job_id):
             return True
