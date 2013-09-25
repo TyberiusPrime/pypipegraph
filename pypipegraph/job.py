@@ -393,6 +393,12 @@ class FunctionInvariant(_InvariantJob):
         if not hasattr(self.function, '__code__'):
             if str(self.function).startswith('<built-in function'):
                 return str(self.function)
+            elif hasattr(self.function, 'im_func') and ('cyfunction' in repr(self.function.im_func) or repr(self.function.im_func).startswith('<built-in function')):
+                return self.get_cython_source(self.function)
+            else:
+                print (repr(self.function))
+                print (repr(self.function.im_func))
+                raise ValueError("Can't handle this object %s" % self.function)
         if not id(self.function.__code__) in util.func_hashes:
             if hasattr(self.function, 'im_func') and 'cyfunction' in repr(self.function.im_func):
                 invariant = self.get_cython_source(self.function)
