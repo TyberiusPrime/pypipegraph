@@ -1197,6 +1197,8 @@ class PlotJob(FileGeneratingJob):
         if not self.do_ignore_code_changes:
             if not self.skip_caching:
                 self.cache_job.depends_on(FunctionInvariant(self.job_id + '.calcfunc', self.calc_function))
+            else:
+                FileGeneratingJob.depends_on(self, FunctionInvariant(self.job_id + '.calcfunc', self.calc_function))
             FileGeneratingJob.depends_on(self, FunctionInvariant(self.job_id + '.plotfunc', self.plot_function))
 
     def get_data(self):
