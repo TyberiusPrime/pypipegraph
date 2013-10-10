@@ -1149,7 +1149,8 @@ class PlotJob(FileGeneratingJob):
                 else:
                     pydataframe.DF2Excel().write(df, self.table_filename)  # must have been a dict...
             table_gen_job = FileGeneratingJob(self.table_filename, dump_table)
-            table_gen_job.depends_on(cache_job)
+            if not self.skip_caching:
+                table_gen_job.depends_on(cache_job)
             self.table_job = table_gen_job
         else:
             self.table_job = None
@@ -1189,6 +1190,8 @@ class PlotJob(FileGeneratingJob):
         #FileGeneratingJob.depends_on(self, other_job)  # just like the cached jobs, the plotting does not depend on the loading of prerequisites
         if self.skip_caching:
             Job.depends_on(self, other_job)
+            if self.table_job:
+                self.table_job.depends_on(other_job)
         elif hasattr(self, 'cache_job') and not other_job is self.cache_job:  # activate this after we have added the invariants...
             self.cache_job.depends_on(other_job)
         return self
