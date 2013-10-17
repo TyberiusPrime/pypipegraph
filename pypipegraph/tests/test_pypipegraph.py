@@ -1541,11 +1541,33 @@ class FunctionInvariantTests(PPGPerTest):
         c = ppg.FunctionInvariant('c', get_func3(100)) #and this invariant should be different
         av = a.get_invariant(False)
         bv = b.get_invariant(False)
-        cv= c.get_invariant(False)
+        cv =c.get_invariant(False)
         self.assertTrue(a.get_invariant(False))
         self.assertEqual(bv, av)
         self.assertNotEqual(av, cv)
 
+    def test_inner_functions(self):
+        def get_func(x):
+            def inner():
+                return 23
+            return inner
+        def get_func2(x):
+            def inner():
+                return 23
+            return inner
+        def get_func3(x):
+            def inner():
+                return 23 + 5
+            return inner
+        a = ppg.FunctionInvariant('a', get_func(100))
+        b = ppg.FunctionInvariant('b', get_func2(100))#that invariant should be the same
+        c = ppg.FunctionInvariant('c', get_func3(100)) #and this invariant should be different
+        av = a.get_invariant(False)
+        bv = b.get_invariant(False)
+        cv =c.get_invariant(False)
+        self.assertTrue(a.get_invariant(False))
+        self.assertEqual(bv, av)
+        self.assertNotEqual(av, cv)
 
     def test_passing_non_function_raises(self):
         def inner():
@@ -1558,8 +1580,6 @@ class FunctionInvariantTests(PPGPerTest):
         jobB.depends_on(job)
         ppg.run_pipegraph()
         self.assertEqual(read('out/A'), 'A')
-
-
 
     def test_passing_non_string_as_jobid(self):
         def inner():
