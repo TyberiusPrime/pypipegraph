@@ -36,12 +36,14 @@ import subprocess
 #rc_gen = lambda : ppg.resource_coordinators.LocalTwisted()
 rc_gen = lambda: ppg.resource_coordinators.LocalSystem()
 
-def read(filename): 
+
+def read(filename):
     """simply read a file"""
     op = open(filename)
     data = op.read()
     op.close()
     return data
+
 
 def write(filename, string):
     """open file for writing, dump string, close file"""
@@ -49,15 +51,18 @@ def write(filename, string):
     op.write(string)
     op.close()
 
+
 def append(filename, string):
     """open file for appending, dump string, close file"""
     op = open(filename, 'a')
     op.write(string)
     op.close()
 
+
 def writeappend(filename_write, filename_append, string):
     write(filename_write, string)
     append(filename_append, string)
+
 
 def magic(filename):
     """See what linux 'file' commando says about that file"""
@@ -66,6 +71,7 @@ def magic(filename):
     p = subprocess.Popen(['file', filename], stdout=subprocess.PIPE)
     stdout, stderr = p.communicate()
     return stdout
+
 
 test_count = 0
 class PPGPerTest(unittest.TestCase):
@@ -180,10 +186,6 @@ class CycleTests(unittest.TestCase):
         self.assertRaises(ppg.CycleError, inner)
 
 
-
-
-
-
 class JobTests(unittest.TestCase):
     def tearDown(self):
         try:
@@ -273,9 +275,6 @@ class JobTests(unittest.TestCase):
         ppg.new_pipegraph(quiet=True)
         jobA = ppg.FileGeneratingJob('out/',lambda : None)
         self.assertTrue(hasattr(jobA, '__hash__'))
-
-
-
 
 
 class FileGeneratingJobTests(PPGPerTest):
@@ -411,7 +410,7 @@ class FileGeneratingJobTests(PPGPerTest):
         ppg.run_pipegraph()
         self.assertTrue(read(ofA) == read(ofB)[::-1])
 
-    def test_file_generation_multicore(self): 
+    def test_file_generation_multicore(self):
         #one fork per FileGeneratingJob...
         ofA = 'out/a'
         def writeA():
@@ -554,7 +553,7 @@ class MultiFileGeneratingJobTests(PPGPerTest):
             pass
         for f in of:
             self.assertFalse(os.path.exists(f))
-    
+
     def test_passing_not_a_list_of_str(self):
         def inner():
             job = ppg.MultiFileGeneratingJob('out/a', lambda: 1)
@@ -610,8 +609,8 @@ class DataLoadingJobTests(PPGPerTest):
         self.assertEqual(read(of), 'shared data')
 
 
-    def test_global_statement_works(self): 
-        #this currently does not work in the cloudpickle transmitted jobs - 
+    def test_global_statement_works(self):
+        #this currently does not work in the cloudpickle transmitted jobs -
         #two jobs refereing to global have different globals afterwards
         #or the 'global shared' does not work as expected after loading
         global shared
@@ -775,12 +774,11 @@ class DataLoadingJobTests(PPGPerTest):
         self.assertEqual(read('out/C'), 'C')
 
 
-
 class Dummy(object):
     pass
 
-class AttributeJobTests(PPGPerTest):
 
+class AttributeJobTests(PPGPerTest):
     def test_basic_attribute_loading(self):
         o = Dummy()
         def load():
@@ -935,8 +933,8 @@ class AttributeJobTests(PPGPerTest):
         self.assertEqual(read('out/Aa'), 'A')
         self.assertEqual(read('out/B'), '5')
 
-class TempFileGeneratingJobTest(PPGPerTest):
 
+class TempFileGeneratingJobTest(PPGPerTest):
     def test_basic(self):
         temp_file = 'out/temp'
         def write_temp():
@@ -976,7 +974,7 @@ class TempFileGeneratingJobTest(PPGPerTest):
         self.assertEqual(read(out_file), '1:temp')
         self.assertEqual(read(count_file), 'X')
         self.assertEqual(read(normal_count_file), 'A')
-        #now, rerun. Tempfile has been deleted, 
+        #now, rerun. Tempfile has been deleted,
         #and should not be regenerated
         ppg.new_pipegraph(rc_gen(), quiet=True)
         jobA = ppg.FileGeneratingJob(out_file, write_count)
@@ -1014,7 +1012,7 @@ class TempFileGeneratingJobTest(PPGPerTest):
         self.assertEqual(read(out_file), '1:temp')
         self.assertEqual(read(count_file), 'X')
         self.assertEqual(read(normal_count_file), 'A')
-        #now, rerun. Tempfile has been deleted, 
+        #now, rerun. Tempfile has been deleted,
         #and should  be regenerated
         os.unlink(out_file)
         ppg.new_pipegraph(rc_gen(), quiet=True)
@@ -1160,7 +1158,7 @@ class TempFileGeneratingJobTest(PPGPerTest):
         self.assertFalse(os.path.exists('out/A'))
         self.assertFalse(os.path.exists('out/B'))
         self.assertFalse(os.path.exists('out/C'))
-         
+
     def test_rerun_because_of_new_dependency_does_not_rerun_old_chained(self):
         jobA = ppg.TempFileGeneratingJob("out/A", lambda: write('out/A', 'A'))
         jobB = ppg.TempFileGeneratingJob("out/B", lambda: write('out/B', read('out/A') + 'B'))
@@ -1181,7 +1179,7 @@ class TempFileGeneratingJobTest(PPGPerTest):
         jobD.depends_on(jobA)
         ppg.run_pipegraph()
         self.assertEqual(read('out/D'), 'AD')
-        self.assertEqual(read('out/Dx'), '1') 
+        self.assertEqual(read('out/Dx'), '1')
         self.assertEqual(read('out/C'), 'ABC')
         self.assertEqual(read('out/Cx'), '1')
 
@@ -1198,8 +1196,6 @@ class TempFileGeneratingJobTest(PPGPerTest):
         self.assertEqual(read('out/Dx'), '11')  #both get rerun
         self.assertEqual(read('out/C'), 'aBC')
         self.assertEqual(read('out/Cx'), '11')
-
-
 
 
 class InvariantTests(PPGPerTest):
@@ -1409,7 +1405,7 @@ class InvariantTests(PPGPerTest):
         self.assertTrue(fg.was_invalidated) #yeah
         self.assertEqual(read("out/A"),'A')
         self.assertEqual(read("out/B"),'BB')
-    
+
     def test_invariant_dumping_on_graph_exception(self):
         #when an exception occurs not within a job
         #but within the pipegraph itself (e.g. when the user hit's CTRL-C
@@ -1470,7 +1466,7 @@ class InvariantTests(PPGPerTest):
         self.assertEqual(read("out/B"),'BB')
 
     def test_FileTimeInvariant_cant_have_dependencies(self):
-        #invariants are always roots of the DAG - they can't have any dependencies themselves 
+        #invariants are always roots of the DAG - they can't have any dependencies themselves
         write('out/shu', 'shu')
         job = ppg.FileTimeInvariant('out/shu')
         jobB = ppg.FileGeneratingJob('out/A', lambda: write('out/A', 'a'))
@@ -1479,7 +1475,7 @@ class InvariantTests(PPGPerTest):
         self.assertRaises(ppg.JobContractError, inner)
 
     def test_FileChecksumInvariant_cant_have_dependencies(self):
-        #invariants are always roots of the DAG - they can't have any dependencies themselves 
+        #invariants are always roots of the DAG - they can't have any dependencies themselves
         write('out/shu', 'shu')
         job = ppg.FileChecksumInvariant('out/shu')
         jobB = ppg.FileGeneratingJob('out/A', lambda: write('out/A', 'a'))
@@ -1489,7 +1485,7 @@ class InvariantTests(PPGPerTest):
 
 
     def test_ParameterInvariant_cant_have_dependencies(self):
-        #invariants are always roots of the DAG - they can't have any dependencies themselves 
+        #invariants are always roots of the DAG - they can't have any dependencies themselves
         job = ppg.ParameterInvariant('out/shu', ('123',))
         jobB = ppg.FileGeneratingJob('out/A', lambda: write('out/A', 'a'))
         def inner():
@@ -1571,7 +1567,7 @@ class FunctionInvariantTests(PPGPerTest):
         self.assertRaises(ValueError, inner)
 
     def test_cant_have_dependencies(self):
-        #invariants are always roots of the DAG - they can't have any dependencies themselves 
+        #invariants are always roots of the DAG - they can't have any dependencies themselves
         def shu():
             pass
         job = ppg.FunctionInvariant('shu', shu)
@@ -1615,9 +1611,8 @@ class FunctionInvariantTests(PPGPerTest):
             y.get_job()
         self.assertRaises(ppg.JobContractError, inner)
 
+
 class DependencyTests(PPGPerTest):
-
-
     def test_simple_chain(self):
         o = Dummy()
         def load_a():
@@ -1674,7 +1669,7 @@ class DependencyTests(PPGPerTest):
 
         self.assertTrue(os.path.exists(ofA))
         self.assertEqual(read(ofA), 'hello') #run only once!
-        self.assertTrue(os.path.exists(ofB)) 
+        self.assertTrue(os.path.exists(ofB))
         self.assertTrue(os.path.exists(ofC))
 
     def test_done_filejob_does_not_gum_up_execution(self):
@@ -1703,7 +1698,7 @@ class DependencyTests(PPGPerTest):
         self.assertTrue(os.path.exists(ofB))
         self.assertTrue(os.path.exists(ofC))
         self.assertEqual(read(ofA), '1111')
-     
+
 
 
     def test_invariant_violation_redoes_deps_but_not_nondeps(self):
@@ -1775,7 +1770,6 @@ class DependencyTests(PPGPerTest):
 
 
 class DependencyInjectionJobTests(PPGPerTest):
-
     def test_basic(self):
         #TODO: there is a problem with this apporach. The AttributeLoadingJob
         #references different objects, since it get's pickled alongside with the method,
@@ -1971,7 +1965,7 @@ class JobGeneratingJobTests(PPGPerTest):
         self.assertTrue(read('out/D'), 'D')
 
     def test_generated_job_depending_on_each_other_one_of_them_is_Invariant(self):
-        #basic idea. You have jobgen A, 
+        #basic idea. You have jobgen A,
         #it not only creates filegenB, but also ParameterDependencyC that A depends on
         #does that work
         def gen():
@@ -2036,7 +2030,7 @@ class JobGeneratingJobTests(PPGPerTest):
         b()
 
     def test_generated_job_depending_on_each_other(self):
-        #basic idea. You have jobgen A, 
+        #basic idea. You have jobgen A,
         #it not only creates filegenB, but also filegenC that depends on B
         #does that work
         def gen():
@@ -2049,7 +2043,7 @@ class JobGeneratingJobTests(PPGPerTest):
         self.assertEqual(read('out/C'), 'B')
 
     def test_generated_job_depending_on_each_other_one_of_them_is_loading(self):
-        #basic idea. You have jobgen A, 
+        #basic idea. You have jobgen A,
         #it not only creates filegenB, but also DataloadingC that depends on B
         #does that work
         def gen():
@@ -2112,8 +2106,6 @@ class JobGeneratingJobTests(PPGPerTest):
         ppg.run_pipegraph()
         self.assertEqual(read('out/Ac'), 'AA')
         self.assertEqual(read('out/Cx'), 'CC')
-
-
 
 
 try:
@@ -2290,7 +2282,7 @@ if pyggplot_available:
                 ppg.run_pipegraph()
                 raise ValueError("should not be reached")
             except ppg.RuntimeError:
-                pass 
+                pass
             self.assertTrue(isinstance(job.cache_job.exception, ppg.JobContractError))
 
         def test_raises_if_plot_returns_non_plot(self):
@@ -2306,7 +2298,7 @@ if pyggplot_available:
                 ppg.run_pipegraph()
                 raise ValueError("should not be reached")
             except ppg.RuntimeError:
-                pass 
+                pass
             self.assertTrue(isinstance(job.exception, ppg.JobContractError))
 
         def test_passing_non_function_for_calc(self):
@@ -2324,8 +2316,8 @@ if pyggplot_available:
                 job = ppg.PlotJob(5, lambda: 1, lambda df: 34)
             self.assertRaises(ValueError, inner)
 
+
 class CachedAttributeJobTests(PPGPerTest):
- 
     def test_simple(self):
         o = Dummy()
         def calc():
@@ -2540,8 +2532,8 @@ class CachedAttributeJobTests(PPGPerTest):
             ca = ppg.CachedAttributeLoadingJob('out/C', o, 354, lambda: 55)
         self.assertRaises(ValueError, inner)
 
-class CachedDataLoadingJobTests(PPGPerTest):
 
+class CachedDataLoadingJobTests(PPGPerTest):
     def test_simple(self):
         o = Dummy()
         def calc():
@@ -2564,7 +2556,7 @@ class CachedDataLoadingJobTests(PPGPerTest):
             return ", ".join(str(x) for x in range(0, 100))
         def store(value):
             o.a = value
-        job = ppg.CachedDataLoadingJob('out/mycalc', calc, store) 
+        job = ppg.CachedDataLoadingJob('out/mycalc', calc, store)
         #job.ignore_code_changes() #or it would run anyway... hm.
         self.assertFalse(os.path.exists('out/mycalc'))
         ppg.run_pipegraph()
@@ -2684,9 +2676,11 @@ class CachedDataLoadingJobTests(PPGPerTest):
         self.assertEqual(read('out/A'), 'A') #did not run the dl job
         self.assertEqual(read('out/B'), 'B') #did not run the calc job again
         self.assertEqual(read('out/Cx'), 'CC') #did run the load job again
-import platform;
+
+
+import platform
 is_pypy = platform.python_implementation() == 'PyPy'
-if is_pypy: #right now, pypy not support numpypy.memmap. IF it ever exists, this will raise...
+if is_pypy:  # right now, pypy not support numpypy.memmap. IF it ever exists, this will raise...
     class DoesMemMapNowExistOnPyPy(unittest.TestCase):
         def test_does_not_exist(self):
             import numpypy
@@ -2768,7 +2762,7 @@ else:
             self.assertEqual(read('out/D'), "a")
             self.assertEqual(read('out/B'), "0,1,2,3,4,5,6,7,8,9,10,11")
             self.assertEqual(read('out/C'), "aa")
-          
+
         def test_raises_on_non_array(self):
             import numpy
             o = []
@@ -2814,9 +2808,7 @@ else:
             self.assertTrue(dl.failed)
 
 
-
 class TestResourceCoordinator(PPGPerTest):
-       
     def test_jobs_that_need_all_cores_are_spawned_one_by_one(self):
         #we'll determine this by the start respective end times..
         ppg.new_pipegraph(ppg.resource_coordinators.LocalSystem(max_cores_to_use = 2), quiet=True)
@@ -2863,7 +2855,7 @@ class TestResourceCoordinator(PPGPerTest):
 
 
 class CantDepickle():
-    """A class that can't be depickled (throws a type error, 
+    """A class that can't be depickled (throws a type error,
     just like the numpy.maskedarray does occacionally)"""
     def __getstate__(self):
         return ['5']
@@ -2872,8 +2864,8 @@ class CantDepickle():
         print(state)
         raise TypeError("I can be pickled, but not unpickled")
 
-class TestingTheUnexpectedTests(PPGPerTest):
 
+class TestingTheUnexpectedTests(PPGPerTest):
     def test_job_killing_python(self):
         def dies():
             import sys
@@ -2941,24 +2933,22 @@ class TestingTheUnexpectedTests(PPGPerTest):
         self.assertEqual(read('out/Bs'), 'AA') #this one got rerun because we could not load the invariant...
 
 
-
 class NotYetImplementedTests(unittest.TestCase):
-
     def test_temp_jobs_and_gen_jobs(self):
         #DependencyInjection A creates TempJob B and job C (c is already done)
         #DependencyInjeciton D (dep on A) creates TempJob B and job E
         #Now, When A runs, B is created, and not added to the jobs-to-run list
         #since it is not necessary (with C being done).
-        #now D runs, B would not be required by E, but does not get added to the 
+        #now D runs, B would not be required by E, but does not get added to the
         #run list (since it is not new), and later on, the sanity check crashes.
 
         #alternativly, if C is not done, execution order is A, B, C. Then cleanup
         #for B happens, then D is run, the E explodes, because cleanup has been done!
-        
+
         #now, if A returns B, it get's injected into the dependenies of D,
         #the exeuction order is correct, but B get's done no matter what because D
         #now requires it, even if both C and E have already been done.
-    
+
         #what a conundrum
         raise NotImplementedError()
 
@@ -2966,12 +2956,13 @@ class NotYetImplementedTests(unittest.TestCase):
         #very similar to the previous case, this basically directly get's you into the 'Job execution order territory....'
         raise NotImplementedError
 
+
 class TestUtils(PPGPerTest):
     def test_assert_uniqueness_simple(self):
         class Dummy:
             def __init__(self, name):
                 self.name = name
-                ppg.util.assert_uniqueness_of_object(self) 
+                ppg.util.assert_uniqueness_of_object(self)
         a = Dummy('shu')
         def inner():
             b = Dummy('shu')
@@ -2981,7 +2972,7 @@ class TestUtils(PPGPerTest):
         class Dummy:
             def __init__(self, name):
                 self.name = name
-                ppg.util.assert_uniqueness_of_object(self) 
+                ppg.util.assert_uniqueness_of_object(self)
         a = Dummy('shu')
         b = Dummy('sha')
         def inner():
@@ -2992,11 +2983,11 @@ class TestUtils(PPGPerTest):
         class Dummy:
             def __init__(self, name):
                 self.name = name
-                ppg.util.assert_uniqueness_of_object(self) 
+                ppg.util.assert_uniqueness_of_object(self)
         class Dummy2:
             def __init__(self, name):
                 self.name = name
-                ppg.util.assert_uniqueness_of_object(self) 
+                ppg.util.assert_uniqueness_of_object(self)
         a = Dummy('shu')
         b = Dummy2('shu')
         def inner():
@@ -3007,11 +2998,11 @@ class TestUtils(PPGPerTest):
         class Dummy:
             def __init__(self, name):
                 self.name = name
-                ppg.util.assert_uniqueness_of_object(self) 
+                ppg.util.assert_uniqueness_of_object(self)
         class Dummy2:
             def __init__(self, name):
                 self.name = name
-                ppg.util.assert_uniqueness_of_object(self, also_check = Dummy) 
+                ppg.util.assert_uniqueness_of_object(self, also_check = Dummy)
         a = Dummy('shu')
         def inner():
             c = Dummy2('shu')
@@ -3021,11 +3012,11 @@ class TestUtils(PPGPerTest):
         class Dummy:
             def __init__(self, name):
                 self.name = name
-                ppg.util.assert_uniqueness_of_object(self) 
+                ppg.util.assert_uniqueness_of_object(self)
         class Dummy2:
             def __init__(self, name):
                 self.name = name
-                ppg.util.assert_uniqueness_of_object(self, also_check = [Dummy]) 
+                ppg.util.assert_uniqueness_of_object(self, also_check = [Dummy])
         a = Dummy('shu')
         def inner():
             c = Dummy2('shu')
