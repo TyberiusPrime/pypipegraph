@@ -145,6 +145,8 @@ class Job(object):
             self.do_cleanup_if_was_never_run = False
             self.invariant_cache = None
             self.is_temp_job = False
+            self._is_done = None
+            self.do_cache = False
         #logger.info("adding self %s to %s" % (job_id, id(util.global_pipegraph)))
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
 
@@ -219,9 +221,21 @@ class Job(object):
         """
         return False
 
-    def is_done(self, depth=0):
+    def is_done(self, depth = 0):
+        if not self.do_cache or self._is_done is None:
+            logger.info("recalc is_done %s" % self)
+            self._is_done = self.calc_is_done(depth)
+        logger.info("called %s.is_done - result %s" % (self, self._is_done))
+        return self._is_done
+
+    def calc_is_done(self, depth=0):
         """Is this Job done ( ie. does it need to be in the execution order)"""
         return True
+
+    def _reset_is_done_cache(self):
+        self._is_done = None
+        for child in self.dependants:
+            child._reset_is_done_cache()
 
     def is_loadable(self):
         """Is this a job that's modifies the in memory data of our process?"""
@@ -615,7 +629,7 @@ class FileGeneratingJob(Job):
             pass
             #logger.info("not Injecting outa invariants %s" % self)
 
-    def is_done(self, depth=0):
+    def calc_is_done(self, depth=0):
         if self._is_done_cache is None:
             self._is_done_cache = util.output_file_exists(self.job_id)
         return self._is_done_cache
@@ -686,7 +700,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         self.rename_broken = rename_broken
         self.do_ignore_code_changes = False
 
-    def is_done(self, depth=0):
+    def calc_is_done(self, depth=0):
         for fn in self.filenames:
             if not util.output_file_exists(fn):
                 return False
@@ -720,6 +734,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
                     except OSError:
                         pass
             util.reraise(exc_info[1], None, exc_info[2])
+        self._is_done = None
         if not self.is_done():
             missing_files = []
             for f in self.filenames:
@@ -754,7 +769,7 @@ class TempFileGeneratingJob(FileGeneratingJob):
     def runs_in_slave(self):
         return True
 
-    def is_done(self, depth=0):
+    def calc_is_done(self, depth=0):
         if util.output_file_exists(self.job_id):
             return True
         else:
@@ -789,7 +804,7 @@ class TempFilePlusGeneratingJob(FileGeneratingJob):
     def runs_in_slave(self):
         return True
 
-    def is_done(self, depth=0):
+    def calc_is_done(self, depth=0):
         if not os.path.exists(self.log_file):
             print ('could not find log file', self.log_file)
             return False
@@ -834,7 +849,7 @@ class DataLoadingJob(Job):
         self.callback()
         self.was_loaded = True
 
-    def is_done(self, depth=0):  # delegate to preqs... passthrough of 'not yet done'
+    def calc_is_done(self, depth=0):  # delegate to preqs... passthrough of 'not yet done'
         #logger.info("\t" * depth + "Checking is done on %s" % self)
         for preq in self.prerequisites:
             if not preq.is_done(depth=depth + 1):
@@ -890,7 +905,7 @@ class AttributeLoadingJob(DataLoadingJob):
     def is_loadable(self):
         return True
 
-    def is_done(self, depth=0):  # delegate to preqs... passthrough of 'not yet done'
+    def calc_is_done(self, depth=0):  # delegate to preqs... passthrough of 'not yet done'
         for preq in self.prerequisites:
             if not preq.is_done():
                 return False
@@ -913,7 +928,7 @@ class _GraphModifyingJob(Job):
     def modifies_jobgraph(self):
         return True
 
-    def is_done(self, depth=0):
+    def calc_is_done(self, depth=0):
         return self.was_run
 
 
@@ -1057,7 +1072,7 @@ class FinalJob(Job):
         self.do_ignore_code_changes = False
         self.always_runs = True
 
-    def is_done(self, depth=0):
+    def calc_is_done(self, depth=0):
         return self.was_run
 
     def depends_on(self):

@@ -175,7 +175,7 @@ class Pipegraph(object):
         self.dump_invariant_status() # the jobs will have removed their output, so we can safely store the invariant data
         self.build_todo_list()
         self.dump_graph()
-
+        
         #make up some computational engines and put them to work.
         logger.info("now executing")
         self.install_signals()
@@ -408,6 +408,8 @@ class Pipegraph(object):
         """
         needs_to_be_run = set()
         for job in self.jobs.values():
+            job.do_cache = True
+        for job in self.jobs.values():
             if not job.is_done():
                 #logger.info("Was not done: %s" % job)
                 if not job.is_loadable():
@@ -435,6 +437,7 @@ class Pipegraph(object):
                 logger.info("Mark was_run before running: %s" % job)
                 logger.info("job.was_invalidated %s, job.runs_in_slave %s, job.is_loadable: %s" % (job.was_invalidated, job.runs_in_slave(), job.is_loadable()))
                 job.was_run = True  # invarites get marked as ran..
+            #job.do_cache = False
         #now prune the possible_execution_order
         self.possible_execution_order = [job for job in self.possible_execution_order if job.job_id in needs_to_be_run]
         self.jobs_to_run_count = len(self.possible_execution_order)
@@ -634,6 +637,7 @@ class Pipegraph(object):
 
     def job_executed(self, job):
         """A job was done. Returns whether there are more jobs read run"""
+        job._reset_is_done_cache()
         logger.info("job_executed %s failed: %s" % (job, job.failed))
         if job.failed:
             self.prune_job(job)
@@ -685,6 +689,7 @@ class Pipegraph(object):
             job.prerequisites = set([self.jobs[job_id] for job_id in job.prerequisites])
             job.dependants = set([self.jobs[job_id] for job_id in job.dependants])
         for job in new_jobs.values():
+            job._reset_is_done_cache()
             if not job.is_done():
                 if not job.always_runs:
                     job.invalidated(reason='not done')
@@ -756,13 +761,15 @@ class Pipegraph(object):
     def dump_graph(self):
         """Dump the current graph in text format into logs/ppg_graph.txt if logs exists"""
         if os.path.exists('logs') and os.path.isdir('logs'):
-            op = open("logs/ppg_graph.txt", 'w')
-            for job in self.jobs.values():
-                op.write("%s - done: %s\n" % (job, job.is_done()))
-                for preq in job.prerequisites:
-                    op.write("\t%s - done: %s\n" % (preq, preq.is_done()))
-                op.write("\n")
-            op.close()
+            if os.fork() == 0:  # run this in an unrelated child process
+                op = open("logs/ppg_graph.txt", 'w')
+                for job in self.jobs.values():
+                    op.write("%s - done: %s\n" % (job, job._is_done))  # use cached is_done value - good enough here
+                    for preq in job.prerequisites:
+                        op.write("\t%s - done: %s\n" % (preq, preq._is_done))
+                    op.write("\n")
+                op.close()
+                sys.exit()
 
     def install_signals(self):
         """make sure we don't crash just because the user logged of"""
