@@ -413,11 +413,15 @@ class FunctionInvariant(_InvariantJob):
                 print (repr(self.function))
                 print (repr(self.function.im_func))
                 raise ValueError("Can't handle this object %s" % self.function)
-        if not id(self.function.__code__) in util.func_hashes:
+        if not (id(self.function.__code__), id(self.function.func_closure)) in util.func_hashes:
             if hasattr(self.function, 'im_func') and 'cyfunction' in repr(self.function.im_func):
                 invariant = self.get_cython_source(self.function)
             else:
                 invariant = self.dis_code(self.function.__code__)
+                if self.function.func_closure:
+                    for cell in self.function.func_closure:
+                        invariant += "\n" + str(cell.cell_contents)
+
             util.func_hashes[id(self.function.__code__)] = invariant
         return util.func_hashes[id(self.function.__code__)]
 

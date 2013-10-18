@@ -1569,6 +1569,21 @@ class FunctionInvariantTests(PPGPerTest):
         self.assertEqual(bv, av)
         self.assertNotEqual(av, cv)
 
+    def test_inner_functions_with_parameters(self):
+        def get_func(x):
+            def inner():
+                return x
+            return inner
+        a = ppg.FunctionInvariant('a', get_func(100))
+        b = ppg.FunctionInvariant('b', get_func(100))#that invariant should be the same
+        c = ppg.FunctionInvariant('c', get_func(2000)) #and this invariant should be different
+        av = a.get_invariant(False)
+        bv = b.get_invariant(False)
+        cv = c.get_invariant(False)
+        self.assertTrue(a.get_invariant(False))
+        self.assertEqual(bv, av)
+        self.assertNotEqual(av, cv)
+
     def test_passing_non_function_raises(self):
         def inner():
             job = ppg.FunctionInvariant('out/a', 'shu')
