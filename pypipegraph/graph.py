@@ -391,7 +391,7 @@ class Pipegraph(object):
                 old = inv  # so no change...
                 self.invariant_status[job.job_id] = inv  # so not to recheck next time...
             if inv != old:
-                if False:
+                if True:
                     logger.info("Invariant change for %s" % job)
                     logger.info("%s invariant was %s, is now %s" % (job, old, inv))
                     if type(old) is str and type(inv) is str:
