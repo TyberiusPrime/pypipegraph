@@ -413,11 +413,16 @@ class FunctionInvariant(_InvariantJob):
                 print (repr(self.function))
                 print (repr(self.function.im_func))
                 raise ValueError("Can't handle this object %s" % self.function)
-        if not id(self.function.__code__) in util.func_hashes:
+        if not (id(self.function.__code__), id(self.function.func_closure)) in util.func_hashes:
             if hasattr(self.function, 'im_func') and 'cyfunction' in repr(self.function.im_func):
                 invariant = self.get_cython_source(self.function)
             else:
                 invariant = self.dis_code(self.function.__code__)
+                if self.function.func_closure:
+                    for name, cell in zip(self.function.__code__.co_freevars, self.function.func_closure):
+                        if name != 'self' and not hasattr(cell.cell_contents, '__code__'):  # we ignore references to self - in that use case you're expected to make your own ParameterInvariants, and we could not detect self.paremeter anyhow
+                            invariant += "\n" + str(cell.cell_contents)
+
             util.func_hashes[id(self.function.__code__)] = invariant
         return util.func_hashes[id(self.function.__code__)]
 
