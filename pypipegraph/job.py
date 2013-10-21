@@ -364,8 +364,8 @@ class Job(object):
         else:
             return "%s (job_id=%s,id=%s)" % (self.__class__.__name__, self.job_id, id(self))
 
-    def __repr__(self):
-        return str(self)
+    def __str__(self):
+        return '%s("%s")' % (self.__class__.__name__, self.job_id)
 
 
 class _InvariantJob(Job):
@@ -420,8 +420,16 @@ class FunctionInvariant(_InvariantJob):
                 invariant = self.dis_code(self.function.__code__)
                 if self.function.func_closure:
                     for name, cell in zip(self.function.__code__.co_freevars, self.function.func_closure):
-                        if name != 'self' and not hasattr(cell.cell_contents, '__code__'):  # we ignore references to self - in that use case you're expected to make your own ParameterInvariants, and we could not detect self.paremeter anyhow
-                            invariant += "\n" + str(cell.cell_contents)
+                        # we ignore references to self - in that use case you're expected to make your own ParameterInvariants, and we could not detect self.parameter anyhow (only self would be bound)
+                        #we also ignore bound functions - their address changes all the time. IDEA: Make this recursive (might get to be too expensive)
+                        if name != 'self' and not hasattr(cell.cell_contents, '__code__'):  
+                            x = str(cell.cell_contents)
+                            if 'at 0x' in x: # if you don't have a sensible str(), we'll default to the class path. This takes things like <chipseq.quality_control.AlignedLaneQualityControl at 0x73246234>.
+                                x = x[:x.find('at 0x')]
+                            if 'id=' in x:
+                                print( x)
+                                raise Value("Still an issue")
+                            invariant += "\n" + x
 
             util.func_hashes[id(self.function.__code__)] = invariant
         return util.func_hashes[id(self.function.__code__)]
@@ -1409,7 +1417,6 @@ class CachedDataLoadingJob(DataLoadingJob):
             # this job should depend on that, not the lazy filegenerating one...
             Job.depends_on(self, FunctionInvariant(self.job_id + '_func', self.loading_function)) # we don't want to depend on 'callback', that's our tiny wrapper, but on the loading_function instead.
         
-
     def __str__(self):
         return "%s (job_id=%s,id=%s\n Calc calcback: %s:%s\nLoad callback: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.calculating_function.__code__.co_filename, self.calculating_function.__code__.co_firstlineno, self.loading_function.__code__.co_filename, self.loading_function.__code__.co_firstlineno)
 
