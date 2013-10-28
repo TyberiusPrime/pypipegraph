@@ -52,6 +52,16 @@ import platform;
 
 is_pypy = platform.python_implementation() == 'PyPy'
 
+try:
+    import exptools
+    import subprocess
+    import tempfile
+    import shutil
+    register_tags = True
+except:
+    register_tags = False
+
+
 class JobList(object):
     """For when you want to return a list of jobs that mostly behaves like a single Job.
     (Ie. when it must have a depends_on() method. Otherwise, a regular list will do fine).
@@ -109,7 +119,12 @@ class Job(object):
             util.job_uniquifier[job_id].job_id = job_id  # doing it later will fail because hash apperantly might be called before init has run?
         else:
             if util.job_uniquifier[job_id].__class__ != cls:
-                raise ppg_exceptions.JobContractError("Same job id, different job classes for %s" % job_id)
+                import types
+                x = ( args[0].__code__.co_filename, args[0].__code__.co_firstlineno)
+                raise ppg_exceptions.JobContractError("Same job id, different job classes for %s - was %s and %s.\nOld job: %s\n My args: %s %s\n%s" % (job_id, util.job_uniquifier[job_id].__class__, cls,
+                    str(util.job_uniquifier[job_id]),
+                    args, kwargs,x
+                    ))
         if util.global_pipegraph is None:
             raise ValueError("You must first instanciate a pypipegraph before creating jobs""")
         return util.job_uniquifier[job_id]
@@ -1159,7 +1174,19 @@ class PlotJob(FileGeneratingJob):
                 render_args['height'] = plot.height
             if self._fiddle:
                 self._fiddle(plot)
-            plot.render(output_filename, **render_args)
+            if register_tags:
+                tag = exptools.get_artifact_tag(os.path.abspath(output_filename), str(exptools.current_run_repo_rev))
+                if output_filename.endswith('.png'):
+                    tag = '-comment=%s' % tag
+                elif output_filename.endswith('.pdf'):
+                    tag = '-keywords=%s' % tag
+                extension = output_filename[-4:]
+                temp_file = tempfile.NamedTemporaryFile(suffix=extension)
+                plot.render(temp_file.name, **render_args)
+                subprocess.check_output(["exiftool", os.path.abspath(temp_file.name), tag, '-o', output_filename])
+                temp_file.close()  #  incidentially deletes the temp file
+            else:
+                plot.render(output_filename, **render_args)
 
         FileGeneratingJob.__init__(self, output_filename, run_plot)
         Job.depends_on(self, ParameterInvariant(self.output_filename + '_params', render_args))
@@ -1231,6 +1258,7 @@ class PlotJob(FileGeneratingJob):
             else:
                 FileGeneratingJob.depends_on(self, FunctionInvariant(self.job_id + '.calcfunc', self.calc_function))
             FileGeneratingJob.depends_on(self, FunctionInvariant(self.job_id + '.plotfunc', self.plot_function))
+            FileGeneratingJob.depends_on(self, FunctionInvariant(self.job_id + '.run_plot', self.callback)) # depend on the run_plot func
 
     def get_data(self):
         if self.skip_caching:
