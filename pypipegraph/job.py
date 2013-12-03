@@ -1203,7 +1203,11 @@ class PlotJob(FileGeneratingJob):
                     pydataframe.DF2TSV().write(df, self.table_filename)
                 else:
                     for key, dframe in df.items():
-                        df[key] = dframe[0:65534, :]
+                        if len(dframe) >= 65534:
+                            key = key+'truncated'
+                            df[key] = dframe[0:65534, :]
+                        else:
+                            df[key] = dframe
                     pydataframe.DF2Excel().write(df, self.table_filename)  # must have been a dict...
             table_gen_job = FileGeneratingJob(self.table_filename, dump_table)
             if not self.skip_caching:
