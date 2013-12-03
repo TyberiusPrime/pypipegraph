@@ -1204,6 +1204,7 @@ class PlotJob(FileGeneratingJob):
                 else:
                     for key, dframe in df.items():
                         if len(dframe) >= 65534:
+                            del df[key]
                             key = key+'truncated'
                             df[key] = dframe[0:65534, :]
                         else:
