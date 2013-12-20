@@ -311,7 +311,7 @@ class Job(object):
         for preq in self.prerequisites:
             if preq.is_done():
                 if preq.was_invalidated and not preq.was_run and not preq.is_loadable():   # see can_run_now for why
-                    res.append((preq, 'not run'))
+                    res.append((str(preq), 'not run'))
                 else:
                     #logger.info("case 2 - delay") #but we still need to try the other preqs if it was ok
                     pass
@@ -319,11 +319,11 @@ class Job(object):
                 #logger.info("case 3 - not done")
                 if preq.was_run:
                     if preq.was_cleaned_up:
-                        res.append((preq, 'not done - but was run! - after cleanup'))
+                        res.append((str(preq), 'not done - but was run! - after cleanup'))
                     else:
-                        res.append((preq, 'not done - but was run! - no cleanup'))
+                        res.append((str(preq), 'not done - but was run! - no cleanup'))
                 else:
-                    res.append((preq, 'not done'))
+                    res.append((str(preq), 'not done'))
                 break
                 #return False
         return res
@@ -757,7 +757,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
             else:
                 for fn in self.filenames:
                     try:
-                        logger.info("Removing %s" % fn)
+                        logger.info("unlinking %s" % fn)
                         os.unlink(fn)
                     except OSError:
                         pass
@@ -798,7 +798,9 @@ class TempFileGeneratingJob(FileGeneratingJob):
         return True
 
     def calc_is_done(self, depth=0):
+        logger.info("calc is done %s" % self)
         if util.output_file_exists(self.job_id):
+            logger.info("calc is done %s - file existed" % self)
             return True
         else:
             for dep in self.dependants:
@@ -834,7 +836,7 @@ class TempFilePlusGeneratingJob(FileGeneratingJob):
 
     def calc_is_done(self, depth=0):
         if not os.path.exists(self.log_file):
-            print ('could not find log file', self.log_file)
+            #print ('could not find log file', self.log_file)
             return False
         if util.output_file_exists(self.job_id):
             return True
