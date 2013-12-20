@@ -383,7 +383,11 @@ class Pipegraph(object):
                     job.invalidation_count = self._distribute_invariant_changes_count
             old = self.invariant_status[job.job_id]
             try:
-                inv = job.get_invariant(old)
+                try:
+                    inv = job.get_invariant(old)
+                except:
+                    print ("Offending job was %s"  % job)
+                    raise
                 #logger.info("%s invariant was %s, is now %s" % (job, old,inv))
             except util.NothingChanged as e:
                 #logger.info("Invariant difference, but NothingChanged")
@@ -537,11 +541,13 @@ class Pipegraph(object):
             logger.info("Nothing running, nothing runnable, but work left to do")
             logger.info("job\tcan_run_now\tlist_blocks")
             for job in self.possible_execution_order:
-                logger.info("%s\t%s\t%s" % (job, job.can_run_now(), job.list_blocks()))
+                logger.info("Job: %s\tCan run now: %s\nBlocks: %s\n\n" % (job, job.can_run_now(), job.list_blocks()))
             util.flush_logging()
             logger.exception("Job excution order error")
             raise ppg_exceptions.RuntimeException(
-            """We had more jobs that needed to be done, none of them could be run right now and none were running. Sounds like a dependency graph bug to me""")
+            """We had more jobs that needed to be done, none of them could be run right now and none were running. Sounds like a dependency graph bug to me.
+            Or perhaps, you're actively removing a file that a job created earlier. This might happen if you add a fancy clean up function
+            """)
 
         while resources_available(resources) and runnable_jobs:
             logger.info("resources were available %s " % resources)
@@ -762,14 +768,44 @@ class Pipegraph(object):
         """Dump the current graph in text format into logs/ppg_graph.txt if logs exists"""
         if os.path.exists('logs') and os.path.isdir('logs'):
             if os.fork() == 0:  # run this in an unrelated child process
-                op = open("logs/ppg_graph.txt", 'w')
+                nodes = {}
+                edges = []
                 for job in self.jobs.values():
-                    op.write("%s - done: %s\n" % (job, job._is_done))  # use cached is_done value - good enough here
+                    nodes[job.job_id] = {'is_done': job._is_done, 'was_run': job.was_run, 'type': job.__class__.__name__}
                     for preq in job.prerequisites:
-                        op.write("\t%s - done: %s\n" % (preq, preq._is_done))
-                    op.write("\n")
-                op.close()
+                        edges.append((preq.job_id, job.job_id))
+                self._write_xgmml("logs/ppg_graph.xgmml", nodes, edges)
                 sys.exit()
+
+    def _write_xgmml(self, output_filename, node_to_attribute_dict, edges):
+        op = open(output_filename, 'wb')
+        op.write("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <graph
+            label="unlabled"
+            xmlns:dc="http://purl.org/dc/elements/1.1/"
+            xmlns:xlink="http://www.w3.org/1999/xlink"
+            xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+            xmlns:cy="http://www.cytoscape.org"
+            xmlns="http://www.cs.rpi.edu/XGMML"
+            directed="1">
+            """)
+        node_id = 0
+        names_to_ids = {}
+        for node_name, attributes in node_to_attribute_dict.items():
+            op.write("""<node label="%s" id="%i">\n""" % (node_name, node_id))
+            names_to_ids[node_name] = node_id
+            node_id += 1
+            op.write("""<att name="title" type="string" value="%s"/>\n""" % (node_name,))
+            for attribute, value in attributes.items():
+                op.write("""<att name="%s" type="string" value="%s"/>\n""" % (attribute, value))
+            op.write("</node>\n")
+        for start, end in edges:
+            op.write("""<edge label="%s-%s" source="%i" target="%i"></edge>\n""" % (start, end, names_to_ids[start], names_to_ids[end]))
+        op.write("""
+        </graph>
+        """)
+        op.close()
+
 
     def install_signals(self):
         """make sure we don't crash just because the user logged of"""
