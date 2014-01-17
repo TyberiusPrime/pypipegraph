@@ -57,7 +57,7 @@ try:
     import subprocess
     import tempfile
     import shutil
-    register_tags = True
+    register_tags = False
 except:
     register_tags = False
 
