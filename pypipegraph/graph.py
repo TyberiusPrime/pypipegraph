@@ -775,7 +775,7 @@ class Pipegraph(object):
                     for preq in job.prerequisites:
                         edges.append((preq.job_id, job.job_id))
                 self._write_xgmml("logs/ppg_graph.xgmml", nodes, edges)
-                sys.exit()
+                os._exit(0)  # Cleanup is for parent processes!
 
     def _write_xgmml(self, output_filename, node_to_attribute_dict, edges):
         op = open(output_filename, 'wb')
