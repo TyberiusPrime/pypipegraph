@@ -437,14 +437,20 @@ class FunctionInvariant(_InvariantJob):
                     for name, cell in zip(self.function.__code__.co_freevars, self.function.func_closure):
                         # we ignore references to self - in that use case you're expected to make your own ParameterInvariants, and we could not detect self.parameter anyhow (only self would be bound)
                         #we also ignore bound functions - their address changes all the time. IDEA: Make this recursive (might get to be too expensive)
-                        if name != 'self' and not hasattr(cell.cell_contents, '__code__'):  
-                            x = str(cell.cell_contents)
-                            if 'at 0x' in x: # if you don't have a sensible str(), we'll default to the class path. This takes things like <chipseq.quality_control.AlignedLaneQualityControl at 0x73246234>.
-                                x = x[:x.find('at 0x')]
-                            if 'id=' in x:
-                                print( x)
-                                raise Value("Still an issue")
-                            invariant += "\n" + x
+                        try:
+                            if name != 'self' and not hasattr(cell.cell_contents, '__code__'):  
+                                x = str(cell.cell_contents)
+                                if 'at 0x' in x:  # if you don't have a sensible str(), we'll default to the class path. This takes things like <chipseq.quality_control.AlignedLaneQualityControl at 0x73246234>.
+                                    x = x[:x.find('at 0x')]
+                                if 'id=' in x:
+                                    print(x)
+                                    raise ValueError("Still an issue")
+                                invariant += "\n" + x
+                        except ValueError, e:
+                            if str(e) == 'Cell is empty':
+                                pass
+                            else:
+                                raise
 
             util.func_hashes[id(self.function.__code__)] = invariant
         return util.func_hashes[id(self.function.__code__)]
