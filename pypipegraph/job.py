@@ -393,6 +393,15 @@ class _InvariantJob(Job):
         return False
 
 
+def function_to_str(func):
+    if str(func).startswith('<built-in function'):
+        return "%s" % func
+    else:
+        return "%s %i" % (
+            func.__code__.co_filename if func else 'None', func.__code__.co_firstlineno if func else 0,
+        )
+
+
 class FunctionInvariant(_InvariantJob):
     """FunctionInvariant detects (bytecode) changes in a python function,
     currently via disassembly"""
@@ -401,11 +410,11 @@ class FunctionInvariant(_InvariantJob):
             raise ValueError("function was not a callable (or None)")
         Job.__init__(self, job_id)
         if hasattr(self, 'function') and function != self.function:
-            raise ppg_exceptions.JobContractError("FunctionInvariant %s created twice with different functions: \n%s %i\n%s %i" % (
+            raise ppg_exceptions.JobContractError("FunctionInvariant %s created twice with different functions: \n%s\n%s" % (
                 job_id,
-                self.function.__code__.co_filename if self.function else 'None', self.function.__code__.co_firstlineno if self.function else 0,
-                function.__code__.co_filename if function else 'None', function.__code__.co_firstlineno if function else 0
-                ))
+                function_to_str(function),
+                function_to_str(self.function)
+            ))
         self.function = function
 
     def __str__(self):
