@@ -396,6 +396,8 @@ class _InvariantJob(Job):
 def function_to_str(func):
     if str(func).startswith('<built-in function'):
         return "%s" % func
+    elif hasattr(func, 'im_func') and ('cyfunction' in repr(func.im_func):
+        return "%s" % func
     else:
         return "%s %i" % (
             func.__code__.co_filename if func else 'None', func.__code__.co_firstlineno if func else 0,
