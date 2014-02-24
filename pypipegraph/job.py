@@ -392,12 +392,41 @@ class _InvariantJob(Job):
     def runs_in_slave(self):
         return False
 
+def get_cython_filename_and_line_no(cython_func):
+    first_doc_line = cython_func.__doc__.split("\n")[0]
+    if not first_doc_line.startswith('File:'):
+        raise ValueError("No file/line information in doc string. Make sure your cython is compiled with -p (or #embed_pos_in_docstring=True atop your pyx")
+    line_no = int(first_doc_line[first_doc_line.find('starting at line ') + len('starting at line '):first_doc_line.find(')')])
+
+    #find the right module
+    module_name = cython_func.im_class.__module__
+    found = False
+    for name in sorted(sys.modules):
+        if name == module_name or name.endswith("." + module_name):
+            try:
+                if getattr(sys.modules[name], cython_func.im_class.__name__) == cython_func.im_class:
+                    found = sys.modules[name]
+                    break
+            except AttributeError:
+                continue
+        elif hasattr(sys.modules[name], module_name):
+            sub_module = getattr(sys.modules[name], module_name)
+            try:
+                if getattr(sub_module, cython_func.im_class.__name__) == cython_func.im_class:
+                    found = sys.moduls[name].sub_module
+                    break
+            except AttributeError:
+                continue
+    if not found:
+        raise ValueError("Could not find module for %s" % cython_func)
+    filename = found.__file__.replace('.so', '.pyx')
+    return filename, line_no
 
 def function_to_str(func):
     if str(func).startswith('<built-in function'):
         return "%s" % func
-    elif hasattr(func, 'im_func') and ('cyfunction' in repr(func.im_func):
-        return "%s" % func
+    elif hasattr(func, 'im_func') and ('cyfunction' in repr(func.im_func) or ('<built-in function' in repr(func.im_func))):
+        return "%s %i" % get_cython_filename_and_line_no(func)
     else:
         return "%s %i" % (
             func.__code__.co_filename if func else 'None', func.__code__.co_firstlineno if func else 0,
@@ -505,34 +534,8 @@ class FunctionInvariant(_InvariantJob):
         """
 
         #check there's actually the file and line no documentation
-        first_doc_line = cython_func.__doc__.split("\n")[0]
-        if not first_doc_line.startswith('File:'):
-            raise ValueError("No file/line information in doc string. Make sure your cython is compiled with -p (or #embed_pos_in_docstring=True atop your pyx")
-        line_no = int(first_doc_line[first_doc_line.find('starting at line ') + len('starting at line '):first_doc_line.find(')')])
-
-        #find the right module
-        module_name = cython_func.im_class.__module__
-        found = False
-        for name in sorted(sys.modules):
-            if name == module_name or name.endswith("." + module_name):
-                try:
-                    if getattr(sys.modules[name], cython_func.im_class.__name__) == cython_func.im_class:
-                        found = sys.modules[name]
-                        break
-                except AttributeError:
-                    continue
-            elif hasattr(sys.modules[name], module_name):
-                sub_module = getattr(sys.modules[name], module_name)
-                try:
-                    if getattr(sub_module, cython_func.im_class.__name__) == cython_func.im_class:
-                        found = sys.moduls[name].sub_module
-                        break
-                except AttributeError:
-                    continue
-        if not found:
-            raise ValueError("Could not find module for %s" % cython_func)
-        filename = found.__file__.replace('.so', '.pyx')
-
+        filename, line_no = get_cython_filename_and_line_no(cython_func)
+        
         #load the source code
         op = open(filename, 'rb')
         d = op.read().split("\n")
