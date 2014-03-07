@@ -1373,6 +1373,7 @@ class _CacheFileGeneratingJob(FileGeneratingJob):
         self.was_invalidated = True
         if (not self.data_loading_job.was_invalidated):
             self.data_loading_job.invalidated(reason)
+        self._is_done_cache = False
         #Job.invalidated(self)  # no going back up the dependants... the dataloading job takes care of that
 
     def run(self):
