@@ -120,7 +120,10 @@ class Job(object):
         else:
             if util.job_uniquifier[job_id].__class__ != cls:
                 import types
-                x = ( args[0].__code__.co_filename, args[0].__code__.co_firstlineno)
+                if args:
+                    x = ( args[0].__code__.co_filename, args[0].__code__.co_firstlineno)
+                else:
+                    x=''
                 raise ppg_exceptions.JobContractError("Same job id, different job classes for %s - was %s and %s.\nOld job: %s\n My args: %s %s\n%s" % (job_id, util.job_uniquifier[job_id].__class__, cls,
                     str(util.job_uniquifier[job_id]),
                     args, kwargs,x
