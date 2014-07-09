@@ -454,7 +454,7 @@ class FunctionInvariant(_InvariantJob):
     def __str__(self):
         if hasattr(self, 'function') and self.function and hasattr(self.function, '__code__'): # during creating, __str__ migth be called by a debug function before function is set...
             return "%s (job_id=%s,id=%s\n Function: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.function.__code__.co_filename, self.function.__code__.co_firstlineno)
-        elif str(self.function).startswith('<built-in function'):
+        elif hasattr(self, 'function') and str(self.function).startswith('<built-in function'):
             return "%s (job_id=%s,id=%s, Function: %s)" % (self.__class__.__name__, self.job_id, id(self), self.function)
         else:
             return "%s (job_id=%s,id=%s, Function: None)" % (self.__class__.__name__, self.job_id, id(self))
@@ -589,17 +589,17 @@ class ParameterInvariant(_InvariantJob):
     def _get_invariant(self, old):
         return self.parameters
 
+if False:
+    class FileTimeInvariant(_InvariantJob):
+        """Check if the modification time on a file changed"""
 
-class FileTimeInvariant(_InvariantJob):
-    """Check if the modification time on a file changed"""
+        def __init__(self, filename):
+            Job.__init__(self, filename)
+            self.input_file = filename
 
-    def __init__(self, filename):
-        Job.__init__(self, filename)
-        self.input_file = filename
-
-    def _get_invariant(self, old):
-        st = util.stat(self.input_file)
-        return st[stat.ST_MTIME]
+        def _get_invariant(self, old):
+            st = util.stat(self.input_file)
+            return st[stat.ST_MTIME]
 
 
 class FileChecksumInvariant(_InvariantJob):
@@ -637,6 +637,7 @@ class FileChecksumInvariant(_InvariantJob):
         op.close()
         return res
 
+FileTimeInvariant = FileChecksumInvariant
 
 class FileGeneratingJob(Job):
     """Create a single output file of more than 0 bytes."""
