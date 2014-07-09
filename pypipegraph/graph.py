@@ -390,8 +390,11 @@ class Pipegraph(object):
             try:
                 try:
                     inv = job.get_invariant(old)
-                except:
-                    print ("Offending job was %s"  % job)
+                except Exception, e:
+                    if isinstance(e, util.NothingChanged):
+                        pass
+                    else:
+                        print ("Offending job was %s"  % job)
                     raise
                 #logger.info("%s invariant was %s, is now %s" % (job, old,inv))
             except util.NothingChanged as e:
