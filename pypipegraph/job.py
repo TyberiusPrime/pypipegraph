@@ -616,19 +616,24 @@ class FileChecksumInvariant(_InvariantJob):
         filetime = st[stat.ST_MTIME]
         filesize = st[stat.ST_SIZE]
         try:
-            if not old or old[1] != filesize or old[0] != filetime:
+            if not old or old == filetime or old[1] != filesize or old[0] != filetime:
                 #print 'triggered checksum', self.input_file
                 #print 'old', old
                 #print 'new', filetime, filesize
                 chksum = self.checksum()
-                if old and old[2] == chksum:
+                if old == filetime:  # we converted from a filetimeinvariant
+                    #print ('nothingchanged', self.job_id)
+                    raise util.NothingChanged((filetime, filesize, chksum)) 
+                elif old and old[2] == chksum:
                     raise util.NothingChanged((filetime, filesize, chksum))
                 else:
+                    #print ('returning new', self.job_id)
                     return filetime, filesize, chksum
             else:
                 return old
         except TypeError:  # could not parse old tuple... possibly was an FileTimeInvariant before...
             chksum = self.checksum()
+            #print ('type error', self.job_id)
             return filetime, filesize, chksum
 
     def checksum(self):
