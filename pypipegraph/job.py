@@ -1293,9 +1293,13 @@ class PlotJob(FileGeneratingJob):
         if self.skip_caching:
             return self.calc_function()
         else:
-            of = open(self.cache_filename, 'rb')
-            df = pickle.load(of)
-            of.close()
+            try:
+                of = open(self.cache_filename, 'rb')
+                df = pickle.load(of)
+                of.close()
+            except:
+                print ('could not load', self.cache_filename)
+                raise
             return df
 
     def __str__(self):
