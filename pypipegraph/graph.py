@@ -360,8 +360,13 @@ class Pipegraph(object):
             try:
                 op = open(self.invariant_status_filename + '.temp', 'wb')
                 for key, value in self.invariant_status.items():
-                    pickle.dump(key, op, pickle.HIGHEST_PROTOCOL)
-                    pickle.dump(value, op, pickle.HIGHEST_PROTOCOL)
+                    try:
+                        pickle.dump(key, op, pickle.HIGHEST_PROTOCOL)
+                        pickle.dump(value, op, pickle.HIGHEST_PROTOCOL)
+                    except Exception, e:
+                        print( key)
+                        print( value)
+                        raise
                 op.close()
                 if os.path.exists(self.invariant_status_filename):
                     os.unlink(self.invariant_status_filename)
