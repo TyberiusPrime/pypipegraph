@@ -89,12 +89,13 @@ class LocalSystem:
     It uses multiprocessing and the LocalSlave
     """
 
-    def __init__(self, max_cores_to_use=util.CPUs()):
+    def __init__(self, max_cores_to_use=util.CPUs(), profile = False):
         self.max_cores_to_use = max_cores_to_use  # todo: update to local cpu count...
         self.slave = LocalSlave(self)
         self.cores_available = max_cores_to_use
         self.physical_memory, self.swap_memory = get_memory_available()
         self.timeout = 5
+        self.profile = profile
 
     def spawn_slaves(self):
         return {
@@ -293,6 +294,8 @@ class LocalSlave:
                     ))
         return was_ok
 
+    def _profile_job(self, job):
+        self.temp = job.run()
     def run_a_job(self, job, stdout, stderr, is_local=True):  # this runs in the spawned processes, except for job.modifies_jobgraph()==True jobs
         old_stdout = sys.stdout
         old_stderr = sys.stderr
@@ -302,7 +305,13 @@ class LocalSlave:
         new_jobs = False
         util.global_pipegraph.new_jobs = None  # ignore jobs created here.
         try:
-            temp = job.run()
+            if self.rc.profile:
+                import cProfile
+                cProfile.runctx('self._profile_job(job)', globals(), locals(), filename = "%s.prof" % (id(job),))
+                temp = self.temp
+                del self.temp
+            else:
+                temp = job.run()
             was_ok = True
             exception = None
             if job.modifies_jobgraph():

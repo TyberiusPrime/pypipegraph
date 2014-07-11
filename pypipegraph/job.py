@@ -49,6 +49,7 @@ except ImportError:
     import pickle
 import traceback
 import platform;
+import time
 
 is_pypy = platform.python_implementation() == 'PyPy'
 
@@ -905,7 +906,15 @@ class DataLoadingJob(Job):
         for preq in self.prerequisites:  # load whatever is necessary...
             if preq.is_loadable():
                 preq.load()
-        self.callback()
+
+        start = time.time()
+        if hasattr(self, 'profile'):
+            import cProfile
+            cProfile.runctx('self.callback()', globals(), locals(), "%s.prof" % id(self))
+        else:
+            self.callback()
+        end = time.time()
+        logger.info("Loading time for %s - %.3f" % (self.job_id, end - start))
         self.was_loaded = True
 
     def calc_is_done(self, depth=0):  # delegate to preqs... passthrough of 'not yet done'
