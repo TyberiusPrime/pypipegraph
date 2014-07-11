@@ -54,13 +54,17 @@ def start_logging(module, other_file = None):
     if not name in loggers:
         logger = logging.getLogger(name)
         logger.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         if default_logging_handler:
+            default_logging_handler.setFormatter(formatter)
             logger.addHandler(default_logging_handler)
         if file_logging_handler is not None:
+            file_logging_handler.setFormatter(formatter)
             logger.addHandler(file_logging_handler)
         if other_file:
             if not other_file in file_logging_handlers:
                 file_logging_handlers[other_file] = logging.FileHandler(os.path.join(logs, other_file), mode = "w")
+                file_logging_handlers[other_file].setFormatter(formatter)
             logger.addHandler(file_logging_handlers[other_file])
 
         loggers[name] = logger
