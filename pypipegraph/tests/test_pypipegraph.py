@@ -215,7 +215,7 @@ class JobTests(unittest.TestCase):
         def load():
             return 'shu'
         def inner():
-            job_dl = ppg.DataLoadingJob(of, job)
+            job_dl = ppg.DataLoadingJob(of, load)
         self.assertRaises(ValueError, inner)
 
     def test_addition(self):
