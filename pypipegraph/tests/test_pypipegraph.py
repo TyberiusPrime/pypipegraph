@@ -1316,7 +1316,7 @@ class InvariantTests(PPGPerTest):
         dep = ppg.FileTimeInvariant(ftfn)
         job.depends_on(dep)
         ppg.run_pipegraph()
-        self.assertEqual(read(of), 'shushu') #job does get rerun...
+        self.assertEqual(read(of), 'shu') #job does not get rerun - filetime invariant is now filechecksum invariant...
 
     def test_filechecksum_dependency(self):
         of = 'out/a'
