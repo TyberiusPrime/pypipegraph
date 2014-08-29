@@ -3043,6 +3043,22 @@ class TestUtils(PPGPerTest):
             c = Dummy2('shu')
         self.assertRaises(ValueError, inner)
 
+    def test_assert_uniqueness_raises_also_check_no_instance_of_second_class(self):
+        class Dummy:
+            def __init__(self, name):
+                self.name = name
+                ppg.util.assert_uniqueness_of_object(self)
+        class Dummy2:
+            def __init__(self, name):
+                self.name = name
+                ppg.util.assert_uniqueness_of_object(self, also_check = Dummy)
+        #a = Dummy('shu')
+        # does not raise of course...
+        c = Dummy2('shu')
+        def inner():
+            d = Dummy2('shu')
+        self.assertRaises(ValueError, inner)
+
     def test_assert_uniqueness_raises_also_check_list(self):
         class Dummy:
             def __init__(self, name):
