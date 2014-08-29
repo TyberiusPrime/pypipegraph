@@ -145,7 +145,7 @@ class LocalSystem:
                         job.exception = pickle.loads(exception)
                         logger.info("After depickle %s" % type(job.exception))
                         logger.info("exception stored at %s" % (job))
-                    except pickle.UnpicklingError:  # some exceptions can't be pickled, so we send a string instead
+                    except (pickle.UnpicklingError, EOFError):  # some exceptions can't be pickled, so we send a string instead
                         pass
                     if job.exception:
                         logger.info("Exception: %s" % repr(exception))

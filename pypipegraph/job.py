@@ -53,14 +53,7 @@ import time
 
 is_pypy = platform.python_implementation() == 'PyPy'
 
-try:
-    import exptools
-    import subprocess
-    import tempfile
-    import shutil
-    register_tags = False
-except:
-    register_tags = False
+register_tags = False
 
 
 class JobList(object):
@@ -98,8 +91,11 @@ class JobList(object):
 
     def depends_on(self, other_job):
         for job in self.jobs:
-           job.depends_on(other_job)
+            print ('calling depends_on', job, other_job)
+            job.depends_on(other_job)
 
+    def __str__(self):
+        return "Job list of %i jobs: %s" % (len(self), ", ".join(str(x) for x in self.jobs))
 
 
 class Job(object):
@@ -396,6 +392,7 @@ class _InvariantJob(Job):
     def runs_in_slave(self):
         return False
 
+
 def get_cython_filename_and_line_no(cython_func):
     first_doc_line = cython_func.__doc__.split("\n")[0]
     if not first_doc_line.startswith('File:'):
@@ -423,8 +420,9 @@ def get_cython_filename_and_line_no(cython_func):
                 continue
     if not found:
         raise ValueError("Could not find module for %s" % cython_func)
-    filename = found.__file__.replace('.so', '.pyx')
+    filename = found.__file__.replace('.so', '.pyx').replace('.pyc','.py') #  pyc replacement is for mock testing
     return filename, line_no
+
 
 def function_to_str(func):
     if str(func).startswith('<built-in function'):
@@ -589,18 +587,6 @@ class ParameterInvariant(_InvariantJob):
 
     def _get_invariant(self, old):
         return self.parameters
-
-if False:
-    class FileTimeInvariant(_InvariantJob):
-        """Check if the modification time on a file changed"""
-
-        def __init__(self, filename):
-            Job.__init__(self, filename)
-            self.input_file = filename
-
-        def _get_invariant(self, old):
-            st = util.stat(self.input_file)
-            return st[stat.ST_MTIME]
 
 
 class FileChecksumInvariant(_InvariantJob):
@@ -1143,8 +1129,8 @@ class FinalJob(Job):
     def calc_is_done(self, depth=0):
         return self.was_run
 
-    def depends_on(self):
-        raise ValueError("Final jobs can not have explicit dependencies - they run in random order after all other jobs")
+    def depends_on(self, *args):
+        raise ppg_exceptions.JobContractError("Final jobs can not have explicit dependencies - they run in random order after all other jobs")
 
     def ignore_code_changes(self):
         pass
@@ -1214,19 +1200,7 @@ class PlotJob(FileGeneratingJob):
                 render_args['height'] = plot.height
             if self._fiddle:
                 self._fiddle(plot)
-            if register_tags:
-                tag = exptools.get_artifact_tag(os.path.abspath(output_filename), str(exptools.current_run_repo_rev))
-                if output_filename.endswith('.png'):
-                    tag = '-comment=%s' % tag
-                elif output_filename.endswith('.pdf'):
-                    tag = '-keywords=%s' % tag
-                extension = output_filename[-4:]
-                temp_file = tempfile.NamedTemporaryFile(suffix=extension)
-                plot.render(temp_file.name, **render_args)
-                subprocess.check_output(["exiftool", os.path.abspath(temp_file.name), tag, '-o', output_filename])
-                temp_file.close()  #  incidentially deletes the temp file
-            else:
-                plot.render(output_filename, **render_args)
+            plot.render(output_filename, **render_args)
 
         FileGeneratingJob.__init__(self, output_filename, run_plot)
         Job.depends_on(self, ParameterInvariant(self.output_filename + '_params', render_args))
