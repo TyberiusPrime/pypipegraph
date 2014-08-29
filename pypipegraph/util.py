@@ -138,7 +138,7 @@ def assert_uniqueness_of_object(object_with_name_attribute, pipeline=None, also_
         if not isinstance(also_check, list):
             also_check = [also_check]
         for other_typ in also_check:
-            if object_with_name_attribute.name in pipeline.object_uniquifier[other_typ]:
+            if other_typ in pipeline.object_uniquifier and object_with_name_attribute.name in pipeline.object_uniquifier[other_typ]:
                 raise ValueError("Doublicate object: %s, %s" % (other_typ, object_with_name_attribute.name))
     object_with_name_attribute.unique_id = len(pipeline.object_uniquifier[typ])
     pipeline.object_uniquifier[typ][object_with_name_attribute.name] = True
