@@ -51,7 +51,6 @@ logger = util.start_logging('graph')
 
 # earlier on, we had a different pickling scheme,
 # and that's what the files were called.
-invariant_status_filename_old = '.pypipegraph_status'
 invariant_status_filename_default = '.pypipegraph_status_robust'
 
 
@@ -85,11 +84,7 @@ def forget_job_status(invariant_status_filename=invariant_status_filename_defaul
         os.unlink(invariant_status_filename)
     except OSError:
         pass
-    try:
-        os.unlink(invariant_status_filename_old)
-    except OSError:
-        pass
-
+    
 
 def destroy_global_pipegraph():
     """Free the current global pipegraph - usually only useful for testing"""
@@ -308,21 +303,17 @@ class Pipegraph(object):
                 path = []
                 find_circle_path(job, job, path)
                 job_path_tuples.append((job, path))
-            raise ppg_exceptions.CycleError("At least one cycle in the graph was detected\nJobs involved (up to a depth of %i) are\n %s " % (max_depth, pprint.pformat(job_path_tuples[0])))
+            if job_path_tuples:
+                raise ppg_exceptions.CycleError("At least one cycle in the graph was detected\nJobs involved (up to a depth of %i) are\n %s " % (max_depth, pprint.pformat(job_path_tuples[0])))
+            else:
+                raise ppg_exceptions.CycleError("At least one cycle in the graph was detected\n Too many jobs involved for detailed output (more than %i)" % (max_depth, ))
         L.reverse()
         self.possible_execution_order = L
 
     def load_invariant_status(self):
         """Load Job invariant status from disk (and self.invariant_status_filename)
         """
-        if os.path.exists(invariant_status_filename_old):
-            # this is support code for the late invariant status filename layout.
-            # probably can be thrown out 'soonish'. Also remove the reference in forget_job_status
-            op = open(invariant_status_filename_old, 'rb')
-            self.invariant_status = pickle.load(op)
-            op.close()
-            os.unlink(invariant_status_filename_old)  # throw away the old file
-        elif os.path.exists(self.invariant_status_filename):
+        if os.path.exists(self.invariant_status_filename):
             op = open(self.invariant_status_filename, 'rb')
             all = op.read()
             op.seek(0, os.SEEK_SET)
