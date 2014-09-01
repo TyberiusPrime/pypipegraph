@@ -1,4 +1,4 @@
-modules_to_test = ['test_pypipegraph']
+modules_to_test = ['test_pypipegraph', 'test_plotjobs']
 
 import os
 os.environ['PYPIPEGRAPH_DO_COVERAGE'] = 'True'
@@ -24,7 +24,7 @@ sys.path.append('/code/pypipegraph/')
 import pypipegraph as ppg
 
 try:
-    nose.core.runmodule(modules_to_test, argv=sys.argv + ['--with-progressive'], exit=False)
+    nose.core.runmodule(modules_to_test, argv=sys.argv + ['--with-progressive', '--nologcapture'], exit=False)  #log capture get's a ton of output from the pipegraph... enable if you need it
 except Exception, e:
     print' error'
     print e
