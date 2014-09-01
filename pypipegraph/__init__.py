@@ -12,11 +12,6 @@ from .ppg_exceptions import (
         PyPipeGraphError,
         JobDiedException
         )
-try:
-    from . import twisted_fork
-    twisted_available = True
-except ImportError:
-    twisted_available = False
 from . import util
 
 from .job import (
@@ -56,5 +51,3 @@ all = [
         MemMappedDataLoadingJob,
         util
         ]
-if twisted_available:
-    all.append(twisted_fork)
