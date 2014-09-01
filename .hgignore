@@ -10,4 +10,4 @@ pypipegraph/tests/a
 pypipegraph/tests/.*
 docs/_build/*
 build/*
-
+pypipegraph/tests/covhtml/*
