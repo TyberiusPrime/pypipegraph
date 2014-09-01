@@ -240,7 +240,7 @@ class LocalSlave:
                 stderr = kitchen.text.converters.getwriter('utf8')(stderr)
                 stdout.fileno()
                 stderr.fileno()
-                p = multiprocessing.Process(target=self.run_a_job, args=[job, stdout, stderr, False])
+                p = multiprocessing.Process(target=self.wrap_run, args=[job, stdout, stderr, False])
                 job.run_info = "pid = %s" % (p.pid, )
                 job.stdout_handle = stdout
                 job.stderr_handle = stderr
@@ -296,6 +296,21 @@ class LocalSlave:
 
     def _profile_job(self, job):
         self.temp = job.run()
+
+    def wrap_run(self, job, stdout, stderr, is_local):
+        if 'PYPIPEGRAPH_DO_COVERAGE' in os.environ:
+                import coverage
+                cov = coverage.coverage(data_suffix=True, config_file = '/code/pypipegraph/pypipegraph/tests/.coveragerc')
+                cov.start()
+                try:
+                    self.run_a_job(job, stdout, stderr, is_local)
+                finally:
+                    cov.stop()
+                    cov.save()
+                    pass
+        else:
+            self.run_a_job(job, stdout, stderr, is_local)
+
     def run_a_job(self, job, stdout, stderr, is_local=True):  # this runs in the spawned processes, except for job.modifies_jobgraph()==True jobs
         old_stdout = sys.stdout
         old_stderr = sys.stderr

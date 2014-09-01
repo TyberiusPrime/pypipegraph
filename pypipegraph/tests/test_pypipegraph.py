@@ -67,6 +67,10 @@ def writeappend(filename_write, filename_append, string):
     write(filename_write, string)
     append(filename_append, string)
 
+    import test_pypipegraph
+def multiproc_test():
+    print 'helleo'
+
 
 def magic(filename):
     """See what linux 'file' commando says about that file"""
@@ -361,6 +365,7 @@ class FileGeneratingJobTests(PPGPerTest):
         data_to_write = "hello"
         def do_write():
             print('do_write was called')
+            multiproc_test()
             write(of, data_to_write)
         job = ppg.FileGeneratingJob(of, do_write)
         job.ignore_code_changes()
