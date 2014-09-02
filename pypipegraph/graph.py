@@ -36,14 +36,10 @@ import signal
 import time
 import collections
 from . import resource_coordinators
-try:
-    import cPickle
-    import pickle
-    pickle_stop = pickle.STOP
-    pickle = cPickle
-except ImportError:
-    import pickle
-    pickle_stop = pickle.STOP
+import cPickle
+import pickle
+pickle_stop = pickle.STOP
+pickle = cPickle
 from . import ppg_exceptions
 from . import util
 import sys
@@ -128,6 +124,7 @@ class Pipegraph(object):
         Usually automagically called when instanciating one of the Job classes
         """
         #logger.info("Adding job %s" % job)
+        print (job.job_id, self.running, self.was_run)
         if not self.running:
             if self.was_run:
                 raise ValueError("This pipegraph was already run. You need to create a new one for more jobs")
@@ -221,6 +218,8 @@ class Pipegraph(object):
         finally:
             if not self.quiet:
                 print('Pipegraph done. Executed %i jobs. %i failed' % (len([x for x in list(self.jobs.values()) if x.was_run]), len([x for x in list(self.jobs.values()) if x.failed])))
+        self.running = False
+        self.was_run = True
 
     def inject_auto_invariants(self):
         """Go through each job and ask it to create the invariants it might need.
@@ -413,13 +412,13 @@ class Pipegraph(object):
         for job in self.jobs.values():
             job.do_cache = True
         for job in self.jobs.values():
-            if not job.is_done():
+            if not job.is_done():  # is done can return True, False, and None ( = False, but even if is_temp_job, rerun dependands...)
                 #logger.info("Was not done: %s" % job)
                 if not job.is_loadable():
                     #logger.info("and is not loadable")
                     needs_to_be_run.add(job.job_id)
                     if not job.always_runs:  # there is no need for the job injecting jobs to invalidate just because they need to be run.
-                        if not job.is_temp_job:
+                        if not job.is_temp_job or job.is_done() is None:
                             #logger.info(job.is_temp_job)
                             job.invalidated('not done')
                             if not job.was_invalidated:  # paranoia
@@ -527,7 +526,7 @@ class Pipegraph(object):
                 runnable_jobs.append(job)
                 if len(runnable_jobs) == maximal_startable_jobs:
                     break
-        if self.possible_execution_order and not runnable_jobs and not self.running_jobs:
+        if self.possible_execution_order and not runnable_jobs and not self.running_jobs:  # pragma: no cover
             time.sleep(5) #there might be an interaction with stat caching - filesize being reported as 0 after a job returned, when it really isn't. So we sleep a bit, anfd try again
             runnable_jobs = []
             logger.info("maximal_startable_jobs: %i" % maximal_startable_jobs)
@@ -536,7 +535,8 @@ class Pipegraph(object):
                     runnable_jobs.append(job)
                     if len(runnable_jobs) == maximal_startable_jobs:
                         break
-        if self.possible_execution_order and not runnable_jobs and not self.running_jobs: #ie. the sleeping did not help
+        if self.possible_execution_order and not runnable_jobs and not self.running_jobs:  # pragma: no cover
+            #ie. the sleeping did not help
             logger.info("Nothing running, nothing runnable, but work left to do")
             logger.info("job\tcan_run_now\tlist_blocks")
             for job in self.possible_execution_order:
@@ -625,7 +625,7 @@ class Pipegraph(object):
                         logger.info("removing job from runnable %s" % job)
                         runnable_jobs.remove(job)
             error_count -= 1
-            if error_count == 0:
+            if error_count == 0:  # pragma: no cover
                 raise ppg_exceptions.RuntimeException("There was a loop error that should never 've been reached in start_jobs")
         logger.info("can't start any more jobs. either there are no more, or resources all utilized. There are currently %i jobs remaining" % len(self.possible_execution_order))
 
@@ -765,15 +765,28 @@ class Pipegraph(object):
 
     def dump_graph(self):
         """Dump the current graph in text format into logs/ppg_graph.txt if logs exists"""
+        def do_dump():
+            nodes = {}
+            edges = []
+            for job in self.jobs.values():
+                nodes[job.job_id] = {'is_done': job._is_done, 'was_run': job.was_run, 'type': job.__class__.__name__}
+                for preq in job.prerequisites:
+                    edges.append((preq.job_id, job.job_id))
+            self._write_xgmml("logs/ppg_graph.xgmml", nodes, edges)
         if os.path.exists('logs') and os.path.isdir('logs'):
             if os.fork() == 0:  # run this in an unrelated child process
-                nodes = {}
-                edges = []
-                for job in self.jobs.values():
-                    nodes[job.job_id] = {'is_done': job._is_done, 'was_run': job.was_run, 'type': job.__class__.__name__}
-                    for preq in job.prerequisites:
-                        edges.append((preq.job_id, job.job_id))
-                self._write_xgmml("logs/ppg_graph.xgmml", nodes, edges)
+                if 'PYPIPEGRAPH_DO_COVERAGE' in os.environ:
+                    import coverage
+                    cov = coverage.coverage(data_suffix=True, config_file = os.environ['PYPIPEGRAPH_DO_COVERAGE'])
+                    cov.start()
+                    try:
+                        do_dump()
+                    finally:
+                        cov.stop()
+                        cov.save()
+                        pass
+                else:
+                    do_dump()
                 os._exit(0)  # Cleanup is for parent processes!
 
     def _write_xgmml(self, output_filename, node_to_attribute_dict, edges):

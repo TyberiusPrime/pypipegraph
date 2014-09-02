@@ -30,11 +30,8 @@ from . import ppg_exceptions
 from . import util
 logger = util.start_logging('job')
 import re
-try:
-    import cStringIO
-    io = cStringIO
-except ImportError:
-    import io
+import cStringIO
+io = cStringIO
 import os
 import stat
 from . import util
@@ -42,11 +39,8 @@ import sys
 import dis
 import shutil
 import hashlib
-try:
-    import cPickle
-    pickle = cPickle
-except ImportError:
-    import pickle
+import cPickle
+pickle = cPickle
 import traceback
 import platform;
 import time
@@ -95,7 +89,7 @@ class JobList(object):
             job.depends_on(other_job)
 
     def __str__(self):
-        return "Job list of %i jobs: %s" % (len(self), ", ".join(str(x) for x in self.jobs))
+        return "JobList of %i jobs: %s" % (len(self), ", ".join(str(x) for x in self.jobs))
 
 
 class Job(object):
@@ -129,9 +123,9 @@ class Job(object):
             raise ValueError("You must first instanciate a pypipegraph before creating jobs""")
         return util.job_uniquifier[job_id]
 
-    def __getnewargs__(self):
-        """Provides unpickeling support"""
-        return (self.job_id, )
+    #def __getnewargs__(self):
+        #"""Provides unpickeling support"""
+        #return (self.job_id, )
 
     def __init__(self, job_id):
         #logger.info("init for %s" % job_id)
@@ -296,7 +290,7 @@ class Job(object):
                      # or it was a loadable job anyhow, then it doesn't matter.
                     #logger.info("case 1 - false %s" % preq)
                     return False  # false means no way
-                else:
+                else:  # pragma: no cover
                     #logger.info("case 2 - delay") #but we still need to try the other preqs if it was ok
                     pass
             else:
@@ -305,7 +299,7 @@ class Job(object):
         #logger.info("case 4 - true")
         return True
 
-    def list_blocks(self):
+    def list_blocks(self):  # pragma: no cover
         """A helper to list what blocked this job from running - debug function"""
         res = []
         for preq in self.prerequisites:
@@ -328,7 +322,7 @@ class Job(object):
                 #return False
         return res
 
-    def run(self):
+    def run(self):  #pragma: no cover
         """Do the actual work"""
         pass
 
@@ -713,6 +707,9 @@ class MultiFileGeneratingJob(FileGeneratingJob):
     def __new__(cls, filenames, *args, **kwargs):
         if isinstance(filenames, str):
             raise ValueError("Filenames must be a list (or at least an iterable), not a single string")
+        if not hasattr(filenames, '__iter__'):
+            raise TypeError("filenames was not iterable")
+        
         job_id = ":".join(sorted(str(x) for x in filenames))
         return Job.__new__(cls, job_id)
 
@@ -726,8 +723,6 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         """
         if not hasattr(function, '__call__'):
             raise ValueError("function was not a callable")
-        if not hasattr(filenames, '__iter__'):
-            raise ValueError("filenames was not iterable")
         sorted_filenames = list(sorted(x for x in filenames))
         for x in sorted_filenames:
             if not isinstance(x, str) and not isinstance(x, str): #FIXME
@@ -779,11 +774,11 @@ class MultiFileGeneratingJob(FileGeneratingJob):
                         pass
             util.reraise(exc_info[1], None, exc_info[2])
         self._is_done = None
-        if not self.is_done():
-            missing_files = []
-            for f in self.filenames:
-                if not util.output_file_exists(f):
-                    missing_files.append(f)
+        missing_files = []
+        for f in self.filenames:
+            if not util.output_file_exists(f):
+                missing_files.append(f)
+        if missing_files:
             raise ppg_exceptions.JobContractError("%s did not create all of its files.\nMissing were:\n %s" % (self.job_id, "\n".join(missing_files)))
 
     def runs_in_slave(self):
@@ -815,7 +810,7 @@ class TempFileGeneratingJob(FileGeneratingJob):
 
     def calc_is_done(self, depth=0):
         logger.info("calc is done %s" % self)
-        if util.output_file_exists(self.job_id):
+        if os.path.exists(self.job_id):  # explicitly not using util.output_file_exists, since there the stat has a race condition - reports 0 on recently closed files
             logger.info("calc is done %s - file existed" % self)
             return True
         else:
@@ -824,15 +819,19 @@ class TempFileGeneratingJob(FileGeneratingJob):
                     return False
             return True
 
+
 class TempFilePlusGeneratingJob(FileGeneratingJob):
     """Create a temporary file that is removed once all direct dependands have
     been executed sucessfully, 
     but keep a log file (and rerun if the log file is not there)
     """
 
-    def __init__(self, output_filename, log_file, function, rename_broken=False):
-        FileGeneratingJob.__init__(self, output_filename, function, rename_broken)
-        self.log_file = log_file
+    def __init__(self, output_filename, log_filename, function, rename_broken=False):
+        if output_filename == log_filename:
+            raise ValueError("output_filename and log_filename must be different")
+        FileGeneratingJob.__init__(self, output_filename, function)
+        self.output_filename = output_filename
+        self.log_file = log_filename
         self.is_temp_job = True
 
     def cleanup(self):
@@ -852,9 +851,8 @@ class TempFilePlusGeneratingJob(FileGeneratingJob):
 
     def calc_is_done(self, depth=0):
         if not os.path.exists(self.log_file):
-            #print ('could not find log file', self.log_file)
-            return False
-        if util.output_file_exists(self.job_id):
+            return None
+        if os.path.exists(self.job_id):  # explicitly not using util.output_file_exists, since there the stat has a race condition - reports 0 on recently closed files
             return True
         else:
             for dep in self.dependants:
@@ -862,6 +860,22 @@ class TempFilePlusGeneratingJob(FileGeneratingJob):
                     return False
             return True
 
+    def run(self):
+        try:
+            self.callback()
+        except Exception as e:
+            exc_info = sys.exc_info()
+            try:
+                logger.info("unlinking %s" % self.output_filename)
+                os.unlink(self.output_filename)
+            except OSError:
+                pass
+            util.reraise(exc_info[1], None, exc_info[2])
+        self._is_done = None
+        if not os.path.exists(self.output_filename):
+            raise ppg_exceptions.JobContractError("%s did not create it's output file")
+        if not os.path.exists(self.log_file):
+            raise ppg_exceptions.JobContractError("%s did not create it's log file")
 
 class DataLoadingJob(Job):
     """Modify the current (system local) master process with a callback function.

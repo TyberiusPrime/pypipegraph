@@ -99,7 +99,7 @@ def output_file_exists(filename):
         return False
     st = stat(filename)
     if st[stat_module.ST_SIZE] == 0:
-        util_logger.info('stat size 0 %s'% filename)
+        util_logger.info('stat size 0 %s - %s'% (os.path.abspath(filename), st))
         return False
     return True
 
@@ -183,43 +183,6 @@ def stat(filename):
         stat_cache[filename] = (os.stat(filename), time.time())
     s, t = stat_cache[filename]
     return s
-
-class JobList(object):
-    """For when you want to return a list of jobs that mostly behaves like a single Job.
-    (Ie. when it must have a depends_on() method. Otherwise, a regular list will do fine).
-    """
-    def __init__(self, jobs):
-        jobs = list(jobs)
-        for job in jobs:
-            if not isinstance(job, Job):
-                raise ppg_exceptions.ValueError("%s was not a job object" % job)
-        self.jobs = set(jobs)
-
-    def __iter__(self):
-        for job in self.jobs:
-            yield job
-
-    def __add__(self, other_job):
-        if isinstance(other_job, list):
-            other_job = JobList(other_job)
-
-        def iter():
-            for job in self.jobs:
-                yield job
-            if isinstance(other_job, Job):
-                yield other_job
-            else:
-                for job in other_job:
-                    yield job
-
-        return JobList(iter())
-
-    def __len__(self):
-        return len(self.jobs)
-
-    def depends_on(self, other_job):
-        for job in self.jobs:
-           job.depends_on(other_job)
 
 
 
