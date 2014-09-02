@@ -38,11 +38,8 @@ try:
 except ImportError:
     import queue
 import sys
-try:
-    import cPickle
-    pickle = cPickle
-except ImportError:
-    import pickle
+import cPickle
+pickle = cPickle
 from . import ppg_exceptions
 import tempfile
 
@@ -300,7 +297,7 @@ class LocalSlave:
     def wrap_run(self, job, stdout, stderr, is_local):
         if 'PYPIPEGRAPH_DO_COVERAGE' in os.environ:
                 import coverage
-                cov = coverage.coverage(data_suffix=True, config_file = '/code/pypipegraph/pypipegraph/tests/.coveragerc')
+                cov = coverage.coverage(data_suffix=True, config_file = os.environ['PYPIPEGRAPH_DO_COVERAGE'])
                 cov.start()
                 try:
                     self.run_a_job(job, stdout, stderr, is_local)

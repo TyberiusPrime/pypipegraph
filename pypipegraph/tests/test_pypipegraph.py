@@ -72,14 +72,6 @@ def multiproc_test():
     print 'helleo'
 
 
-def magic(filename):
-    """See what linux 'file' commando says about that file"""
-    if not os.path.exists(filename):
-        raise OSError("Does not exists %s" % filename)
-    p = subprocess.Popen(['file', filename], stdout=subprocess.PIPE)
-    stdout, stderr = p.communicate()
-    return stdout
-
 
 test_count = 0
 class PPGPerTest(unittest.TestCase):
@@ -139,9 +131,23 @@ class SimpleTests(unittest.TestCase):
         ppg.destroy_global_pipegraph()
         ppg.new_pipegraph()
         ppg.run_pipegraph()
-        def inner():
+        try:
             ppg.run_pipegraph()
-        self.assertRaises(ValueError, inner)
+            self.assertTrue(False, 'Exception not correctly raised')
+        except ValueError, e:
+            print e
+            self.assertTrue('Each pipegraph may be run only once.' in str(e))
+
+    def test_can_not_add_jobs_after_run(self):
+        ppg.destroy_global_pipegraph()
+        ppg.new_pipegraph()
+        ppg.run_pipegraph()
+        try:
+            job = ppg.FileGeneratingJob('out/A', lambda: write('out/A','A'))
+            self.assertTrue(False, 'Exception not correctly raised')
+        except ValueError, e:
+            print e
+            self.assertTrue('This pipegraph was already run. You need to create a new one for more jobs' in str(e))
 
     def test_job_creation_after_pipegraph_run_raises(self):
         def inner():
@@ -169,6 +175,7 @@ class SimpleTests(unittest.TestCase):
         finally:
             ppg.forget_job_status('shu.dat')
 
+
 class CycleTests(unittest.TestCase):
     def setUp(self):
         try:
@@ -191,7 +198,7 @@ class CycleTests(unittest.TestCase):
             jobB = ppg.FileGeneratingJob("A", lambda :write("B","A"))
             jobA.depends_on(jobB)
             jobB.depends_on(jobA)
-            ppg.run_pipegraph()
+            #ppg.run_pipegraph()
         self.assertRaises(ppg.CycleError, inner)
 
     def test_indirect_cicle(self):
@@ -357,6 +364,16 @@ class JobTests(PPGPerTest):
         #max_depth reached -> answer with false
         self.assertFalse(jobA.is_in_dependency_chain(jobs[0], 5))
         
+    def test_str(self):
+        a = ppg.FileGeneratingJob('out/A', lambda: write('out/A', 'hello'))
+        self.assertTrue(isinstance(str(a), str))
+
+        a = ppg.ParameterInvariant('out/A', 'hello')
+        self.assertTrue(isinstance(str(a), str))
+
+        a = ppg.JobGeneratingJob('out/Ax', lambda :'hello')
+        self.assertTrue(isinstance(str(a), str))
+
 
 class FileGeneratingJobTests(PPGPerTest):
 
@@ -690,6 +707,15 @@ class MultiFileGeneratingJobTests(PPGPerTest):
             jobB = ppg.MultiFileGeneratingJob([25], lambda: write('out/A', param))
         self.assertRaises(ValueError, inner)
 
+    def test_non_iterable(self):
+        try:
+            jobB = ppg.MultiFileGeneratingJob(25, lambda: write('out/A', param))
+            self.assertFalse("Exception not raised")
+        except TypeError, e:
+            print e
+            self.assertTrue("filenames was not iterable" in str(e))
+
+    
     def test_single_stre(self):
         def inner():
             jobB = ppg.MultiFileGeneratingJob("A", lambda: write('out/A', param))
@@ -1343,6 +1369,147 @@ class TempFileGeneratingJobTest(PPGPerTest):
         self.assertFalse(os.path.exists('out/temp'))
 
 
+class TempFilePlusGeneratingJobTest(PPGPerTest):
+    def test_basic(self):
+        ppg.new_pipegraph(quiet=False)
+        temp_file = 'out/temp'
+        keep_file = 'out/keep'
+        def write_temp():
+            write(temp_file, 'hello')
+            write(keep_file, 'hello')
+        temp_job = ppg.TempFilePlusGeneratingJob(temp_file, keep_file, write_temp)
+        ofA = 'out/A'
+        def write_A():
+            write(ofA, read(temp_file))
+        fgjob = ppg.FileGeneratingJob(ofA, write_A)
+        fgjob.depends_on(temp_job)
+        ppg.run_pipegraph()
+        self.assertEqual(read(ofA), 'hello')
+        self.assertFalse(os.path.exists(temp_file))
+        self.assertTrue(os.path.exists(keep_file))
+
+    def test_raises_on_keep_equal_temp_file(self):
+        temp_file = 'out/temp'
+        keep_file = temp_file
+        def write_temp():
+            write(temp_file, 'hello')
+            write(keep_file, 'hello')
+        def inner():
+            temp_job = ppg.TempFilePlusGeneratingJob(temp_file, keep_file, write_temp)
+        self.assertRaises(ValueError, inner)
+        
+    def test_does_not_get_return_if_output_is_done(self):
+        temp_file = 'out/temp'
+        keep_file = 'out/keep'
+        out_file = 'out/A'
+        count_file = 'out/count'
+        normal_count_file = 'out/countA'
+        def write_count():
+            try:
+                count = read(out_file)
+                count = count[:count.find(':')]
+            except IOError:
+                count = '0'
+            count = int(count) + 1
+            write(out_file, str(count) + ':' + read(temp_file))
+            append(normal_count_file,'A')
+        def write_temp():
+            write(temp_file, 'temp')
+            write(keep_file, 'temp')
+            append(count_file, 'X')
+        jobA = ppg.FileGeneratingJob(out_file, write_count)
+        jobTemp = ppg.TempFilePlusGeneratingJob(temp_file, keep_file, write_temp)
+        jobA.depends_on(jobTemp)
+        ppg.run_pipegraph()
+        self.assertFalse(os.path.exists(temp_file))
+        self.assertEqual(read(out_file), '1:temp')
+        self.assertEqual(read(count_file), 'X')
+        self.assertEqual(read(normal_count_file), 'A')
+        self.assertTrue(os.path.exists(keep_file))
+        #now, rerun. Tempfile has been deleted,
+        #and should not be regenerated
+        ppg.new_pipegraph(rc_gen(), quiet=True)
+        jobA = ppg.FileGeneratingJob(out_file, write_count)
+        jobTemp = ppg.TempFilePlusGeneratingJob(temp_file, keep_file, write_temp)
+        jobA.depends_on(jobTemp)
+        ppg.run_pipegraph()
+        self.assertFalse(os.path.exists(temp_file))
+        self.assertEqual(read(out_file), '1:temp')
+        self.assertEqual(read(count_file), 'X')
+        self.assertEqual(read(normal_count_file), 'A')
+        self.assertTrue(os.path.exists(keep_file))
+
+
+    def test_fails_if_keep_file_is_not_generated(self):
+        temp_file = 'out/temp'
+        keep_file = 'out/keep'
+        out_file = 'out/A'
+        count_file = 'out/count'
+        normal_count_file = 'out/countA'
+        def write_count():
+            try:
+                count = read(out_file)
+                count = count[:count.find(':')]
+            except IOError:
+                count = '0'
+            count = int(count) + 1
+            write(out_file, str(count) + ':' + read(temp_file))
+            append(normal_count_file,'A')
+        def write_temp():
+            write(temp_file, 'temp')
+            #write(keep_file, 'temp')
+            append(count_file, 'X')
+        jobA = ppg.FileGeneratingJob(out_file, write_count)
+        jobTemp = ppg.TempFilePlusGeneratingJob(temp_file, keep_file, write_temp)
+        jobA.depends_on(jobTemp)
+        def inner():
+            ppg.run_pipegraph()
+        self.assertRaises(ppg.RuntimeError, inner)
+        self.assertFalse(os.path.exists(out_file))
+        self.assertFalse(os.path.exists(keep_file))
+        self.assertTrue(os.path.exists(temp_file))
+
+
+
+    def test_does_get_rerun_if_keep_file_is_gone(self):
+        temp_file = 'out/temp'
+        keep_file = 'out/keep'
+        out_file = 'out/A'
+        count_file = 'out/count'
+        normal_count_file = 'out/countA'
+        def write_count():
+            try:
+                count = read(out_file)
+                count = count[:count.find(':')]
+            except IOError:
+                count = '0'
+            count = int(count) + 1
+            write(out_file, str(count) + ':' + read(temp_file))
+            append(normal_count_file,'A')
+        def write_temp():
+            write(temp_file, 'temp')
+            write(keep_file, 'temp')
+            append(count_file, 'X')
+        jobA = ppg.FileGeneratingJob(out_file, write_count)
+        jobTemp = ppg.TempFilePlusGeneratingJob(temp_file, keep_file, write_temp)
+        jobA.depends_on(jobTemp)
+        ppg.run_pipegraph()
+        self.assertFalse(os.path.exists(temp_file))
+        self.assertEqual(read(out_file), '1:temp')
+        self.assertEqual(read(count_file), 'X')
+        self.assertEqual(read(normal_count_file), 'A')
+        self.assertTrue(os.path.exists(keep_file))
+        os.unlink(keep_file)
+        ppg.new_pipegraph(rc_gen(), quiet=True)
+        jobA = ppg.FileGeneratingJob(out_file, write_count)
+        jobTemp = ppg.TempFilePlusGeneratingJob(temp_file, keep_file, write_temp)
+        jobA.depends_on(jobTemp)
+        ppg.run_pipegraph()
+        self.assertEqual(read(out_file), '1:temp')
+        self.assertEqual(read(count_file), 'XX')  # where we see the temp file job ran again
+        self.assertEqual(read(normal_count_file), 'AA') ## which is where we see it ran again...
+        self.assertTrue(os.path.exists(keep_file))
+
 class InvariantTests(PPGPerTest):
     def sentinel_count(self):
         sentinel = 'out/sentinel'
@@ -1811,10 +1978,12 @@ class FunctionInvariantTests(PPGPerTest):
             __name__ = 'MockIM'
         class MockCython:
             __doc__ = "File:stat.py starting at line 0)\nHello world"
-            im_func = "cyfunction"
+            im_func = "cyfunction shu"
             im_class = MockImClass
             def __call__(self):
                 pass
+            def __repr__(self):
+                return 'cyfunction mockup'
         c = MockCython()
         mi = MockImClass()
         stat.MockIM = mi
@@ -2338,7 +2507,7 @@ class JobGeneratingJobTests(PPGPerTest):
         self.assertEqual(read('out/Ac'), 'AA')
         self.assertEqual(read('out/Cx'), 'CC')
 
-
+     
 class CachedAttributeJobTests(PPGPerTest):
     def test_simple(self):
         o = Dummy()
@@ -3032,6 +3201,16 @@ class TestUtils(PPGPerTest):
             c = Dummy('shu')
         self.assertRaises(ValueError, inner)
 
+    def test_assert_uniqueness_raises_slashes(self):
+        class Dummy:
+            def __init__(self, name):
+                self.name = name
+                ppg.util.assert_uniqueness_of_object(self)
+        b = Dummy('shu')
+        def inner():
+            a = Dummy('shu/sha')
+        self.assertRaises(ValueError, inner)
+
     def test_assert_uniqueness_raises_also_check(self):
         class Dummy:
             def __init__(self, name):
@@ -3109,15 +3288,27 @@ class TestFinalJobs(PPGPerTest):
     def test_cannot_depend_on_final_job(self):
         jobA = ppg.FileGeneratingJob("A", lambda :write("A","A"))
         final_job = ppg.FinalJob('da_final', lambda : None)
-        def inner():
-            final_job.depends_on(jobA)
-        self.assertRaises(ppg.JobContractError, inner)
+        try:
+            jobA.depends_on(final_job)
+            self.assertFalse("Exception not raised")
+        except ppg.JobContractError, e:
+            print e
+            self.assertTrue('No jobs can depend on FinalJobs' in str(e))
 
 class TestJobList(PPGPerTest):
+
     def raises_on_non_job(self):
         def inner():
             ppg.JobList("shu")
         self.assertRaises(ValueError, inner)
+
+    def raises_on_non_job_in_list(self):
+        try:
+            a = ppg.DataLoadingJob('a', lambda: 5)
+            ppg.JobList([a, "shu"])
+            self.assertFalse("Exception not raised")
+        except ValueError, e:
+            self.assertTrue(' was not a job object' in str(e))
 
     def test_add(self):
         jobA = ppg.FileGeneratingJob("A", lambda :write("A","A"))
@@ -3145,8 +3336,47 @@ class TestJobList(PPGPerTest):
         ppg.util.global_pipegraph.connect_graph()
         self.assertTrue(jobA in jobC.dependants)
         self.assertTrue(jobB in jobC.dependants)
- 
 
+    def test_str(self):
+        jobA = ppg.FileGeneratingJob("A", lambda :write("A","A"))
+        l1 = ppg.JobList([jobA])
+        x = str(l1)
+        self.assertTrue(x.startswith("JobList of "))
+
+    def test_adding_two_jobs(self):
+        jobA = ppg.FileGeneratingJob("A", lambda :write("A","A"))
+        jobB = ppg.FileGeneratingJob("B", lambda :write("A","A"))
+        x = jobA + jobB
+        self.assertTrue(isinstance(x, ppg.JobList))
+        self.assertEqual(len(x), 2)
+
+        
+
+
+class DefinitionErrorsTests(PPGPerTest):
+    def test_defining_function_invariant_twice(self):
+        a = lambda: 55
+        b = lambda: 66
+        aj = ppg.FunctionInvariant('a', a)
+        def inner():
+            bj = ppg.FunctionInvariant('a', b)
+        self.assertRaises(ppg.JobContractError, inner)
+
+    def test_defining_function_and_parameter_invariant_with_same_name(self):
+        a = lambda: 55
+        b = lambda: 66
+        aj = ppg.FunctionInvariant('PIa', a)
+        def inner():
+            bj = ppg.ParameterInvariant('a', b)
+        self.assertRaises(ppg.JobContractError, inner)
+
+    def test_defining_function_and_parameter_invariant_with_same_name_reversed(self):
+        a = lambda: 55
+        b = lambda: 66
+        bj = ppg.ParameterInvariant('a', b)
+        def inner():
+            aj = ppg.FunctionInvariant('PIa', a)
+        self.assertRaises(ppg.JobContractError, inner)
 
 
 if __name__ == '__main__':

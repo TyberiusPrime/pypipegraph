@@ -1,7 +1,7 @@
 modules_to_test = ['test_pypipegraph', 'test_plotjobs']
 
 import os
-os.environ['PYPIPEGRAPH_DO_COVERAGE'] = 'True'
+os.environ['PYPIPEGRAPH_DO_COVERAGE'] = '/code/pypipegraph/pypipegraph/tests/.coveragerc'
 import coverage
 with open(".coveragerc",'wb') as op:
     op.write("""
@@ -24,13 +24,15 @@ sys.path.append('/code/pypipegraph/')
 import pypipegraph as ppg
 
 try:
-    nose.core.runmodule(modules_to_test, argv=sys.argv + ['--with-progressive', '--nologcapture'], exit=False)  #log capture get's a ton of output from the pipegraph... enable if you need it
+    nose.core.runmodule(modules_to_test, argv=sys.argv + ['--with-progressive', 
+        '--nologcapture'
+        ], exit=False)  #log capture get's a ton of output from the pipegraph... enable if you need it
 except Exception, e:
     print' error'
     print e
     pass
 cov.stop()
 cov.save()
-os.system('coverage combine')
-os.system('coverage html -d covhtml')
-print 'coverage report is in covhtml/index.html'
+#os.system('coverage combine')
+#os.system('coverage html -d covhtml')
+#print 'coverage report is in covhtml/index.html'
