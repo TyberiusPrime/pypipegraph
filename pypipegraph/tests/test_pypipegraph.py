@@ -242,6 +242,8 @@ class CycleTests(unittest.TestCase):
 
 
 class JobTests(unittest.TestCase):
+    def setUp(self):
+        pass
     def tearDown(self):
         try:
             shutil.rmtree('out')
@@ -331,7 +333,7 @@ class JobTests(unittest.TestCase):
         jobA = ppg.FileGeneratingJob('out/',lambda : None)
         self.assertTrue(hasattr(jobA, '__hash__'))
 
-class JobTests(PPGPerTest):
+class JobTests2(PPGPerTest):
     def test_ignore_code_changes_raises(self):
         jobA = ppg.Job("shu")
         def inner():
