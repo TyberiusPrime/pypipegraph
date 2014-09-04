@@ -124,7 +124,6 @@ class Pipegraph(object):
         Usually automagically called when instanciating one of the Job classes
         """
         #logger.info("Adding job %s" % job)
-        print (job.job_id, self.running, self.was_run)
         if not self.running:
             if self.was_run:
                 raise ValueError("This pipegraph was already run. You need to create a new one for more jobs")
