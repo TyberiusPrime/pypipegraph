@@ -30,8 +30,11 @@ from . import ppg_exceptions
 from . import util
 logger = util.start_logging('job')
 import re
-import cStringIO
-io = cStringIO
+try:
+    import cStringIO
+    io = cStringIO
+except ImportError:
+    import io
 import os
 import stat
 from . import util
@@ -39,8 +42,11 @@ import sys
 import dis
 import shutil
 import hashlib
-import cPickle
-pickle = cPickle
+try:
+    import cPickle
+    pickle = cPickle
+except ImportError:
+    import pickle
 import traceback
 import platform;
 import time
@@ -482,7 +488,7 @@ class FunctionInvariant(_InvariantJob):
                                     print(x)
                                     raise ValueError("Still an issue")
                                 invariant += "\n" + x
-                        except ValueError, e:
+                        except ValueError as e:
                             if str(e) == 'Cell is empty':
                                 pass
                             else:

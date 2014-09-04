@@ -31,15 +31,22 @@ import os
 import codecs
 import traceback
 import multiprocessing
-import kitchen
+try:
+    import kitchen
+    kitchen_available = True
+except ImportError:
+    kitchen_available = False
 try: 
     import Queue
     queue = Queue
 except ImportError:
     import queue
 import sys
-import cPickle
-pickle = cPickle
+try:
+    import cPickle
+    pickle = cPickle
+except ImportError:
+    import pickle
 from . import ppg_exceptions
 import tempfile
 
@@ -225,16 +232,18 @@ class LocalSlave:
                 logger.info("Slave: Running %s in slave" % job)
                 stdout = tempfile.SpooledTemporaryFile(mode='w+')
                 stderr = tempfile.SpooledTemporaryFile(mode='w+')
-                stdout = kitchen.text.converters.getwriter('utf8')(stdout)
-                stderr = kitchen.text.converters.getwriter('utf8')(stderr)
+                if kitchen_available:
+                    stdout = kitchen.text.converters.getwriter('utf8')(stdout)
+                    stderr = kitchen.text.converters.getwriter('utf8')(stderr)
                 self.run_a_job(job, stdout, stderr)
                 logger.info("Slave: returned from %s in slave, data was put" % job)
             else:
                 logger.info("Slave: Forking for %s" % job.job_id)
                 stdout = tempfile.TemporaryFile(mode='w+') #no more spooling - it doesn't get passed back
                 stderr = tempfile.TemporaryFile(mode='w+')
-                stdout = kitchen.text.converters.getwriter('utf8')(stdout)
-                stderr = kitchen.text.converters.getwriter('utf8')(stderr)
+                if kitchen_available:
+                    stdout = kitchen.text.converters.getwriter('utf8')(stdout)
+                    stderr = kitchen.text.converters.getwriter('utf8')(stderr)
                 stdout.fileno()
                 stderr.fileno()
                 p = multiprocessing.Process(target=self.wrap_run, args=[job, stdout, stderr, False])
@@ -296,15 +305,14 @@ class LocalSlave:
 
     def wrap_run(self, job, stdout, stderr, is_local):
         if 'PYPIPEGRAPH_DO_COVERAGE' in os.environ:
-                import coverage
-                cov = coverage.coverage(data_suffix=True, config_file = os.environ['PYPIPEGRAPH_DO_COVERAGE'])
-                cov.start()
-                try:
-                    self.run_a_job(job, stdout, stderr, is_local)
-                finally:
-                    cov.stop()
-                    cov.save()
-                    pass
+            import coverage
+            cov = coverage.coverage(data_suffix=True, config_file = os.environ['PYPIPEGRAPH_DO_COVERAGE'])
+            cov.start()
+            try:
+                self.run_a_job(job, stdout, stderr, is_local)
+            finally:
+                cov.stop()
+                cov.save()
         else:
             self.run_a_job(job, stdout, stderr, is_local)
 

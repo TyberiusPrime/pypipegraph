@@ -36,10 +36,14 @@ import signal
 import time
 import collections
 from . import resource_coordinators
-import cPickle
-import pickle
-pickle_stop = pickle.STOP
-pickle = cPickle
+try:
+    import cPickle
+    import pickle
+    pickle_stop = pickle.STOP
+    pickle = cPickle
+except ImportError:
+    import pickle
+    pickle_stop = pickle.STOP
 from . import ppg_exceptions
 from . import util
 import sys
@@ -58,7 +62,7 @@ def run_pipegraph():
 
 
 def new_pipegraph(resource_coordinator=None, quiet=False,
-        invariant_status_filename=invariant_status_filename_default):
+        invariant_status_filename=invariant_status_filename_default, dump_graph = True):
     """Create a new global pipegraph.
     New jobs will automagically be attached to this pipegraph.
     Default ResourceCoordinator is L{LocalSystem}
@@ -66,7 +70,7 @@ def new_pipegraph(resource_coordinator=None, quiet=False,
     if resource_coordinator is None:
         resource_coordinator = resource_coordinators.LocalSystem()
     util.global_pipegraph = Pipegraph(resource_coordinator, quiet=quiet, 
-            invariant_status_filename=invariant_status_filename)
+            invariant_status_filename=invariant_status_filename, dump_graph = dump_graph)
     util.job_uniquifier = {}
     util.filename_collider_check = {}
     util.func_hashes = {}
@@ -102,7 +106,7 @@ class Pipegraph(object):
     (Default ResourceCoordinator does so).
     Abort run with ctrl-c.
     """
-    def __init__(self, resource_coordinator, quiet=False, invariant_status_filename=invariant_status_filename_default):
+    def __init__(self, resource_coordinator, quiet=False, invariant_status_filename=invariant_status_filename_default, dump_graph = True):
         self.rc = resource_coordinator
         self.rc.pipegraph = self
         self.jobs = {}
@@ -114,6 +118,7 @@ class Pipegraph(object):
         self.invariant_loading_issues = {}  # jobs whose invariant could not be unpickled for some reason - and the exception.
         self._distribute_invariant_changes_count = 0
         self.invariant_status_filename = invariant_status_filename
+        self.do_dump_graph = True
 
     def __del__(self):
         # remove circle link between rc and pipegraph
@@ -166,7 +171,8 @@ class Pipegraph(object):
         self.distribute_invariant_changes()
         self.dump_invariant_status() # the jobs will have removed their output, so we can safely store the invariant data
         self.build_todo_list()
-        self.dump_graph()
+        if self.do_dump_graph:
+            self.dump_graph()
         
         #make up some computational engines and put them to work.
         logger.info("now executing")
@@ -353,7 +359,7 @@ class Pipegraph(object):
                     try:
                         pickle.dump(key, op, pickle.HIGHEST_PROTOCOL)
                         pickle.dump(value, op, pickle.HIGHEST_PROTOCOL)
-                    except Exception, e:
+                    except Exception as e:
                         print( key)
                         print( value)
                         raise
@@ -380,7 +386,7 @@ class Pipegraph(object):
             try:
                 try:
                     inv = job.get_invariant(old)
-                except Exception, e:
+                except Exception as e:
                     if isinstance(e, util.NothingChanged):
                         pass
                     else:
@@ -700,7 +706,8 @@ class Pipegraph(object):
                     job.invalidated(reason='not done')
         self.connect_graph()
         self.distribute_invariant_changes()
-        self.dump_graph()
+        if not self.do_dump_graph:
+            self.dump_graph()
         #we not only need to check the jobs we have received, we also need to check their dependands
         #for example there might have been a DependencyInjectionJob than injected a DataLoadingJob
         #that had it's invariant FunctionInvariant changed...
