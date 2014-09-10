@@ -394,6 +394,22 @@ class FileGeneratingJobTests(PPGPerTest):
         self.assertEqual(data, data_to_write)
         self.assertEqual(job.was_run, True)
 
+    def test_basic_with_parameter(self):
+        data_to_write = "hello"
+        def do_write(filename):
+            print('do_write was called')
+            write(filename, data_to_write)
+        job = ppg.FileGeneratingJob('out/a', do_write)
+        job.ignore_code_changes()
+        ppg.run_pipegraph()
+        self.assertFalse(job.failed)
+        self.assertTrue(os.path.exists('out/a'))
+        op = open('out/a', 'r')
+        data = op.read()
+        op.close()
+        self.assertEqual(data, data_to_write)
+        self.assertEqual(job.was_run, True)
+
     def test_simple_filegeneration_with_function_dependency(self):
         of = "out/a"
         data_to_write = "hello"

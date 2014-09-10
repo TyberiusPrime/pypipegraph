@@ -689,7 +689,13 @@ class FileGeneratingJob(Job):
 
     def run(self):
         try:
-            self.callback()
+            try:
+                self.callback()
+            except TypeError as e:
+                if 'takes exactly 1 argument (0 given)' in str(e):
+                    self.callback(self.job_id)
+                else:
+                    raise
         except Exception as e:
             exc_info = sys.exc_info()
             print(traceback.format_exc(), file=sys.stderr)
