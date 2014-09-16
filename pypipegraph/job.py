@@ -91,7 +91,6 @@ class JobList(object):
 
     def depends_on(self, other_job):
         for job in self.jobs:
-            print ('calling depends_on', job, other_job)
             job.depends_on(other_job)
 
     def __str__(self):
