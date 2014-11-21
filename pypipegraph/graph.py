@@ -755,7 +755,7 @@ class Pipegraph(object):
         print('-' * 75, file=file_handle)
         print('%s failed. Reason:' % (job, ), file=file_handle)
         if job.exception:
-            print('\tThrew an exception %s' % (job.exception,), file=file_handle)
+            print('\tThrew an exception %s' % (unicode(job.exception).encode('ascii', errors='replace'),), file=file_handle)
             print('\tTraceback: %s' % (job.trace,), file=file_handle)
 
         print('\t stdout was %s' % (job.stdout,), file=file_handle)

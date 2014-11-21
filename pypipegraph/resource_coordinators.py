@@ -31,6 +31,8 @@ import os
 import codecs
 import traceback
 import multiprocessing
+from mp_queues import MPQueueFixed
+
 try:
     import kitchen
     kitchen_available = True
@@ -119,7 +121,7 @@ class LocalSystem:
 
     def enter_loop(self):
         self.spawn_slaves()
-        self.que = multiprocessing.Queue()
+        self.que = MPQueueFixed()
         logger.info("Starting first batch of jobs")
         self.pipegraph.start_jobs()
         while True:
@@ -127,7 +129,7 @@ class LocalSystem:
             self.see_if_output_is_requested()
             try:
                 logger.info("Listening to que")
-                slave_id, was_ok, job_id_done, stdout, stderr, exception, trace, new_jobs = self.que.get(block=True, timeout=self.timeout)  # was there a job done?
+                slave_id, was_ok, job_id_done, stdout, stderr, exception, trace, new_jobs = self.que.get(block=True, timeout=self.timeout)  # was there a job done?t
                 logger.info("Job returned: %s, was_ok: %s" % (job_id_done, was_ok))
                 logger.info("Remaining in que (approx): %i" % self.que.qsize())
                 job = self.pipegraph.jobs[job_id_done]
@@ -175,9 +177,6 @@ class LocalSystem:
                 self.pipegraph.start_jobs()
 
             except (queue.Empty, IOError):  # either timeout, or the que failed
-                #logger.info("Timout")
-                #for job in self.pipegraph.running_jobs:
-                    #logger.info('running %s' % (job, ))
                 pass
         self.que.close()
         self.que.join_thread()  # wait for the que to close
@@ -213,6 +212,7 @@ class LocalSlave:
                 if preq.is_loadable():
                     logger.info("Slave: Loading %s" % preq)
                     if not self.load_job(preq):
+                        logger.info("Slave: Preq failed %s" % preq)
                         preq_failed = True
                         break
         if preq_failed:
@@ -227,6 +227,7 @@ class LocalSlave:
                         '',
                         False,
                     ))
+            time.sleep(0)
         else:
             if job.modifies_jobgraph():
                 logger.info("Slave: Running %s in slave" % job)
@@ -317,6 +318,7 @@ class LocalSlave:
             self.run_a_job(job, stdout, stderr, is_local)
 
     def run_a_job(self, job, stdout, stderr, is_local=True):  # this runs in the spawned processes, except for job.modifies_jobgraph()==True jobs
+        
         old_stdout = sys.stdout
         old_stderr = sys.stderr
         sys.stdout = stdout
@@ -414,4 +416,3 @@ class LocalSlave:
                             ))
         for proc in remove:
             del self.process_to_job[proc]
-

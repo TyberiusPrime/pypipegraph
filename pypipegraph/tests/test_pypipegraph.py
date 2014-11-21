@@ -3154,6 +3154,15 @@ class TestingTheUnexpectedTests(PPGPerTest):
         self.assertEqual(read('out/B'), 'A')
         self.assertEqual(read('out/Bs'), 'AA') #this one got rerun because we could not load the invariant...
 
+    def testing_import_does_not_hang(self):  # see python issue22853 
+        old_dir = os.getcwd()
+        os.chdir(os.path.dirname(__file__))
+        p = subprocess.Popen(['python', '_import_does_not_hang.py'], stderr = subprocess.PIPE)
+        stdout, stderr = p.communicate()
+        print stdout, stderr
+        self.assertTrue('OK' in stderr)
+        os.chdir(old_dir)
+
 
 class NotYetImplementedTests(unittest.TestCase):
     def test_temp_jobs_and_gen_jobs(self):
