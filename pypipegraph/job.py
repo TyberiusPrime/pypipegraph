@@ -633,7 +633,7 @@ FileTimeInvariant = FileChecksumInvariant
 class FileGeneratingJob(Job):
     """Create a single output file of more than 0 bytes."""
 
-    def __init__(self, output_filename, function, rename_broken=False):
+    def __init__(self, output_filename, function, rename_broken=False, empty_file_allowed = False):
         """If @rename_broken is set, any eventual outputfile that exists
         when the job crashes will be renamed to output_filename + '.broken'
         (overwriting whatever was there before)
@@ -644,6 +644,7 @@ class FileGeneratingJob(Job):
             raise ValueError("Two jobs generating the same file: %s %s%" % (self, util.filename_collider_check[output_filename]))
         else:
             util.filename_collider_check[output_filename] = self
+        self.empty_file_allowed = empty_file_allowed
         Job.__init__(self, output_filename)
         self.callback = function
         self.rename_broken = rename_broken
@@ -674,7 +675,10 @@ class FileGeneratingJob(Job):
 
     def calc_is_done(self, depth=0):
         if self._is_done_cache is None:
-            self._is_done_cache = util.output_file_exists(self.job_id)
+            if self.empty_file_allowed:
+                self._is_done_cache = util.file_exists(self.job_id)
+            else:
+                self._is_done_cache = util.output_file_exists(self.job_id)
         return self._is_done_cache
 
     def invalidated(self, reason=''):
@@ -727,7 +731,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
     def __getnewargs__(self):   # so that unpickling works
         return (self.filenames, )
 
-    def __init__(self, filenames, function, rename_broken=False):
+    def __init__(self, filenames, function, rename_broken=False, empty_files_ok = False):
         """If @rename_broken is set, any eventual outputfile that exists
         when the job crashes will be renamed to output_filename + '.broken'
         (overwriting whatever was there before)
@@ -749,11 +753,16 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         self.callback = function
         self.rename_broken = rename_broken
         self.do_ignore_code_changes = False
+        self.empty_files_ok = empty_files_ok
 
     def calc_is_done(self, depth=0):
         for fn in self.filenames:
-            if not util.output_file_exists(fn):
-                return False
+            if self.empty_files_ok:
+                if not util.file_exists(fn):
+                    return False
+            else:
+                if not util.output_file_exists(fn):
+                    return False
         return True
 
     def invalidated(self, reason=''):
@@ -1374,7 +1383,8 @@ class _CacheFileGeneratingJob(FileGeneratingJob):
     """A job that takes the results from it's callback and pickles it.
     data_loading_job is dependend on somewhere"""
 
-    def __init__(self, job_id, calc_function, dl_job):
+    def __init__(self, job_id, calc_function, dl_job, emtpy_file_allowed = False):
+        self.empty_file_allowed = emtpy_file_allowed
         if not hasattr(calc_function, '__call__'):
             raise ValueError("calc_function was not a callable")
         Job.__init__(self, job_id)  # FileGeneratingJob has no benefits for us
