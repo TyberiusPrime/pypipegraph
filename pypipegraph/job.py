@@ -1205,16 +1205,16 @@ class PlotJob(FileGeneratingJob):
 
             def run_calc():
                 df = calc_function()
-                if not isinstance(df, pydataframe.DataFrame):
+                if not isinstance(df, pydataframe.DataFrame) and not str(df.__class__) == "<class 'pandas.core.frame.DataFrame'>":
                     do_raise = True
                     if isinstance(df, dict):  # might be a list dfs...
                         do_raise = False
                         for x in df.values():
-                            if not isinstance(x, pydataframe.DataFrame):
+                            if not isinstance(x, pydataframe.DataFrame) and not str(x.__class__) == "<class 'pandas.core.frame.DataFrame'>":
                                 do_raise = True
                                 break
                     if do_raise:
-                        raise ppg_exceptions.JobContractError("%s.calc_function did not return a DataFrame (or dict of such), was %s " % (output_filename, df.__class__))
+                        raise ppg_exceptions.JobContractError("%s.calc_function did not return a DataFrame (or dict of such), was %s " % (output_filename, str(df.__class__)))
                 try:
                     os.makedirs(os.path.dirname(self.cache_filename))
                 except OSError:
@@ -1249,6 +1249,8 @@ class PlotJob(FileGeneratingJob):
                 df = self.get_data()
                 if isinstance(df, pydataframe.DataFrame):
                     pydataframe.DF2TSV().write(df, self.table_filename)
+                elif str(df.__class__) == "<class 'pandas.core.frame.DataFrame'>":
+                    df.to_csv(self.table_filename, sep="\t")
                 else:
                     for key, dframe in df.items():
                         if len(dframe) >= 65534:
