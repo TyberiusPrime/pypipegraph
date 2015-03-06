@@ -116,7 +116,7 @@ class Job(object):
         else:
             if util.job_uniquifier[job_id].__class__ != cls:
                 import types
-                if args:
+                if args and hasattr(args[0], '__code__'):
                     x = ( args[0].__code__.co_filename, args[0].__code__.co_firstlineno)
                 else:
                     x=''
