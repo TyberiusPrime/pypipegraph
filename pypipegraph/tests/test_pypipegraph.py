@@ -1384,6 +1384,24 @@ class TempFileGeneratingJobTest(PPGPerTest):
         self.assertFalse(os.path.exists('out/temp'))
 
 
+class MultipTempFileGeneratingJobTest(PPGPerTest):
+    def test_basic(self):
+        temp_files = ['out/temp', 'out/temp2']
+        def write_temp():
+            for temp_file in temp_files:
+                write(temp_file, 'hello')
+        print 'path', sys.modules['pypipegraph']
+        temp_job = ppg.MultiTempFileGeneratingJob(temp_files, write_temp)
+        ofA = 'out/A'
+        def write_A():
+            write(ofA, read(temp_files[0]) + read(temp_files[1]))
+        fgjob = ppg.FileGeneratingJob(ofA, write_A)
+        fgjob.depends_on(temp_job)
+        ppg.run_pipegraph()
+        self.assertEqual(read(ofA), 'hellohello')
+        self.assertFalse(os.path.exists(temp_file))
+
+
 class TempFilePlusGeneratingJobTest(PPGPerTest):
     def test_basic(self):
         ppg.new_pipegraph(quiet=False, dump_graph=False)
