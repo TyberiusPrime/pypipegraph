@@ -839,6 +839,79 @@ class TempFileGeneratingJob(FileGeneratingJob):
                     return False
             return True
 
+class MultiTempFileGeneratingJob(FileGeneratingJob):
+    """Create a temporary file that is removed once all direct dependands have
+    been executed sucessfully"""
+
+    def __new__(cls, filenames, *args, **kwargs):
+        if isinstance(filenames, str):
+            raise ValueError("Filenames must be a list (or at least an iterable), not a single string")
+        if not hasattr(filenames, '__iter__'):
+            raise TypeError("filenames was not iterable")
+        
+        job_id = ":".join(sorted(str(x) for x in filenames))
+        return Job.__new__(cls, job_id)
+
+    def __getnewargs__(self):   # so that unpickling works
+        return (self.filenames, )
+
+    def __init__(self, filenames, function, rename_broken=False):
+        """If @rename_broken is set, any eventual outputfile that exists
+        when the job crashes will be renamed to output_filename + '.broken'
+        (overwriting whatever was there before)
+        """
+        FileGeneratingJob.__init__(self, output_filename, function, rename_broken)
+        self.is_temp_job = True
+        if not hasattr(function, '__call__'):
+            raise ValueError("function was not a callable")
+        sorted_filenames = list(sorted(x for x in filenames))
+        for x in sorted_filenames:
+            if not isinstance(x, str) and not isinstance(x, unicode):
+                raise ValueError("Not all filenames passed to MultiTempFileGeneratingJob were str or unicode objects")
+            if x in util.filename_collider_check and util.filename_collider_check[x] is not self:
+                raise ValueError("Two jobs generating the same file: %s %s - %s" % (self, util.filename_collider_check[x], x))
+            else:
+                util.filename_collider_check[x] = self
+        
+        job_id = ":".join(sorted_filenames)
+        Job.__init__(self, job_id)
+        self.filenames = filenames
+        self.callback = function
+        self.rename_broken = rename_broken
+        self.do_ignore_code_changes = False
+        self.empty_files_ok = empty_files_ok
+
+
+    def cleanup(self):
+        logger.info("%s cleanup" % self)
+        try:
+             # the renaming will already have been done when FileGeneratingJob.run(self) was called...
+            #if self.rename_broken:
+                #shutil.move(self.job_id, self.job_id + '.broken')
+            #else:
+            for fn in self.filenames:
+                logger.info("unlinking %s" % fn)
+                os.unlink(fn)
+        except (OSError, IOError):
+            pass
+
+    def runs_in_slave(self):
+        return True
+
+    def calc_is_done(self, depth=0):
+        logger.info("calc is done %s" % self)
+        all_files_exist = True
+        for fn in self.filenames:
+            all_files_exist = all_files_exist and os.path.exists(fn)
+        if all_files_exist:  # explicitly not using util.output_file_exists, since there the stat has a race condition - reports 0 on recently closed files
+            logger.info("calc is done %s - file existed" % self)
+            return True
+        else:
+            for dep in self.dependants:
+                if (not dep.is_done()) and (not dep.is_loadable()):
+                    return False
+            return True
+
 
 class TempFilePlusGeneratingJob(FileGeneratingJob):
     """Create a temporary file that is removed once all direct dependands have
