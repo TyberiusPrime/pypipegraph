@@ -860,7 +860,6 @@ class MultiTempFileGeneratingJob(FileGeneratingJob):
         when the job crashes will be renamed to output_filename + '.broken'
         (overwriting whatever was there before)
         """
-        FileGeneratingJob.__init__(self, output_filename, function, rename_broken)
         self.is_temp_job = True
         if not hasattr(function, '__call__'):
             raise ValueError("function was not a callable")
@@ -879,7 +878,6 @@ class MultiTempFileGeneratingJob(FileGeneratingJob):
         self.callback = function
         self.rename_broken = rename_broken
         self.do_ignore_code_changes = False
-        self.empty_files_ok = empty_files_ok
 
 
     def cleanup(self):
@@ -890,14 +888,49 @@ class MultiTempFileGeneratingJob(FileGeneratingJob):
                 #shutil.move(self.job_id, self.job_id + '.broken')
             #else:
             for fn in self.filenames:
-                logger.info("unlinking %s" % fn)
+                logger.info("unlinking (cleanup) %s" % fn)
                 os.unlink(fn)
         except (OSError, IOError):
             pass
 
+    def invalidated(self, reason=''):
+        for fn in self.filenames:
+            try:
+                logger.info("unlinking (invalidated) %s" % self.job_id)
+                os.unlink(fn)
+            except OSError:
+                pass
+        Job.invalidated(self, reason)
+
+    def run(self):
+        try:
+            self.callback()
+        except Exception as e:
+            exc_info = sys.exc_info()
+            if self.rename_broken:
+                for fn in self.filenames:
+                    try:
+                        shutil.move(fn, fn + '.broken')
+                    except IOError:
+                        pass
+            else:
+                for fn in self.filenames:
+                    try:
+                        logger.info("unlinking %s" % fn)
+                        os.unlink(fn)
+                    except OSError:
+                        pass
+            util.reraise(exc_info[1], None, exc_info[2])
+        self._is_done = None
+        missing_files = []
+        for f in self.filenames:
+            if not util.output_file_exists(f):
+                missing_files.append(f)
+        if missing_files:
+            raise ppg_exceptions.JobContractError("%s did not create all of its files.\nMissing were:\n %s" % (self.job_id, "\n".join(missing_files)))
+
     def runs_in_slave(self):
         return True
-
     def calc_is_done(self, depth=0):
         logger.info("calc is done %s" % self)
         all_files_exist = True
