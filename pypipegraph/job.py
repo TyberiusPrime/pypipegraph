@@ -711,7 +711,11 @@ class FileGeneratingJob(Job):
             except (OSError, IOError):
                 pass
             util.reraise(exc_info[1], None, exc_info[2])
-        if not util.output_file_exists(self.job_id):
+        if self.empty_file_allowed:
+            filecheck = util.file_exists
+        else:
+            filecheck = util.output_file_exists
+        if not filecheck(self.job_id):
             raise ppg_exceptions.JobContractError("%s did not create its file" % (self.job_id, ))
 
 
@@ -795,8 +799,12 @@ class MultiFileGeneratingJob(FileGeneratingJob):
             util.reraise(exc_info[1], None, exc_info[2])
         self._is_done = None
         missing_files = []
-        for f in self.filenames:
-            if not util.output_file_exists(f):
+        if self.empty_files_ok:
+            filecheck = util.file_exists
+        else:
+            filecheck = util.output_file_exists
+        for f in self.filenames:            
+            if not filecheck(f):
                 missing_files.append(f)
         if missing_files:
             raise ppg_exceptions.JobContractError("%s did not create all of its files.\nMissing were:\n %s" % (self.job_id, "\n".join(missing_files)))
