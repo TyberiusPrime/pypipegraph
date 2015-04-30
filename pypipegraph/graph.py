@@ -644,7 +644,7 @@ class Pipegraph(object):
             pass
         job.failed = True
         job.error_reason = "Indirect"
-        if found or depth == 0: # if this job wasn't in the graph, it's descendands won't be either. But a job that was run and failed has already been removed.
+        if found or depth == 0 or job.is_loadable(): # if this job wasn't in the graph, it's descendands won't be either. But a job that was run and failed has already been removed. Loadable jobs are never in the possible_execution_order
             for dep in job.dependants:
                 self.prune_job(dep, depth + 1)
 
@@ -775,16 +775,18 @@ class Pipegraph(object):
     def dump_graph(self):
         """Dump the current graph in text format into logs/ppg_graph.txt if logs exists"""
         def do_dump():
+            import job as jobs
             nodes = {}
             edges = []
             for job in self.jobs.values():
-                nodes[job.job_id] = {'is_done': job._is_done, 'was_run': job.was_run, 'type': job.__class__.__name__}
-                for preq in job.prerequisites:
-                    edges.append((preq.job_id, job.job_id))
+                if not (isinstance(job, jobs.FunctionInvariant) or isinstance(job, jobs.ParameterInvariant) or isinstance(job, jobs.FinalJob)):
+                    nodes[job.job_id] = {'is_done': job._is_done, 'was_run': job.was_run, 'type': job.__class__.__name__}
+                    for preq in job.prerequisites:
+                        edges.append((preq.job_id, job.job_id))
             #self._write_xgmml("logs/ppg_graph.xgmml", nodes, edges)
             self._write_gml("logs/ppg_graph.gml", nodes, edges)
         if os.path.exists('logs') and os.path.isdir('logs'):
-            if os.fork() == 0:  # run this in an unrelated child process
+            if True or os.fork() == 0:  # run this in an unrelated child process
                 if 'PYPIPEGRAPH_DO_COVERAGE' in os.environ:
                     import coverage
                     cov = coverage.coverage(data_suffix=True, config_file = os.environ['PYPIPEGRAPH_DO_COVERAGE'])
@@ -797,6 +799,7 @@ class Pipegraph(object):
                         pass
                 else:
                     do_dump()
+                raise ValueError("Dump Exit")
                 os._exit(0)  # Cleanup is for parent processes!
 
     def _write_xgmml(self, output_filename, node_to_attribute_dict, edges):
@@ -844,16 +847,20 @@ class Pipegraph(object):
         label "%s"
     ]
 """ % (node_id, node_name))
-            node_id += 1
             names_to_ids[node_name] = node_id
+            node_id += 1
+        op.flush()
         for start, end in edges:
-            op.write("""\tedge
+            if start in names_to_ids and end in names_to_ids:
+                op.write("""\tedge
     [
         source %i
         target %i
     ]
 """ % (names_to_ids[start], names_to_ids[end]))
         op.write("]\n")
+        op.flush()
+        print ('wrote gml')
         op.close()
 
 
