@@ -634,7 +634,7 @@ class Pipegraph(object):
                 raise ppg_exceptions.RuntimeException("There was a loop error that should never 've been reached in start_jobs")
         logger.info("can't start any more jobs. either there are no more, or resources all utilized. There are currently %i jobs remaining" % len(self.possible_execution_order))
 
-    def prune_job(self, job):
+    def prune_job(self, job, depth=0):
         """Remove job (and its descendands) from the list of jobs to run"""
         try:
             self.possible_execution_order.remove(job)
@@ -644,9 +644,9 @@ class Pipegraph(object):
             pass
         job.failed = True
         job.error_reason = "Indirect"
-        if found: # if this job wasn't in the graph, it's descendands won't be either
+        if found or depth == 0: # if this job wasn't in the graph, it's descendands won't be either. But a job that was run and failed has already been removed.
             for dep in job.dependants:
-                self.prune_job(dep)
+                self.prune_job(dep, depth + 1)
 
     def job_executed(self, job):
         """A job was done. Returns whether there are more jobs read run"""
