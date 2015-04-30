@@ -779,7 +779,10 @@ class Pipegraph(object):
             nodes = {}
             edges = []
             for job in self.jobs.values():
-                if not (isinstance(job, jobs.FunctionInvariant) or isinstance(job, jobs.ParameterInvariant) or isinstance(job, jobs.FinalJob)):
+                if not (isinstance(job, jobs.FunctionInvariant) or 
+                        isinstance(job, jobs.ParameterInvariant) or 
+                        isinstance(job, jobs.FileChecksumInvariant) or 
+                        isinstance(job, jobs.FinalJob)):
                     nodes[job.job_id] = {'is_done': job._is_done, 'was_run': job.was_run, 'type': job.__class__.__name__}
                     for preq in job.prerequisites:
                         edges.append((preq.job_id, job.job_id))
@@ -839,14 +842,30 @@ class Pipegraph(object):
 """)
         names_to_ids = {}
         node_id = 0
+        colors = {
+                'FileGeneratingJob': '#5050AF',
+                'TempFileGeneratingJob': '#9050AF',
+                'MultiFileGeneratingJob': '#1010FF',
+                'JobGeneratingJob': "#AF0000",
+                "DependencyInjectionJob": "#FF0000",
+                'DataLoadingJob': "#50FF50",
+                'AttributeLoadingJob': "#10FF10",
+                'PlotJob': '#AF00AF',
+                '_CacheFileGeneratingJob': "#7f7f7f",
+                'CachedDataLoadingJob': "#Ef7f7f",
+                }
         for node_name, attributes in node_to_attribute_dict.items():
             op.write(
 """\tnode
     [
         id %i
         label "%s"
+        graphics 
+        [
+            fill "%s"
+        ]
     ]
-""" % (node_id, node_name))
+""" % (node_id, node_name, colors[attributes['type']]))
             names_to_ids[node_name] = node_id
             node_id += 1
         op.flush()
