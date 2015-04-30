@@ -634,16 +634,19 @@ class Pipegraph(object):
                 raise ppg_exceptions.RuntimeException("There was a loop error that should never 've been reached in start_jobs")
         logger.info("can't start any more jobs. either there are no more, or resources all utilized. There are currently %i jobs remaining" % len(self.possible_execution_order))
 
-    def prune_job(self, job):
+    def prune_job(self, job, depth=0):
         """Remove job (and its descendands) from the list of jobs to run"""
         try:
             self.possible_execution_order.remove(job)
+            found = True
         except ValueError:  # might occur sereval times when following the graph...
+            found = False
             pass
         job.failed = True
         job.error_reason = "Indirect"
-        for dep in job.dependants:
-            self.prune_job(dep)
+        if found or depth == 0: # if this job wasn't in the graph, it's descendands won't be either. But a job that was run and failed has already been removed.
+            for dep in job.dependants:
+                self.prune_job(dep, depth + 1)
 
     def job_executed(self, job):
         """A job was done. Returns whether there are more jobs read run"""
@@ -778,7 +781,8 @@ class Pipegraph(object):
                 nodes[job.job_id] = {'is_done': job._is_done, 'was_run': job.was_run, 'type': job.__class__.__name__}
                 for preq in job.prerequisites:
                     edges.append((preq.job_id, job.job_id))
-            self._write_xgmml("logs/ppg_graph.xgmml", nodes, edges)
+            #self._write_xgmml("logs/ppg_graph.xgmml", nodes, edges)
+            self._write_gml("logs/ppg_graph.gml", nodes, edges)
         if os.path.exists('logs') and os.path.isdir('logs'):
             if os.fork() == 0:  # run this in an unrelated child process
                 if 'PYPIPEGRAPH_DO_COVERAGE' in os.environ:
@@ -796,6 +800,7 @@ class Pipegraph(object):
                 os._exit(0)  # Cleanup is for parent processes!
 
     def _write_xgmml(self, output_filename, node_to_attribute_dict, edges):
+        from xml.sax.saxutils import escape
         op = open(output_filename, 'wb')
         op.write("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <graph
@@ -810,18 +815,45 @@ class Pipegraph(object):
         node_id = 0
         names_to_ids = {}
         for node_name, attributes in node_to_attribute_dict.items():
-            op.write("""<node label="%s" id="%i">\n""" % (node_name, node_id))
+            op.write("""<node label="%s" id="%i">\n""" % (escape(node_name), node_id))
             names_to_ids[node_name] = node_id
             node_id += 1
-            op.write("""<att name="title" type="string" value="%s"/>\n""" % (node_name,))
+            op.write("""<att name="title" type="string" value="%s"/>\n""" % (escape(node_name),))
             for attribute, value in attributes.items():
-                op.write("""<att name="%s" type="string" value="%s"/>\n""" % (attribute, value))
+                op.write("""<att name="%s" type="string" value="%s"/>\n""" % (escape(attribute), escape("%s" % (value,))))
             op.write("</node>\n")
         for start, end in edges:
-            op.write("""<edge label="%s-%s" source="%i" target="%i"></edge>\n""" % (start, end, names_to_ids[start], names_to_ids[end]))
+            op.write("""<edge label="%s-%s" source="%i" target="%i"></edge>\n""" % (escape(start), escape(end), names_to_ids[start], names_to_ids[end]))
         op.write("""
         </graph>
         """)
+        op.close()
+
+    def _write_gml(self, output_filename, node_to_attribute_dict, edges):
+        op = open(output_filename, 'wb')
+        op.write("""graph
+[
+""")
+        names_to_ids = {}
+        node_id = 0
+        for node_name, attributes in node_to_attribute_dict.items():
+            op.write(
+"""\tnode
+    [
+        id %i
+        label "%s"
+    ]
+""" % (node_id, node_name))
+            node_id += 1
+            names_to_ids[node_name] = node_id
+        for start, end in edges:
+            op.write("""\tedge
+    [
+        source %i
+        target %i
+    ]
+""" % (names_to_ids[start], names_to_ids[end]))
+        op.write("]\n")
         op.close()
 
 
