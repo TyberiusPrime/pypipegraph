@@ -76,11 +76,11 @@ class MPQueueFixed(multiprocessing.queues.Queue):
                         else:
                             wacquire()
                             try:
-                                print ('sending object of size %i"' %
-                                        sys.getsizeof(obj, -1) )
-                                print str(obj)[:100]
-                                print ""
-                                print ""
+                                #print ('sending object of size %i"' %
+                                        #sys.getsizeof(obj, -1) )
+                                #print str(obj)[:100]
+                                #print ""
+                                #print ""
                                 send(obj)
                             finally:
                                 wrelease()
