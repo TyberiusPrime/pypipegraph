@@ -865,7 +865,7 @@ class Pipegraph(object):
             fill "%s"
         ]
     ]
-""" % (node_id, node_name, colors[attributes['type']]))
+""" % (node_id, node_name, colors[attributes['type']] if attribute['type' in colors else '#FFFFFF'))
             names_to_ids[node_name] = node_id
             node_id += 1
         op.flush()
