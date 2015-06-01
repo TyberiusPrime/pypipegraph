@@ -6,6 +6,8 @@ import weakref
 import traceback
 _sentinel = multiprocessing.queues._sentinel
 import sys
+import os
+import pickle
 
 class MPQueueFixed(multiprocessing.queues.Queue):
     def _start_thread(self):
@@ -81,7 +83,23 @@ class MPQueueFixed(multiprocessing.queues.Queue):
                                 #print str(obj)[:100]
                                 #print ""
                                 #print ""
-                                send(obj)
+                                try:
+                                    send(obj)
+                                except SystemError as e:
+                                    print 'Que sending error %s' % e
+                                    print 'error dump in %i.dump' %  (os.getpid(),)
+                                    with open("%i.dump" % (os.getpid(), ), 'wb') as op:
+                                        try:
+                                            pickle.dump(obj, op)
+                                        except:
+                                            pass
+                                        try:
+                                            op.write("%s" % obj)
+                                        except:
+                                            pass
+
+
+                                    raise
                             finally:
                                 wrelease()
                 except IndexError:
