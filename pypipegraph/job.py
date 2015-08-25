@@ -573,18 +573,28 @@ class ParameterInvariant(_InvariantJob):
     a = FileGeneratingJob("A")
     you can simply say
     a.depends_on(pypipegraph.ParameterInvariant('A', (my_threshold_value)))
+
+    In the special case that you need to extend a parameter, but the (new) default is the old behaviour,
+    so no recalc is necessary, you can pass @accept_as_unchanged_func
+    accept_as_unchanged_func will be called with the invariant from the last run, 
+    and you need to return True if you want to accept it.
     """
 
     def __new__(cls, job_id, *parameters, **kwargs):
         job_id = 'PI' + job_id
         return Job.__new__(cls, job_id)
 
-    def __init__(self, job_id, parameters):
+    def __init__(self, job_id, parameters, accept_as_unchanged_func = None):
         job_id = 'PI' + job_id
         self.parameters = parameters
+        self.accept_as_unchanged_func = accept_as_unchanged_func 
         Job.__init__(self, job_id)
 
     def _get_invariant(self, old):
+        if self.accept_as_unchanged_func is not None:
+            if self.accept_as_unchanged_func(old):
+                logger.info("Nothing Changed for %s" % self)
+                raise util.NothingChanged(self.parameters)
         return self.parameters
 
 
