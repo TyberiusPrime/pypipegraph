@@ -754,7 +754,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
             raise ValueError("function was not a callable")
         sorted_filenames = list(sorted(x for x in filenames))
         for x in sorted_filenames:
-            if not isinstance(x, str) and not isinstance(x, str): #FIXME
+            if not isinstance(x, str) and not isinstance(x, unicode): 
                 raise ValueError("Not all filenames passed to MultiFileGeneratingJob were str or unicode objects")
             if x in util.filename_collider_check and util.filename_collider_check[x] is not self:
                 raise ValueError("Two jobs generating the same file: %s %s - %s" % (self, util.filename_collider_check[x], x))
