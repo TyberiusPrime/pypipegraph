@@ -27,7 +27,8 @@ from .job import (
     JobGeneratingJob, DependencyInjectionJob,
     FinalJob, 
     MemMappedDataLoadingJob,
-    MultiTempFileGeneratingJob
+    MultiTempFileGeneratingJob,
+    NotebookJob
         )
 
 assert_uniqueness_of_object = util.assert_uniqueness_of_object
@@ -51,6 +52,7 @@ all = [
         FinalJob,
         MemMappedDataLoadingJob,
         util,
-        MultiTempFileGeneratingJob
+        MultiTempFileGeneratingJob,
+        NotebookJob
         
         ]
