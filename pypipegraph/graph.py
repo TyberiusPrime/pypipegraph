@@ -119,6 +119,7 @@ class Pipegraph(object):
         self._distribute_invariant_changes_count = 0
         self.invariant_status_filename = invariant_status_filename
         self.do_dump_graph = True
+        self.restart_afterwards = False
 
     def __del__(self):
         # remove circle link between rc and pipegraph
@@ -215,7 +216,8 @@ class Pipegraph(object):
                         print('\n------Pipegraph output end-----', file=error_log)
                         if error_log.name != '/dev/null':
                             print('\n failed job log in logs/ppg_erros', file=sys.stderr)
-                    raise ppg_exceptions.RuntimeError()
+                    if not self.restart_afterwards:
+                        raise ppg_exceptions.RuntimeError()
                 else:
                     self.cleanup_jobs_that_requested_it()
             finally:
@@ -225,6 +227,9 @@ class Pipegraph(object):
                 print('Pipegraph done. Executed %i jobs. %i failed' % (len([x for x in list(self.jobs.values()) if x.was_run]), len([x for x in list(self.jobs.values()) if x.failed])))
         self.running = False
         self.was_run = True
+        if self.restart_afterwards:
+            import subprocess
+            subprocess.check_call([sys.executable] + sys.argv)
 
     def inject_auto_invariants(self):
         """Go through each job and ask it to create the invariants it might need.
@@ -263,8 +268,9 @@ class Pipegraph(object):
         Basically imposes a topological ordering, and if that's impossible, we have a cycle.
         Also, this gives a valid, job by job order of executing them.
         """
-        for job in self.jobs.values():
+        for ii, job in enumerate(self.jobs.values()):
             job.dependants_copy = job.dependants.copy()
+            job.job_no = ii + 123
         L = []
         S = [job for job in self.jobs.values() if len(job.dependants_copy) == 0]
         while S:
@@ -675,7 +681,7 @@ class Pipegraph(object):
         #self.signal_job_done()
         self.jobs_done_count += 1
         if not self.quiet:
-            sys.stderr.write("Done %i of %i jobs (%i total including non-running)\r" % (self.jobs_done_count, self.jobs_to_run_count, len(self.jobs)))
+            sys.stderr.write("Done %i of %i jobs (%i total including non-running)\n" % (self.jobs_done_count, self.jobs_to_run_count, len(self.jobs)))
         return bool(self.running_jobs) or bool(self.possible_execution_order)
 
     def new_jobs_generated_during_runtime(self, new_jobs):
@@ -892,3 +898,11 @@ class Pipegraph(object):
     def restore_signals(self):
         if self._old_signal_up:
             signal.signal(signal.SIGHUP, self._old_signal_up)
+            
+    def get_error_count(self):
+        count = 0
+        for job in self.jobs.values():
+            if job.failed or job in self.invariant_loading_issues:
+                count += 1 
+        return count
+
