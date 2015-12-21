@@ -32,6 +32,8 @@ import codecs
 import traceback
 import multiprocessing
 from mp_queues import MPQueueFixed
+import threading
+import signal
 
 try:
     import kitchen
@@ -87,6 +89,8 @@ def get_memory_available():
     else:
         raise ValueError("get_memory_available() does not know how to get available memory on your system.")
 
+def signal_handler(signal, frame):
+    print ('Ctrl-C has been disable. Please give command "abort"')
 
 class LocalSystem:
     """A ResourceCoordinator that uses the current machine,
@@ -124,12 +128,20 @@ class LocalSystem:
         self.que = MPQueueFixed()
         logger.info("Starting first batch of jobs")
         self.pipegraph.start_jobs()
+        import interactive
+        interactive_thread = threading.Thread(target = interactive.thread_loop)
+        interactive_thread.start()
+        s = signal.signal(signal.SIGINT, signal_handler) # ignore ctrl-c
         while True:
             self.slave.check_for_dead_jobs()  # whether time out or or job was done, let's check this...
             self.see_if_output_is_requested()
             try:
                 logger.info("Listening to que")
-                slave_id, was_ok, job_id_done, stdout, stderr, exception, trace, new_jobs = self.que.get(block=True, timeout=self.timeout)  # was there a job done?t
+                r = self.que.get(block=True, timeout=self.timeout)
+                if r is None and interactive.interpreter.terminated:  # abort was requested
+                    self.slave.kill_jobs()
+                    break
+                slave_id, was_ok, job_id_done, stdout, stderr, exception, trace, new_jobs = r  # was there a job done?t
                 logger.info("Job returned: %s, was_ok: %s" % (job_id_done, was_ok))
                 logger.info("Remaining in que (approx): %i" % self.que.qsize())
                 job = self.pipegraph.jobs[job_id_done]
@@ -180,6 +192,10 @@ class LocalSystem:
                 pass
         self.que.close()
         self.que.join_thread()  # wait for the que to close
+        if not interactive.interpreter.stay:
+            interactive.interpreter.terminated = True
+        interactive_thread.join()
+        signal.signal(signal.SIGINT, s)
         logger.info("Leaving loop")
 
     def see_if_output_is_requested(self):
@@ -192,6 +208,12 @@ class LocalSystem:
         finally:
             pass
             #termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+    def abort(self):
+        self.que.put(None)
+
+    def kill_job(self, job):
+        self.slave.kill_job(job)
 
 
 class LocalSlave:
@@ -305,6 +327,8 @@ class LocalSlave:
         self.temp = job.run()
 
     def wrap_run(self, job, stdout, stderr, is_local):
+        s = signal.signal(signal.SIGINT, signal.SIG_IGN) # ignore ctrl-c
+
         if 'PYPIPEGRAPH_DO_COVERAGE' in os.environ:
             import coverage
             cov = coverage.coverage(data_suffix=True, config_file = os.environ['PYPIPEGRAPH_DO_COVERAGE'])
@@ -416,3 +440,16 @@ class LocalSlave:
                             ))
         for proc in remove:
             del self.process_to_job[proc]
+
+    def kill_job(self, target_job):
+        for process, job in self.process_to_job.items():
+            if job == target_job:
+                print ('Found target job')
+                logger.info("Killing job on user request: %s" % job)
+                process.terminate()
+
+    def kill_jobs(self):
+        print ("Killing %i running children" % len(self.process_to_job))
+        for proc in self.process_to_job:
+            proc.terminate()
+
