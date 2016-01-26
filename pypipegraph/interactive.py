@@ -136,12 +136,14 @@ class GraphCmd(SmartCMD):
         print ('Staying around. You will have to leave with abort at the end')
 
     def do_errors(self, line):
+        """List failed jobs"""
         print ("Failed jobs:")
         for job in util.global_pipegraph.jobs.values():
             if job.failed:
                 print ("\t%s (%s)" % (job, 'Indirect' if job.error_reason == 'Indirect'  else ('failed')))
 
     def do_kill(self, line):
+        """Kill a specific job's process"""
         try:
             job_no = int(line)
             for job in util.global_pipegraph.running_jobs:
