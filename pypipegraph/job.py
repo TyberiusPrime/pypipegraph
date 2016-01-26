@@ -439,7 +439,7 @@ class FunctionInvariant(_InvariantJob):
     currently via disassembly"""
     def __init__(self, job_id, function):
         if not hasattr(function, '__call__') and function is not None:
-            raise ValueError("function was not a callable (or None)")
+            raise ValueError("%s function was not a callable (or None)" % job_id)
         Job.__init__(self, job_id)
         if hasattr(self, 'function') and function != self.function:
             raise ppg_exceptions.JobContractError("FunctionInvariant %s created twice with different functions: \n%s\n%s" % (
