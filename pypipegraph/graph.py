@@ -795,7 +795,8 @@ class Pipegraph(object):
             #self._write_xgmml("logs/ppg_graph.xgmml", nodes, edges)
             self._write_gml("logs/ppg_graph.gml", nodes, edges)
         if os.path.exists('logs') and os.path.isdir('logs'):
-            if os.fork() == 0:  # run this in an unrelated child process
+            pid = os.fork()
+            if pid == 0:  # run this in an unrelated child process
                 if 'PYPIPEGRAPH_DO_COVERAGE' in os.environ:
                     import coverage
                     cov = coverage.coverage(data_suffix=True, config_file = os.environ['PYPIPEGRAPH_DO_COVERAGE'])
@@ -810,6 +811,7 @@ class Pipegraph(object):
                     do_dump()
                 #raise ValueError("Dump Exit")
                 os._exit(0)  # Cleanup is for parent processes!
+            self.dump_pid = pid
 
     def _write_xgmml(self, output_filename, node_to_attribute_dict, edges):
         from xml.sax.saxutils import escape
@@ -905,4 +907,8 @@ class Pipegraph(object):
             if job.failed or job in self.invariant_loading_issues:
                 count += 1 
         return count
+
+    def prioritize(self, job):
+        if not job in self.possible_execution_order:
+            raise ValueError("Job not in possible_execution_order")
 

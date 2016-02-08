@@ -238,6 +238,26 @@ class CycleTests(unittest.TestCase):
             ppg.run_pipegraph()
         self.assertRaises(ppg.CycleError, inner)
 
+    def test_prioritize_simple(self):
+        jobA = ppg.Job('A')
+        jobB = ppg.Job('B')
+        jobA.depends_on(jobB)
+        jobC = ppg.Job('C')
+        jobD = ppg.Job('D')
+        jobC.depends_on(jobD)
+        ppg.util.global_pipegraph.connect_graph()
+        ppg.util.global_pipegraph.check_cycles()
+        self.assertTrue(jobD in ppg.util.global_pipegraph.possible_execution_order)
+        self.assertFalse(jobD == ppg.util.global_pipegraph.possible_execution_order[0])
+        ppg.util.global_pipegraph.prioritize(jobD)
+        self.assertTrue(jobD == ppg.util.global_pipegraph.possible_execution_order[0])
+        ppg.util.global_pipegraph.prioritize(jobB)
+        self.assertTrue(jobB == ppg.util.global_pipegraph.possible_execution_order[0])
+        self.assertTrue(jobA == ppg.util.global_pipegraph.possible_execution_order[1])
+        ppg.util.global_pipegraph.prioritize(jobC)
+        self.assertTrue(jobD == ppg.util.global_pipegraph.possible_execution_order[0])
+        self.assertTrue(jobC == ppg.util.global_pipegraph.possible_execution_order[1])
+        
 
 class JobTests(unittest.TestCase):
     def setUp(self):
@@ -592,7 +612,10 @@ class FileGeneratingJobTests(PPGPerTest):
         ppg.new_pipegraph(quiet=True, invariant_status_filename = 'shu.dat', dump_graph=True)
         jobA = ppg.FileGeneratingJob('out/A', lambda: write('out/A','A'))
         ppg.run_pipegraph()
-        self.assertTrue(os.path.exists('logs/ppg_graph.xgmml'))
+        pid = ppg.util.global_pipegraph.dump_pid
+        os.waitpid(pid, 0)
+        print os.listdir('logs')
+        self.assertTrue(os.path.exists('logs/ppg_graph.gml'))
             
 
 class MultiFileGeneratingJobTests(PPGPerTest):
