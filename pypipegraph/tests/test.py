@@ -1,7 +1,7 @@
 modules_to_test = ['test_pypipegraph', 'test_plotjobs']
 
 import os
-os.environ['PYPIPEGRAPH_DO_COVERAGE'] = '/code/pypipegraph/pypipegraph/tests/.coveragerc'
+os.environ['PYPIPEGRAPH_DO_COVERAGE'] = os.path.abspath(os.path.join(os.path.dirname(__file__), '.coveragerc'))
 import coverage
 with open(".coveragerc",'wb') as op:
     op.write(b"""
@@ -20,7 +20,7 @@ import unittest
 import nose
 import noseprogressive
 import sys
-sys.path.append('/code/pypipegraph/')
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))#'/code/pypipegraph/')
 import pypipegraph as ppg
 
 try:
