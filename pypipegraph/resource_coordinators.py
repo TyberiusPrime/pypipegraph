@@ -40,7 +40,7 @@ try:
     kitchen_available = True
 except ImportError:
     kitchen_available = False
-try: 
+try:
     import Queue
     queue = Queue
 except ImportError:
@@ -89,8 +89,10 @@ def get_memory_available():
     else:
         raise ValueError("get_memory_available() does not know how to get available memory on your system.")
 
+
 def signal_handler(signal, frame):
     print ('Ctrl-C has been disable. Please give command "abort"')
+
 
 class LocalSystem:
     """A ResourceCoordinator that uses the current machine,
@@ -282,7 +284,7 @@ class LocalSlave:
         stderr = tempfile.SpooledTemporaryFile(mode='w')
         stdout = kitchen.text.converters.getwriter('utf8')(stdout)
         stderr = kitchen.text.converters.getwriter('utf8')(stderr)
-                
+
         old_stdout = sys.stdout
         old_stderr = sys.stderr
         sys.stdout = stdout
@@ -342,7 +344,7 @@ class LocalSlave:
             self.run_a_job(job, stdout, stderr, is_local)
 
     def run_a_job(self, job, stdout, stderr, is_local=True):  # this runs in the spawned processes, except for job.modifies_jobgraph()==True jobs
-        
+
         old_stdout = sys.stdout
         old_stderr = sys.stderr
         sys.stdout = stdout
@@ -375,15 +377,27 @@ class LocalSlave:
                     exception = bytes("STR", 'UTF-8') + bytes(e)
                 except TypeError:
                     exception = str(e)
-        stdout.seek(0, os.SEEK_SET)
-        stdout_text = stdout.read()
-        stdout.close()
-        stderr.seek(0, os.SEEK_SET)
-        stderr_text = stderr.read()
-        stderr.close()
+        try:
+            stdout.seek(0, os.SEEK_SET)
+            stdout_text = stdout.read()
+            stdout.close()
+        except ValueError as e:
+            if 'I/O operation on closed file' in e:
+                stdout = "Stdout could not be captured / io operation on closed file"
+            else:
+                raise
+        try:
+            stderr.seek(0, os.SEEK_SET)
+            stderr_text = stderr.read()
+            stderr.close()
+        except ValueError as e:
+            if 'I/O operation on closed file' in e:
+                stdout = "stderr could not be captured / io operation on closed file"
+            else:
+                raise
         sys.stdout = old_stdout
         sys.stderr = old_stderr
-        #logger.info("Now putting job data into que: %s - %s" % (job, os.getpid()))
+        # logger.info("Now putting job data into que: %s - %s" % (job, os.getpid()))
         self.rc.que.put(
                 (
                     self.slave_id,
