@@ -383,7 +383,7 @@ class LocalSlave:
             stdout.close()
         except ValueError as e:
             if 'I/O operation on closed file' in e:
-                stdout = "Stdout could not be captured / io operation on closed file"
+                stdout_text = "Stdout could not be captured / io operation on closed file"
             else:
                 raise
         try:
@@ -392,7 +392,7 @@ class LocalSlave:
             stderr.close()
         except ValueError as e:
             if 'I/O operation on closed file' in e:
-                stdout = "stderr could not be captured / io operation on closed file"
+                stderr_text = "stderr could not be captured / io operation on closed file"
             else:
                 raise
         sys.stdout = old_stdout
