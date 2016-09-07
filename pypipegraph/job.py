@@ -1463,7 +1463,8 @@ class PlotJob(FileGeneratingJob):
 
 
 def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args=None, fiddle = None):
-    """Combine multiple PlotJobs into a common (faceted) output plot
+    """Combine multiple PlotJobs into a common (faceted) output plot.
+    An empty list means 'no facetting'
     
     To use these jobs, you need to have pyggplot available.
     """
