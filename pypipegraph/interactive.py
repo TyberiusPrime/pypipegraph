@@ -124,7 +124,7 @@ class GraphCmd(SmartCMD):
         for runtime, job in by_runtime:
             print ("%.2fs %s" % (runtime, job))
 
-    def do_next(self):
+    def do_next(self, line):
         """What will be started next"""
         print ("Jobs will try to start in the following order")
         for ii, job in enumerate(util.global_pipegraph.possible_execution_order):

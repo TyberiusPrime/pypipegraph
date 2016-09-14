@@ -230,6 +230,7 @@ class Pipegraph(object):
         if self.restart_afterwards:
             import subprocess
             subprocess.check_call([sys.executable] + sys.argv)
+        self.signal_finished()
 
     def inject_auto_invariants(self):
         """Go through each job and ask it to create the invariants it might need.
@@ -906,3 +907,9 @@ class Pipegraph(object):
                 count += 1 
         return count
 
+
+    def signal_finished(self):
+        """If there's a .pipegraph_finished.py in ~, call it"""
+        fn = os.path.expanduser("~/.pipegraph_finished.py")
+        if os.path.exists(fn):
+            os.system(fn)
