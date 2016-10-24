@@ -62,13 +62,13 @@ def run_pipegraph():
 
 
 def new_pipegraph(resource_coordinator=None, quiet=False,
-        invariant_status_filename=invariant_status_filename_default, dump_graph = True):
+        invariant_status_filename=invariant_status_filename_default, dump_graph = True, interactive = True):
     """Create a new global pipegraph.
     New jobs will automagically be attached to this pipegraph.
     Default ResourceCoordinator is L{LocalSystem}
     """
     if resource_coordinator is None:
-        resource_coordinator = resource_coordinators.LocalSystem()
+        resource_coordinator = resource_coordinators.LocalSystem(interactive=interactive)
     util.global_pipegraph = Pipegraph(resource_coordinator, quiet=quiet, 
             invariant_status_filename=invariant_status_filename, dump_graph = dump_graph)
     util.job_uniquifier = {}
