@@ -101,13 +101,14 @@ class LocalSystem:
     It uses multiprocessing and the LocalSlave
     """
 
-    def __init__(self, max_cores_to_use=util.CPUs(), profile = False):
+    def __init__(self, max_cores_to_use=util.CPUs(), profile = False, interactive=True):
         self.max_cores_to_use = max_cores_to_use  # todo: update to local cpu count...
         self.slave = LocalSlave(self)
         self.cores_available = max_cores_to_use
         self.physical_memory, self.swap_memory = get_memory_available()
         self.timeout = 5
         self.profile = profile
+        self.interactive = interactive
 
     def spawn_slaves(self):
         return {
@@ -130,10 +131,11 @@ class LocalSystem:
         self.que = MPQueueFixed()
         logger.info("Starting first batch of jobs")
         self.pipegraph.start_jobs()
-        import interactive
-        interactive_thread = threading.Thread(target = interactive.thread_loop)
-        interactive_thread.start()
-        s = signal.signal(signal.SIGINT, signal_handler) # ignore ctrl-c
+        if self.interactive:
+            import interactive
+            interactive_thread = threading.Thread(target = interactive.thread_loop)
+            interactive_thread.start()
+        s = signal.signal(signal.SIGINT, signal_handler)  # ignore ctrl-c
         while True:
             self.slave.check_for_dead_jobs()  # whether time out or or job was done, let's check this...
             self.see_if_output_is_requested()
@@ -182,10 +184,10 @@ class LocalSystem:
                         self.pipegraph.new_jobs_generated_during_runtime(new_jobs)
 
                 more_jobs = self.pipegraph.job_executed(job)
-                #if job.cores_needed == -1:
-                    #self.cores_available = self.max_cores_to_use
-                #else:
-                    #self.cores_available += job.cores_needed
+                # if job.cores_needed == -1:
+                    # self.cores_available = self.max_cores_to_use
+                # else:
+                    # self.cores_available += job.cores_needed
                 if not more_jobs:  # this means that all jobs are done and there are no longer any more running...
                     break
                 self.pipegraph.start_jobs()
@@ -194,9 +196,10 @@ class LocalSystem:
                 pass
         self.que.close()
         self.que.join_thread()  # wait for the que to close
-        if not interactive.interpreter.stay:
-            interactive.interpreter.terminated = True
-        interactive_thread.join()
+        if self.interactive:
+            if not interactive.interpreter.stay:
+                interactive.interpreter.terminated = True
+            interactive_thread.join()
         signal.signal(signal.SIGINT, s)
         logger.info("Leaving loop")
 
