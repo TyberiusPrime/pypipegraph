@@ -94,6 +94,16 @@ class GraphCmd(SmartCMD):
         util.global_pipegraph.possible_execution_order = []
         util.global_pipegraph.restart_afterwards = True
 
+    def do_reboot(self, line):
+        """After current pipegraph has ended, restart it
+        Start again from the top
+        """
+        print ("restart requested. Waiting for %i running jobs to finish" % len(util.global_pipegraph.running_jobs))
+        if self.stay and util.global_pipegraph.was_run:
+            import subprocess
+            subprocess.check_call([sys.executable] + sys.argv)
+        util.global_pipegraph.restart_afterwards = Tru
+
     def do_stop(self, line):
         """Wait till all currently running jobs have finished.
         Leave current pipegraph.
