@@ -102,7 +102,7 @@ class GraphCmd(SmartCMD):
         if self.stay and util.global_pipegraph.was_run:
             import subprocess
             subprocess.check_call([sys.executable] + sys.argv)
-        util.global_pipegraph.restart_afterwards = Tru
+        util.global_pipegraph.restart_afterwards = True
 
     def do_stop(self, line):
         """Wait till all currently running jobs have finished.
