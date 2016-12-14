@@ -249,8 +249,11 @@ class Pipegraph(object):
                 preq.dependants.add(job)
 
         #inject final jobs to run after all others...
+        ii = 0
         for job in self.jobs.values():
             if job.is_final_job:
+                job.job_no = len(self.jobs) + i + 123
+                i += 1
                 for jobB in self.jobs.values():
                     non_final_dependands = [j for j in jobB.dependants if not j.is_final_job]
                     if not jobB.is_final_job and not non_final_dependands:
