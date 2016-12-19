@@ -161,13 +161,22 @@ class GraphCmd(SmartCMD):
         """Print all jobs that are yet to be executed"""
         print ('Executing jobs in the following order:')
         for job in util.global_pipegraph.possible_execution_order:
-            print ("\t%i: %s (%.2fs)" % (job.job_no, job, time.time() - job.start_time))
+            print ("\t%i: %s" % (job.job_no, job))
+
+    def do_open_jobs_search(self, line):
+        """search jobs by string"""
+        search = line.lower().strip()
+        print ('searching for', search)
+        for job in util.global_pipegraph.possible_execution_order:
+            if search in str(job).lower():
+                print ("\t%i: %s" % (job.job_no, job))
+
 
     def do_run_next(self, line):
         """Run a job as soon as possible -"""
         try:
             job_no = int(line)
-            for job in util.global_pipegraph.running_jobs:
+            for job in util.global_pipegraph.possible_execution_order:
                 if job.job_no == job_no:
                     print ("prioritize %i %s" % (job.job_no, job))
                     util.global_pipegraph.prioritize(job)
