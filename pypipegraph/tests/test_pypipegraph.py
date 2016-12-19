@@ -261,8 +261,10 @@ class CycleTests(unittest.TestCase):
         self.assertTrue(jobB == ppg.util.global_pipegraph.possible_execution_order[0])
 
     def test_prioritize_raises_on_done_job(self):
-        jobA = ppg.FileGeneratingJob('out/A')
-        jobB = ppg.FileGeneratingJob('out/B')
+        def dump():
+            pass
+        jobA = ppg.FileGeneratingJob('out/A', dump)
+        jobB = ppg.FileGeneratingJob('out/B', dump)
         jobB.ignore_code_changes()
         with open("out/B", 'wb') as op:
            op.write("Done")
@@ -3221,10 +3223,10 @@ class TestingTheUnexpectedTests(PPGPerTest):
     def testing_import_does_not_hang(self):  # see python issue22853 
         old_dir = os.getcwd()
         os.chdir(os.path.dirname(__file__))
-        p = subprocess.Popen(['python', '_import_does_not_hang.py'], stderr = subprocess.PIPE)
+        p = subprocess.Popen(['python', '_import_does_not_hang.py'], stdout = subprocess.PIPE, stderr = subprocess.PIPE)
         stdout, stderr = p.communicate()
         print stdout, stderr
-        self.assertTrue('OK' in stderr)
+        self.assertTrue('OK' in stdout)
         os.chdir(old_dir)
 
 
