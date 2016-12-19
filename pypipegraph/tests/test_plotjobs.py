@@ -3,7 +3,8 @@ import unittest
 import sys
 sys.path.insert(0, '/code')
 sys.path.append('/code/pydataframe')
-import R
+sys.path.append('/code/pyggplot')
+#import R
 import pydataframe
 import pyggplot
 import pypipegraph as ppg
