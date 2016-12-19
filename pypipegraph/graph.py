@@ -51,7 +51,12 @@ logger = util.start_logging('graph')
 
 # earlier on, we had a different pickling scheme,
 # and that's what the files were called.
-invariant_status_filename_default = '.pypipegraph_status_robust'
+if os.path.exists('.pypipegraph_status_robust'):  # old projects keep their filename
+    invariant_status_filename_default = '.pypipegraph_status_robust'
+elif '/' in sys.argv[0]:  # no script name but an executable?
+    invariant_status_filename_default = '.pypipegraph_status_robust'
+else:
+    invariant_status_filename_default = '.ppg_status_%s' % argv[0]  # script specific pipegraphs
 
 
 def run_pipegraph():
