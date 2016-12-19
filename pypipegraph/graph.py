@@ -56,7 +56,7 @@ if os.path.exists('.pypipegraph_status_robust'):  # old projects keep their file
 elif '/' in sys.argv[0]:  # no script name but an executable?
     invariant_status_filename_default = '.pypipegraph_status_robust'
 else:
-    invariant_status_filename_default = '.ppg_status_%s' % argv[0]  # script specific pipegraphs
+    invariant_status_filename_default = '.ppg_status_%s' % sys.argv[0]  # script specific pipegraphs
 
 
 def run_pipegraph():
