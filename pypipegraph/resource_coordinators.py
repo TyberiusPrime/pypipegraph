@@ -167,7 +167,7 @@ class LocalSystem:
                         job.exception = pickle.loads(exception)
                         logger.info("After depickle %s" % type(job.exception))
                         logger.info("exception stored at %s" % (job))
-                    except (pickle.UnpicklingError, EOFError, TypeError):  # some exceptions can't be pickled, so we send a string instead
+                    except (pickle.UnpicklingError, EOFError, TypeError, AttributeError):  # some exceptions can't be pickled, so we send a string instead
                         pass
                     if job.exception:
                         logger.info("Exception: %s" % repr(exception))
@@ -469,4 +469,3 @@ class LocalSlave:
         print ("Killing %i running children" % len(self.process_to_job))
         for proc in self.process_to_job:
             proc.terminate()
-
