@@ -71,7 +71,7 @@ class SmartCMD(cmd.Cmd):
 class GraphCmd(SmartCMD):
     """Simple command processor example."""
     prompt = '>'
-    
+
 
     def do_abort(self, line):
         """Abort running pipeline"""
@@ -99,7 +99,7 @@ class GraphCmd(SmartCMD):
         Start again from the top
         """
         print ("reboot requested. Waiting for %i jobs to finish" % (
-            len(util.global_pipegraph.possible_execution_order) + 
+            len(util.global_pipegraph.possible_execution_order) +
         len(util.global_pipegraph.running_jobs)
             ))
         if self.stay and util.global_pipegraph.was_run:
@@ -119,7 +119,7 @@ class GraphCmd(SmartCMD):
         print ('Running %i jobs' % len(util.global_pipegraph.running_jobs))
         print ('%i jobs remaining' % len(util.global_pipegraph.possible_execution_order))
         print ("%i jobs failed so far" % util.global_pipegraph.get_error_count())
-        for ii, job in enumerate(util.global_pipegraph.running_jobs):
+        for ii, job in enumerate(util.global_pipegraph.running_jobs.copy()):
             print ("\t%i: %s (%.2fs)" % (job.job_no, job, time.time() - job.start_time))
             print ("")
         if self.stay:

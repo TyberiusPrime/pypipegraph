@@ -1382,6 +1382,10 @@ class PlotJob(FileGeneratingJob):
                     writer = pd.ExcelWriter(self.table_filename)
                     for key, dframe in df.items():
                         dframe.to_excel(writer, key)
+                    writer = pd.ExcelWriter(self.table_filename)
+                    for key in df:
+                        df[key].to_excel(writer, key)
+                    writer.save()
             table_gen_job = FileGeneratingJob(self.table_filename, dump_table)
             if not self.skip_caching:
                 table_gen_job.depends_on(cache_job)
@@ -1472,8 +1476,8 @@ def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args=Non
         render_args = {'width': 10, 'height': 10}
 
     def plot():
-        import pyggplot
         import pandas as pd
+        import pyggplot
         data = pd.concat([plot_job.get_data() for plot_job in plot_jobs], axis=0)
         plot = plot_jobs[0].plot_function(data)
         if isinstance(facet_arguments, list):
