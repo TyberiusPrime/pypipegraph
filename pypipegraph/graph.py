@@ -74,7 +74,7 @@ def new_pipegraph(resource_coordinator=None, quiet=False,
     """
     if resource_coordinator is None:
         resource_coordinator = resource_coordinators.LocalSystem(interactive=interactive)
-    util.global_pipegraph = Pipegraph(resource_coordinator, quiet=quiet, 
+    util.global_pipegraph = Pipegraph(resource_coordinator, quiet=quiet,
             invariant_status_filename=invariant_status_filename, dump_graph = dump_graph)
     util.job_uniquifier = {}
     util.filename_collider_check = {}
@@ -89,7 +89,7 @@ def forget_job_status(invariant_status_filename=invariant_status_filename_defaul
         os.unlink(invariant_status_filename)
     except OSError:
         pass
-    
+
 
 def destroy_global_pipegraph():
     """Free the current global pipegraph - usually only useful for testing"""
@@ -178,7 +178,7 @@ class Pipegraph(object):
         self.build_todo_list()
         if self.do_dump_graph:
             self.dump_graph()
-        
+
         #make up some computational engines and put them to work.
         logger.info("now executing")
         self.install_signals()
@@ -513,7 +513,7 @@ class Pipegraph(object):
             if job.do_cleanup_if_was_never_run and not job.was_run:
                 job.cleanup()
 
-    def start_jobs(self):  
+    def start_jobs(self):
         """Instruct slaves to start as many jobs as we can currently spawn under our memory/cpu restrictions"""
         # I really don't like this function... and I also have the strong inkling it should acttually sit in the resource coordinatora         # first, check what we actually have some resources...
         resources = self.rc.get_resources()  # a dict of slave name > {cores: y, memory: x}
@@ -803,9 +803,9 @@ class Pipegraph(object):
             nodes = {}
             edges = []
             for job in self.jobs.values():
-                if not (isinstance(job, jobs.FunctionInvariant) or 
-                        isinstance(job, jobs.ParameterInvariant) or 
-                        isinstance(job, jobs.FileChecksumInvariant) or 
+                if not (isinstance(job, jobs.FunctionInvariant) or
+                        isinstance(job, jobs.ParameterInvariant) or
+                        isinstance(job, jobs.FileChecksumInvariant) or
                         isinstance(job, jobs.FinalJob)):
                     nodes[job.job_id] = {'is_done': job._is_done, 'was_run': job.was_run, 'type': job.__class__.__name__}
                     for preq in job.prerequisites:
@@ -886,7 +886,7 @@ class Pipegraph(object):
     [
         id %i
         label "%s"
-        graphics 
+        graphics
         [
             fill "%s"
         ]
@@ -918,12 +918,12 @@ class Pipegraph(object):
     def restore_signals(self):
         if self._old_signal_up:
             signal.signal(signal.SIGHUP, self._old_signal_up)
-            
+
     def get_error_count(self):
         count = 0
         for job in self.jobs.values():
             if job.failed or job in self.invariant_loading_issues:
-                count += 1 
+                count += 1
         return count
 
     def prioritize(self, job):
@@ -943,5 +943,5 @@ class Pipegraph(object):
     def signal_finished(self):
         """If there's a .pipegraph_finished.py in ~, call it"""
         fn = os.path.expanduser("~/.pipegraph_finished.py")
-        if os.path.exists(fn):
+        if os.path.exists(fn) and os.access(fn, os.X_OK) :
             os.system(fn)
