@@ -1501,7 +1501,7 @@ def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args=Non
         )))
     job.depends_on(FunctionInvariant(output_filename + '_fiddle', fiddle))
     job.depends_on([plot_job.cache_job for plot_job in plot_jobs])
-    job.depends_on(FunctionInvariant(output_filename + '_plot', plot_jobs[0].plot_function))
+    job.depends_on(FunctionInvariant(output_filename + '_plot_combined', plot_jobs[0].plot_function))
     return job
 
 
