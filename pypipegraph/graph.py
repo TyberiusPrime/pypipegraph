@@ -278,6 +278,7 @@ class Pipegraph(object):
                 job.job_no = ii + 123
         L = []
         S = [job for job in list_of_jobs if len(job.dependants_copy) == 0]
+        S.sort(key = lambda job: job.prio if hasattr(job, 'prio') else 0)
         while S:
             n = S.pop()
             L.append(n)
@@ -927,18 +928,18 @@ class Pipegraph(object):
         return count
 
     def prioritize(self, job):
-        if not job in self.possible_execution_order:
-            raise ValueError("Job not in possible_execution_order")
         p = self.possible_execution_order[:]
-        if len(job.dependants) == 0:
-            p.remove(job)
-            p.append(job)
-            p = self.apply_topological_order(p)
-            self.possible_execution_order = p
-        else:
-            raise ValueError("Figure this out")
-
-
+        if not job in p:
+            raise ValueError("Job not in execution order")
+        for job in p:
+            job.prio = 0
+        def recurse(j):
+            j.prio = -1
+            for jp in j.prerequisites:
+                recurse(jp)
+        recurse(job)
+        self.possible_execution_order = self.apply_topological_order(p)[::-1]
+        return
 
     def signal_finished(self):
         """If there's a .pipegraph_finished.py in ~, call it"""
