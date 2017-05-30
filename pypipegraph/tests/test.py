@@ -33,6 +33,6 @@ except Exception as e:
     pass
 cov.stop()
 cov.save()
-os.system('coverage combine')
-os.system('coverage html -d covhtml')
+#os.system('coverage combine')
+#os.system('coverage html -d covhtml')
 print ('coverage report is in covhtml/index.html')

@@ -249,16 +249,35 @@ class CycleTests(unittest.TestCase):
         ppg.util.global_pipegraph.check_cycles()
         self.assertTrue(jobD in ppg.util.global_pipegraph.possible_execution_order)
         self.assertFalse(jobD == ppg.util.global_pipegraph.possible_execution_order[0])
+        print('before')
+        for x in ppg.util.global_pipegraph.possible_execution_order:
+            print(x.job_id)
+        print('after')
+
         ppg.util.global_pipegraph.prioritize(jobD)
+        for x in ppg.util.global_pipegraph.possible_execution_order:
+            print(x.job_id)
+
         self.assertTrue(jobD == ppg.util.global_pipegraph.possible_execution_order[0])
+
         ppg.util.global_pipegraph.prioritize(jobB)
         self.assertTrue(jobB == ppg.util.global_pipegraph.possible_execution_order[0])
-        self.assertTrue(jobA == ppg.util.global_pipegraph.possible_execution_order[1])
+        self.assertTrue(ppg.util.global_pipegraph.possible_execution_order.index(jobA) > ppg.util.global_pipegraph.possible_execution_order.index(jobB))
         ppg.util.global_pipegraph.prioritize(jobC)
+        print("after prio c")
+        for x in ppg.util.global_pipegraph.possible_execution_order:
+            print(x.job_id)
+
+        self.assertTrue(ppg.util.global_pipegraph.possible_execution_order.index(jobA) > ppg.util.global_pipegraph.possible_execution_order.index(jobB))
+        self.assertTrue(ppg.util.global_pipegraph.possible_execution_order.index(jobC) > ppg.util.global_pipegraph.possible_execution_order.index(jobD))
+
+        
         self.assertTrue(jobD == ppg.util.global_pipegraph.possible_execution_order[0])
         self.assertTrue(jobC == ppg.util.global_pipegraph.possible_execution_order[1])
+
         ppg.util.global_pipegraph.prioritize(jobB)
         self.assertTrue(jobB == ppg.util.global_pipegraph.possible_execution_order[0])
+        self.assertTrue(ppg.util.global_pipegraph.possible_execution_order.index(jobA) > ppg.util.global_pipegraph.possible_execution_order.index(jobB))
 
     def test_prioritize_raises_on_done_job(self):
         def dump():
