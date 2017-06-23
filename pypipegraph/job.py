@@ -214,7 +214,7 @@ class Job(object):
         """Create the automagically generated FunctionInvariants if applicable"""
         pass
 
-    def get_invariant(self, old):
+    def get_invariant(self, old, all_invariant_stati):
         """Retrieve the invariant 'magic cookie' we should store for this Job.
         The job (and it's descendands) will be invalidated if you return anything
         but @old. You may escape this and raise a NothingChanged(new_value) exception,
@@ -227,10 +227,10 @@ class Job(object):
         _get_invariant(old) in subclasses.
         """
         if self.invariant_cache is None or self.invariant_cache[0] != old:
-            self.invariant_cache = (old, self._get_invariant(old))
+            self.invariant_cache = (old, self._get_invariant(old, all_invariant_stati))
         return self.invariant_cache[1]
 
-    def _get_invariant(self, old):
+    def _get_invariant(self, old, all_invariant_stati):
         """The actual workhorse/sub class specific function for get_invariant
         """
         return False
@@ -457,7 +457,7 @@ class FunctionInvariant(_InvariantJob):
         else:
             return "%s (job_id=%s,id=%s, Function: None)" % (self.__class__.__name__, self.job_id, id(self))
 
-    def _get_invariant(self, old):
+    def _get_invariant(self, old, all_invariant_stati):
         if self.function is None:
             return None  # since the 'default invariant' is False, this will still read 'invalidated the first time it's being used'
         if not hasattr(self.function, '__code__'):
@@ -590,7 +590,7 @@ class ParameterInvariant(_InvariantJob):
         self.accept_as_unchanged_func = accept_as_unchanged_func
         Job.__init__(self, job_id)
 
-    def _get_invariant(self, old):
+    def _get_invariant(self, old, all_invariant_stati):
         if self.accept_as_unchanged_func is not None:
             if self.accept_as_unchanged_func(old):
                 logger.info("Nothing Changed for %s" % self)
@@ -607,7 +607,7 @@ class FileChecksumInvariant(_InvariantJob):
         Job.__init__(self, filename)
         self.input_file = filename
 
-    def _get_invariant(self, old):
+    def _get_invariant(self, old, all_invariant_stati):
         st = util.stat(self.input_file)
         filetime = st[stat.ST_MTIME]
         filesize = st[stat.ST_SIZE]
@@ -642,6 +642,32 @@ class FileChecksumInvariant(_InvariantJob):
         return res
 
 FileTimeInvariant = FileChecksumInvariant
+
+
+class RobustFileChecksumInvariant(FileChecksumInvariant):
+    """A file checksum invariant that is robust against file moves (but not against renames!"""
+
+    def _get_invariant(self, old, all_invariant_stati):
+        if old: # if we have something stored, this acts like a normal FileChecksumInvariant
+            return FileChecksumInvariant._get_invariant(self, old, all_invariant_stati)
+        else:
+            basename = os.path.basename(self.input_file)
+            st = util.stat(self.input_file)
+            filetime = st[stat.ST_MTIME]
+            filesize = st[stat.ST_SIZE]
+            checksum = self.checksum()
+            for job_id in all_invariant_stati:
+                if os.path.basename(job_id) == basename: # could be a moved file...
+                    old = all_invariant_stati[job_id]
+                    if isinstance(old, tuple):
+                        dummy_old_filetime, old_filesize, old_chksum = old
+                        if old_filesize == filesize:
+                            if old_chksum == checksum:  # don't check filetime, if the file has moved it will have changed
+                                print("checksum hit %s" % self.input_file)
+                                raise util.NothingChanged((filetime, filesize, checksum))
+            # no suitable old job found.
+            return (filetime, filesize, checksum)
+
 
 class FileGeneratingJob(Job):
     """Create a single output file of more than 0 bytes."""

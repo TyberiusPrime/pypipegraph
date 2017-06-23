@@ -405,7 +405,11 @@ class Pipegraph(object):
             old = self.invariant_status[job.job_id]
             try:
                 try:
-                    inv = job.get_invariant(old)
+                    try:
+                        inv = job.get_invariant(old, self.invariant_status)
+                    except TypeError:
+                        print(job)
+                        raise
                 except Exception as e:
                     if isinstance(e, util.NothingChanged):
                         pass
