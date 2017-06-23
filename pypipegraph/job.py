@@ -214,7 +214,7 @@ class Job(object):
         """Create the automagically generated FunctionInvariants if applicable"""
         pass
 
-    def get_invariant(self, old):
+    def get_invariant(self, old, all_invariant_stati):
         """Retrieve the invariant 'magic cookie' we should store for this Job.
         The job (and it's descendands) will be invalidated if you return anything
         but @old. You may escape this and raise a NothingChanged(new_value) exception,
@@ -227,10 +227,10 @@ class Job(object):
         _get_invariant(old) in subclasses.
         """
         if self.invariant_cache is None or self.invariant_cache[0] != old:
-            self.invariant_cache = (old, self._get_invariant(old))
+            self.invariant_cache = (old, self._get_invariant(old, all_invariant_stati))
         return self.invariant_cache[1]
 
-    def _get_invariant(self, old):
+    def _get_invariant(self, old, all_invariant_stati):
         """The actual workhorse/sub class specific function for get_invariant
         """
         return False
@@ -332,7 +332,7 @@ class Job(object):
         pass
 
     def check_prerequisites_for_cleanup(self):
-        """If for one of our prerequisites, all dependands have run, we can 
+        """If for one of our prerequisites, all dependands have run, we can
         call it's cleanup function (unload data, remove tempfile...)
         """
         for preq in self.prerequisites:
@@ -457,7 +457,7 @@ class FunctionInvariant(_InvariantJob):
         else:
             return "%s (job_id=%s,id=%s, Function: None)" % (self.__class__.__name__, self.job_id, id(self))
 
-    def _get_invariant(self, old):
+    def _get_invariant(self, old, all_invariant_stati):
         if self.function is None:
             return None  # since the 'default invariant' is False, this will still read 'invalidated the first time it's being used'
         if not hasattr(self.function, '__code__'):
@@ -479,7 +479,7 @@ class FunctionInvariant(_InvariantJob):
                         # we ignore references to self - in that use case you're expected to make your own ParameterInvariants, and we could not detect self.parameter anyhow (only self would be bound)
                         #we also ignore bound functions - their address changes all the time. IDEA: Make this recursive (might get to be too expensive)
                         try:
-                            if name != 'self' and not hasattr(cell.cell_contents, '__code__'):  
+                            if name != 'self' and not hasattr(cell.cell_contents, '__code__'):
                                 x = str(cell.cell_contents)
                                 if 'at 0x' in x:  # if you don't have a sensible str(), we'll default to the class path. This takes things like <chipseq.quality_control.AlignedLaneQualityControl at 0x73246234>.
                                     x = x[:x.find('at 0x')]
@@ -500,7 +500,7 @@ class FunctionInvariant(_InvariantJob):
                                        '(<code\tobject\t<[^>]+>,\tfile\t\'[^\']+\',\tline\t[0-9]+)' #that's how they look like in pypy. More sensibly, actually
             )
 
-    def dis_code(self, code):  
+    def dis_code(self, code):
         """'dissassemble' python code.
         Strips lambdas (they change address every execution otherwise)"""
         # TODO: replace with bytecode based smarter variant
@@ -536,7 +536,7 @@ class FunctionInvariant(_InvariantJob):
 
         #check there's actually the file and line no documentation
         filename, line_no = get_cython_filename_and_line_no(cython_func)
-        
+
         #load the source code
         op = open(filename, 'rb')
         d = op.read().split("\n")
@@ -569,14 +569,14 @@ class FunctionInvariant(_InvariantJob):
 
 class ParameterInvariant(_InvariantJob):
     """ParameterInvariants encapsulate smalling parameters, thresholds etc. that your work-jobs
-    depend on. They prefix their job_id with 'PI' so given 
+    depend on. They prefix their job_id with 'PI' so given
     a = FileGeneratingJob("A")
     you can simply say
     a.depends_on(pypipegraph.ParameterInvariant('A', (my_threshold_value)))
 
     In the special case that you need to extend a parameter, but the (new) default is the old behaviour,
     so no recalc is necessary, you can pass @accept_as_unchanged_func
-    accept_as_unchanged_func will be called with the invariant from the last run, 
+    accept_as_unchanged_func will be called with the invariant from the last run,
     and you need to return True if you want to accept it.
     """
 
@@ -587,10 +587,10 @@ class ParameterInvariant(_InvariantJob):
     def __init__(self, job_id, parameters, accept_as_unchanged_func = None):
         job_id = 'PI' + job_id
         self.parameters = parameters
-        self.accept_as_unchanged_func = accept_as_unchanged_func 
+        self.accept_as_unchanged_func = accept_as_unchanged_func
         Job.__init__(self, job_id)
 
-    def _get_invariant(self, old):
+    def _get_invariant(self, old, all_invariant_stati):
         if self.accept_as_unchanged_func is not None:
             if self.accept_as_unchanged_func(old):
                 logger.info("Nothing Changed for %s" % self)
@@ -607,7 +607,7 @@ class FileChecksumInvariant(_InvariantJob):
         Job.__init__(self, filename)
         self.input_file = filename
 
-    def _get_invariant(self, old):
+    def _get_invariant(self, old, all_invariant_stati):
         st = util.stat(self.input_file)
         filetime = st[stat.ST_MTIME]
         filesize = st[stat.ST_SIZE]
@@ -619,7 +619,7 @@ class FileChecksumInvariant(_InvariantJob):
                 chksum = self.checksum()
                 if old == filetime:  # we converted from a filetimeinvariant
                     #print ('nothingchanged', self.job_id)
-                    raise util.NothingChanged((filetime, filesize, chksum)) 
+                    raise util.NothingChanged((filetime, filesize, chksum))
                 elif old and old[2] == chksum:
                     raise util.NothingChanged((filetime, filesize, chksum))
                 else:
@@ -642,6 +642,32 @@ class FileChecksumInvariant(_InvariantJob):
         return res
 
 FileTimeInvariant = FileChecksumInvariant
+
+
+class RobustFileChecksumInvariant(FileChecksumInvariant):
+    """A file checksum invariant that is robust against file moves (but not against renames!"""
+
+    def _get_invariant(self, old, all_invariant_stati):
+        if old: # if we have something stored, this acts like a normal FileChecksumInvariant
+            return FileChecksumInvariant._get_invariant(self, old, all_invariant_stati)
+        else:
+            basename = os.path.basename(self.input_file)
+            st = util.stat(self.input_file)
+            filetime = st[stat.ST_MTIME]
+            filesize = st[stat.ST_SIZE]
+            checksum = self.checksum()
+            for job_id in all_invariant_stati:
+                if os.path.basename(job_id) == basename: # could be a moved file...
+                    old = all_invariant_stati[job_id]
+                    if isinstance(old, tuple):
+                        dummy_old_filetime, old_filesize, old_chksum = old
+                        if old_filesize == filesize:
+                            if old_chksum == checksum:  # don't check filetime, if the file has moved it will have changed
+                                print("checksum hit %s" % self.input_file)
+                                raise util.NothingChanged((filetime, filesize, checksum))
+            # no suitable old job found.
+            return (filetime, filesize, checksum)
+
 
 class FileGeneratingJob(Job):
     """Create a single output file of more than 0 bytes."""
@@ -673,7 +699,7 @@ class FileGeneratingJob(Job):
         self._was_run = value
         self._is_done_cache = None
     was_run = property(get_was_run, set_was_run)
-    
+
 
     def ignore_code_changes(self):
         self.do_ignore_code_changes = True
@@ -741,7 +767,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
             raise ValueError("Filenames must be a list (or at least an iterable), not a single string")
         if not hasattr(filenames, '__iter__'):
             raise TypeError("filenames was not iterable")
-        
+
         job_id = ":".join(sorted(str(x) for x in filenames))
         return Job.__new__(cls, job_id)
 
@@ -757,13 +783,13 @@ class MultiFileGeneratingJob(FileGeneratingJob):
             raise ValueError("function was not a callable")
         sorted_filenames = list(sorted(x for x in filenames))
         for x in sorted_filenames:
-            if not isinstance(x, str) and not isinstance(x, unicode): 
+            if not isinstance(x, str) and not isinstance(x, unicode):
                 raise ValueError("Not all filenames passed to MultiFileGeneratingJob were str or unicode objects")
             if x in util.filename_collider_check and util.filename_collider_check[x] is not self:
                 raise ValueError("Two jobs generating the same file: %s %s - %s" % (self, util.filename_collider_check[x], x))
             else:
                 util.filename_collider_check[x] = self
-        
+
         job_id = ":".join(sorted_filenames)
         Job.__init__(self, job_id)
         self.filenames = filenames
@@ -816,7 +842,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
             filecheck = util.file_exists
         else:
             filecheck = util.output_file_exists
-        for f in self.filenames:            
+        for f in self.filenames:
             if not filecheck(f):
                 missing_files.append(f)
         if missing_files:
@@ -869,7 +895,7 @@ class MultiTempFileGeneratingJob(FileGeneratingJob):
             raise ValueError("Filenames must be a list (or at least an iterable), not a single string")
         if not hasattr(filenames, '__iter__'):
             raise TypeError("filenames was not iterable")
-        
+
         job_id = ":".join(sorted(str(x) for x in filenames))
         return Job.__new__(cls, job_id)
 
@@ -892,7 +918,7 @@ class MultiTempFileGeneratingJob(FileGeneratingJob):
                 raise ValueError("Two jobs generating the same file: %s %s - %s" % (self, util.filename_collider_check[x], x))
             else:
                 util.filename_collider_check[x] = self
-        
+
         job_id = ":".join(sorted_filenames)
         Job.__init__(self, job_id)
         self.filenames = filenames
@@ -969,7 +995,7 @@ class MultiTempFileGeneratingJob(FileGeneratingJob):
 
 class TempFilePlusGeneratingJob(FileGeneratingJob):
     """Create a temporary file that is removed once all direct dependands have
-    been executed sucessfully, 
+    been executed sucessfully,
     but keep a log file (and rerun if the log file is not there)
     """
 
@@ -1153,10 +1179,10 @@ class DependencyInjectionJob(_GraphModifyingJob):
     For example if you have an aggregation job, but the generating jobs are not known until you have
     queried a webservice. Then your aggregation job would be B, and A would create all the generating
     jobs.
-    The callback should report back the jobs it has created - B will automagically depend on those 
+    The callback should report back the jobs it has created - B will automagically depend on those
     after A has run (you don't need to do this yourself).
 
-    The DependencyInjectionJob does it's very best to check wheter you're doing something stupid and 
+    The DependencyInjectionJob does it's very best to check wheter you're doing something stupid and
     will raise JobContractErrors if you do.
     """
 
@@ -1465,7 +1491,7 @@ class PlotJob(FileGeneratingJob):
 def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args=None, fiddle = None):
     """Combine multiple PlotJobs into a common (faceted) output plot.
     An empty list means 'no facetting'
-    
+
     To use these jobs, you need to have pyggplot available.
     """
     if not isinstance(output_filename, str) or isinstance(output_filename, unicode):#FIXME
@@ -1545,7 +1571,7 @@ class _CacheFileGeneratingJob(FileGeneratingJob):
 
 
 class CachedAttributeLoadingJob(AttributeLoadingJob):
-    """Like an AttributeLoadingJob, except that the callback value is pickled into 
+    """Like an AttributeLoadingJob, except that the callback value is pickled into
     a file called job_id and reread on the next run"""
 
     def __new__(cls, job_id, *args, **kwargs):
@@ -1599,7 +1625,7 @@ class CachedAttributeLoadingJob(AttributeLoadingJob):
 
 
 class CachedDataLoadingJob(DataLoadingJob):
-    """Like a DataLoadingJob, except that the callback value is pickled into 
+    """Like a DataLoadingJob, except that the callback value is pickled into
     a file called job_id and reread on the next run"""
 
     def __new__(cls, job_id, *args, **kwargs):
@@ -1635,7 +1661,7 @@ class CachedDataLoadingJob(DataLoadingJob):
         if not self.do_ignore_code_changes:
             # this job should depend on that, not the lazy filegenerating one...
             Job.depends_on(self, FunctionInvariant(self.job_id + '_func', self.loading_function)) # we don't want to depend on 'callback', that's our tiny wrapper, but on the loading_function instead.
-        
+
     def __str__(self):
         try:
             return "%s (job_id=%s,id=%s\n Calc calcback: %s:%s\nLoad callback: %s:%s)" % (self.__class__.__name__, self.job_id, id(self), self.calculating_function.__code__.co_filename, self.calculating_function.__code__.co_firstlineno, self.loading_function.__code__.co_filename, self.loading_function.__code__.co_firstlineno)
@@ -1691,7 +1717,7 @@ class MemMappedDataLoadingJob(DataLoadingJob):
             import numpy
             data = numpy.memmap(cache_filename, self.dtype, mode='r')
             loading_function(data)
-        DataLoadingJob.__init__(self, cache_filename + '_load', do_load)  # 
+        DataLoadingJob.__init__(self, cache_filename + '_load', do_load)  #
         def do_calc(cache_filename=abs_cache_filename):
             import numpy
             data = calculating_function()
@@ -1781,7 +1807,3 @@ class _NotebookJob(MultiFileGeneratingJob):
            elif isinstance(job, FileGeneratingJob):
                 if job.job_id in raw_text:
                        deps.append(job)
-
-
-
- 
