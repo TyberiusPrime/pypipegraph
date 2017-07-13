@@ -636,9 +636,14 @@ class FileChecksumInvariant(_InvariantJob):
         file_size = os.stat(self.job_id)[stat.ST_SIZE]
         if file_size > 200 * 1024 * 1024:
             print ('Taking md5 of large file', self.job_id)
-        op = open(self.job_id, 'rb')
-        res = hashlib.md5(op.read()).hexdigest()
-        op.close()
+        with open(self.job_id, 'rb') as op:
+            block_size = 1024**2 * 10
+            block = op.read(block_size)
+            _hash = hashlib.md5()
+            while block:
+                _hash.update(block)
+                block = op.read(block_size)
+            res = _hash.hexdigest()
         return res
 
 FileTimeInvariant = FileChecksumInvariant
