@@ -668,7 +668,7 @@ class RobustFileChecksumInvariant(FileChecksumInvariant):
                         dummy_old_filetime, old_filesize, old_chksum = old
                         if old_filesize == filesize:
                             if old_chksum == checksum:  # don't check filetime, if the file has moved it will have changed
-                                print("checksum hit %s" % self.input_file)
+                                #print("checksum hit %s" % self.input_file)
                                 raise util.NothingChanged((filetime, filesize, checksum))
             # no suitable old job found.
             return (filetime, filesize, checksum)
