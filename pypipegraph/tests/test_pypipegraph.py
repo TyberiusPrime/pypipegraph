@@ -271,7 +271,7 @@ class CycleTests(unittest.TestCase):
         self.assertTrue(ppg.util.global_pipegraph.possible_execution_order.index(jobA) > ppg.util.global_pipegraph.possible_execution_order.index(jobB))
         self.assertTrue(ppg.util.global_pipegraph.possible_execution_order.index(jobC) > ppg.util.global_pipegraph.possible_execution_order.index(jobD))
 
-        
+
         self.assertTrue(jobD == ppg.util.global_pipegraph.possible_execution_order[0])
         self.assertTrue(jobC == ppg.util.global_pipegraph.possible_execution_order[1])
 
@@ -299,7 +299,7 @@ class CycleTests(unittest.TestCase):
 
 
 
-         
+
 
 class JobTests(unittest.TestCase):
     def setUp(self):
@@ -425,7 +425,7 @@ class JobTests2(PPGPerTest):
         self.assertTrue(jobA.is_in_dependency_chain(jobs[0], 10))
         #max_depth reached -> answer with false
         self.assertFalse(jobA.is_in_dependency_chain(jobs[0], 5))
-        
+
     def test_str(self):
         a = ppg.FileGeneratingJob('out/A', lambda: write('out/A', 'hello'))
         self.assertTrue(isinstance(str(a), str))
@@ -658,7 +658,7 @@ class FileGeneratingJobTests(PPGPerTest):
         os.waitpid(pid, 0)
         print os.listdir('logs')
         self.assertTrue(os.path.exists('logs/ppg_graph.gml'))
-            
+
 
 class MultiFileGeneratingJobTests(PPGPerTest):
     def test_basic(self):
@@ -795,7 +795,7 @@ class MultiFileGeneratingJobTests(PPGPerTest):
             print (e)
             self.assertTrue("filenames was not iterable" in str(e))
 
-    
+
     def test_single_stre(self):
         def inner():
             jobB = ppg.MultiFileGeneratingJob("A", lambda: write('out/A', param))
@@ -1497,7 +1497,7 @@ class TempFilePlusGeneratingJobTest(PPGPerTest):
         def inner():
             temp_job = ppg.TempFilePlusGeneratingJob(temp_file, keep_file, write_temp)
         self.assertRaises(ValueError, inner)
-        
+
     def test_does_not_get_return_if_output_is_done(self):
         temp_file = 'out/temp'
         keep_file = 'out/keep'
@@ -1912,7 +1912,7 @@ class InvariantTests(PPGPerTest):
             ppg.run_pipegraph()
         self.assertRaises(ValueError, inner)
 
-    
+
 class FunctionInvariantTests(PPGPerTest):
     #most of the function invariant testing is handled by other test classes.
     #but these are more specialized.
@@ -1933,10 +1933,10 @@ class FunctionInvariantTests(PPGPerTest):
         a = ppg.FunctionInvariant('a', get_func(100))
         b = ppg.FunctionInvariant('b', get_func2(100))#that invariant should be the same
         c = ppg.FunctionInvariant('c', get_func3(100)) #and this invariant should be different
-        av = a.get_invariant(False)
-        bv = b.get_invariant(False)
-        cv= c.get_invariant(False)
-        self.assertTrue(a.get_invariant(False))
+        av = a.get_invariant(False, [])
+        bv = b.get_invariant(False, [])
+        cv= c.get_invariant(False, [])
+        self.assertTrue(a.get_invariant(False, []))
         self.assertEqual(bv, av)
         self.assertNotEqual(av, cv)
 
@@ -1959,10 +1959,10 @@ class FunctionInvariantTests(PPGPerTest):
         a = ppg.FunctionInvariant('a', get_func(100))
         b = ppg.FunctionInvariant('b', get_func2(100))#that invariant should be the same
         c = ppg.FunctionInvariant('c', get_func3(100)) #and this invariant should be different
-        av = a.get_invariant(False)
-        bv = b.get_invariant(False)
-        cv =c.get_invariant(False)
-        self.assertTrue(a.get_invariant(False))
+        av = a.get_invariant(False, [])
+        bv = b.get_invariant(False, [])
+        cv =c.get_invariant(False, [])
+        self.assertTrue(a.get_invariant(False, []))
         self.assertEqual(bv, av)
         self.assertNotEqual(av, cv)
 
@@ -1982,10 +1982,10 @@ class FunctionInvariantTests(PPGPerTest):
         a = ppg.FunctionInvariant('a', get_func(100))
         b = ppg.FunctionInvariant('b', get_func2(100))#that invariant should be the same
         c = ppg.FunctionInvariant('c', get_func3(100)) #and this invariant should be different
-        av = a.get_invariant(False)
-        bv = b.get_invariant(False)
-        cv =c.get_invariant(False)
-        self.assertTrue(a.get_invariant(False))
+        av = a.get_invariant(False, [])
+        bv = b.get_invariant(False, [])
+        cv =c.get_invariant(False, [])
+        self.assertTrue(a.get_invariant(False, []))
         self.assertEqual(bv, av)
         self.assertNotEqual(av, cv)
 
@@ -1997,10 +1997,10 @@ class FunctionInvariantTests(PPGPerTest):
         a = ppg.FunctionInvariant('a', get_func(100))
         b = ppg.FunctionInvariant('b', get_func(100))#that invariant should be the same
         c = ppg.FunctionInvariant('c', get_func(2000)) #and this invariant should be different
-        av = a.get_invariant(False)
-        bv = b.get_invariant(False)
-        cv = c.get_invariant(False)
-        self.assertTrue(a.get_invariant(False))
+        av = a.get_invariant(False, [])
+        bv = b.get_invariant(False, [])
+        cv = c.get_invariant(False, [])
+        self.assertTrue(a.get_invariant(False, []))
         self.assertEqual(bv, av)
         self.assertNotEqual(av, cv)
 
@@ -2068,7 +2068,7 @@ class FunctionInvariantTests(PPGPerTest):
 
     def test_invariant_build_in_function(self):
         a = ppg.FunctionInvariant('test', sorted)
-        a._get_invariant(None)
+        a._get_invariant(None, [])
 
     def test_cython_function(self):
         # horrible mocking hack to see that it actually extracts something, - not tested if it's the right thing...
@@ -2091,7 +2091,7 @@ class FunctionInvariantTests(PPGPerTest):
         print (c.im_class.__module__ in sys.modules)
 
         a = ppg.FunctionInvariant('test', c)
-        a._get_invariant(None)
+        a._get_invariant(None, [])
 
 class DependencyTests(PPGPerTest):
     def test_simple_chain(self):
@@ -2448,7 +2448,7 @@ class JobGeneratingJobTests(PPGPerTest):
 
     def test_with_memory_needed(self):
         jobA = ppg.FileGeneratingJob('out/A', lambda : write('out/A', 'A'))
-        jobA.memory_needed = 1024 
+        jobA.memory_needed = 1024
         ppg.run_pipegraph()
         self.assertTrue(os.path.exists('out/A')) #since the gen job crashed
 
@@ -2607,7 +2607,7 @@ class JobGeneratingJobTests(PPGPerTest):
         self.assertEqual(read('out/Ac'), 'AA')
         self.assertEqual(read('out/Cx'), 'CC')
 
-     
+
 class CachedAttributeJobTests(PPGPerTest):
     def test_simple(self):
         o = Dummy()
@@ -3239,7 +3239,7 @@ class TestingTheUnexpectedTests(PPGPerTest):
         self.assertEqual(read('out/B'), 'A')
         self.assertEqual(read('out/Bs'), 'AA') #this one got rerun because we could not load the invariant...
 
-    def testing_import_does_not_hang(self):  # see python issue22853 
+    def testing_import_does_not_hang(self):  # see python issue22853
         old_dir = os.getcwd()
         os.chdir(os.path.dirname(__file__))
         p = subprocess.Popen(['python', '_import_does_not_hang.py'], stdout = subprocess.PIPE, stderr = subprocess.PIPE)
@@ -3459,7 +3459,7 @@ class TestJobList(PPGPerTest):
         self.assertTrue(isinstance(x, ppg.JobList))
         self.assertEqual(len(x), 2)
 
-        
+
 
 
 class DefinitionErrorsTests(PPGPerTest):
