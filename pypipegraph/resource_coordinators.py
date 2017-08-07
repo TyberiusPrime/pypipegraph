@@ -307,10 +307,10 @@ class LocalSlave:
             except Exception as e:  # some exceptions can't be pickled, so we send a string instead
                 exception = str(exception)
         stdout.seek(0, os.SEEK_SET)
-        stdout_text = stdout.read()
+        stdout_text = stdout.read()[-10 * 1024:]
         stdout.close()
         stderr.seek(0, os.SEEK_SET)
-        stderr_text = stderr.read()
+        stderr_text = stderr.read()[-10 * 1024:]
         stderr.close()
         sys.stdout = old_stdout
         sys.stderr = old_stderr
