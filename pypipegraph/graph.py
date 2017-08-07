@@ -380,9 +380,9 @@ class Pipegraph(object):
                         pickle.dump(key, op, pickle.HIGHEST_PROTOCOL)
                         pickle.dump(value, op, pickle.HIGHEST_PROTOCOL)
                     except Exception as e:
-                        print( key)
-                        print( value)
-                        raise
+                        print (key)
+                        print (value)
+                        raise e
                 op.close()
                 if os.path.exists(self.invariant_status_filename + '.old'):  # we use the .old copy for comparison purposes later on
                     os.unlink(self.invariant_status_filename + '.old')
@@ -425,7 +425,7 @@ class Pipegraph(object):
                 old = inv  # so no change...
                 self.invariant_status[job.job_id] = inv  # so not to recheck next time...
             if inv != old:
-                if True:
+                if False:
                     logger.info("Invariant change for %s" % job)
                     logger.info("%s invariant was %s, is now %s" % (job, old, inv))
                     if type(old) is str and type(inv) is str:
