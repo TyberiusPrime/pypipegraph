@@ -384,8 +384,10 @@ class Pipegraph(object):
                         print( value)
                         raise
                 op.close()
+                if os.path.exists(self.invariant_status_filename + '.old'):  # we use the .old copy for comparison purposes later on
+                    os.unlink(self.invariant_status_filename + '.old')
                 if os.path.exists(self.invariant_status_filename):
-                    os.unlink(self.invariant_status_filename)
+                    os.rename(self.invariant_status_filename, self.invariant_status_filename + '.old')
                 os.rename(self.invariant_status_filename + '.temp', self.invariant_status_filename)
                 finished = True
             except KeyboardInterrupt:
