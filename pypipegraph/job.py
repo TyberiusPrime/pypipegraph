@@ -665,7 +665,10 @@ class RobustFileChecksumInvariant(FileChecksumInvariant):
                 if os.path.basename(job_id) == basename: # could be a moved file...
                     old = all_invariant_stati[job_id]
                     if isinstance(old, tuple):
-                        dummy_old_filetime, old_filesize, old_chksum = old
+                        if len(old) == 2:
+                            old_filesize, old_chksum = old
+                        else:
+                            dummy_old_filetime, old_filesize, old_chksum = old
                         if old_filesize == filesize:
                             if old_chksum == checksum:  # don't check filetime, if the file has moved it will have changed
                                 #print("checksum hit %s" % self.input_file)

@@ -279,6 +279,7 @@ class LocalSlave:
                 job.stdout_handle = stdout
                 job.stderr_handle = stderr
                 p.start()
+                logger.info("Slave pid: %s" % (p.pid,))
                 self.process_to_job[p] = job
                 logger.info("Slave, returning to start_jobs")
 
