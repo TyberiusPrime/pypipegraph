@@ -1984,10 +1984,39 @@ class FunctionInvariantTests(PPGPerTest):
         c = ppg.FunctionInvariant('c', get_func3(100)) #and this invariant should be different
         av = a.get_invariant(False, [])
         bv = b.get_invariant(False, [])
-        cv =c.get_invariant(False, [])
+        cv = c.get_invariant(False, [])
         self.assertTrue(a.get_invariant(False, []))
         self.assertEqual(bv, av)
         self.assertNotEqual(av, cv)
+
+    def test_nested_inner_functions(self):
+        def get_func(x):
+            def inner():
+                def shu():
+                    return 23
+                return shu
+            return inner
+        def get_func2(x):
+            def inner():
+                def shu():
+                    return 23
+                return shu
+            return inner
+        def get_func3(x):
+            def inner():
+                def shu():
+                    return 23 + 5
+                return shu
+            return inner
+        a = ppg.FunctionInvariant('a', get_func(100))
+        b = ppg.FunctionInvariant('b', get_func2(100))#that invariant should be the same
+        c = ppg.FunctionInvariant('c', get_func3(100)) #and this invariant should be different
+        av = a.get_invariant(False, [])
+        bv = b.get_invariant(False, [])
+        cv = c.get_invariant(False, [])
+        self.assertTrue(a.get_invariant(False, []))
+        self.assertEqual(bv, av)
+        self.assertNotEqual(av, cv)  # constat value is different
 
     def test_inner_functions_with_parameters(self):
         def get_func(x):
