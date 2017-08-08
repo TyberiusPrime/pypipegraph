@@ -2,15 +2,36 @@ import cPickle as pickle
 import subprocess
 import tempfile
 import sys
+import os
 
 
 def print_usage():
-    print("invariant_diff.py name_of_job_to_diff")
+    print("invariant_diff.py name_of_job_to_diff [--status=prefix]")
     print("Dumps the current and the last invariant for this job and then attempts a diff between them")
+    print("--status=prefix is used if the .pypipegraph_status_robust file is named differently")
     sys.exit(1)
 
-if len(sys.argv) != 2:
+def print_status_not_found():
+    print "Status filename: %s  not found" % status_prefix
+    print "try passing --status="
+    sys.exit(1)
+
+
+if len(sys.argv) < 2:
     print_usage()
+
+default_status_prefix = '.pypipegraph_status_robust'
+status_prefix = default_status_prefix
+job_id_to_compare = None
+for x in sys.argv[1:]:
+    if x.startswith('--status='):
+        status_prefix = x[x.find('=') + 1:]
+    else:
+        if job_id_to_compare:
+            print_usage()
+        else:
+            job_id_to_compare = x
+
 
 
 
@@ -22,29 +43,40 @@ def load_invariant(filename, job_id):
                 value = pickle.load(op)
                 if name == job_id:
                     return value
-        except pickle.EOFError:
+        except EOFError as e:
             pass
     raise KeyError("Job not found in %s" % filename)
 
-job_id_to_compare = sys.argv[1]
-new = load_invariant('.pypipegraph_status_robust', job_id_to_compare)
-old = load_invariant('.pypipegraph_status_robust.old', job_id_to_compare)
+if not os.path.exists(status_prefix):
+    if status_prefix == default_status_prefix:
+        for fn in os.listdir('.'):
+            if fn.startswith('.ppg_status_'):
+                status_prefix = fn
+                print 'Using %s as status filename, use --status if you want another one'  % status_prefix
+                break
+        else:
+            print_status_not_found()
+    else:
+        print_status_not_found()
+    new = load_invariant(status_prefix, job_id_to_compare)
+old = load_invariant(status_prefix + '.old', job_id_to_compare)
 
 print 'New:'
 print new
 print ''
-print 'Old:'
-print old
-
-print 'Comparison'
 if old == new:
     print 'Identicial'
 else:
+    print 'Old:'
+    print old
+    print ''
+    print 'Comparison'
+
     newf = tempfile.NamedTemporaryFile(prefix='new_')
     oldf = tempfile.NamedTemporaryFile(prefix='old_')
     newf.write(str(new))
-    old.write(str(old))
+    oldf.write(str(old))
     newf.flush()
     oldf.flush()
-    p = subprocess.Popen(['diff', newf.filename, oldf.filename])
+    p = subprocess.Popen(['diff', newf.name, oldf.name, '-c5'])
     p.communicate()
