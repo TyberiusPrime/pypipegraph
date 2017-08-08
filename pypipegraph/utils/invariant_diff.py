@@ -49,7 +49,7 @@ def load_invariant(filename, job_id):
 
 if not os.path.exists(status_prefix):
     if status_prefix == default_status_prefix:
-        for fn in os.listdir('.'):
+        for fn in sorted(os.listdir('.')):
             if fn.startswith('.ppg_status_'):
                 status_prefix = fn
                 print 'Using %s as status filename, use --status if you want another one'  % status_prefix
