@@ -179,7 +179,7 @@ class Job(object):
                     self.depends_on(job)
                     pass
                 else:
-                    raise ValueError("Can only depend on Job objects")
+                    raise ValueError("Can only depend on Job objects, was: %s" % type(job))
             else:
                 if self in job.prerequisites:
                     raise ppg_exceptions.CycleError("Cycle adding %s to %s" % (self.job_id, job.job_id))
