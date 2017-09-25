@@ -1,3 +1,4 @@
+"""Fix Queue for running a pypipegraph within an import"""
 import threading
 from multiprocessing.util import is_exiting, debug, Finalize
 import multiprocessing.queues
@@ -9,7 +10,9 @@ import sys
 import os
 import pickle
 
+
 class MPQueueFixed(multiprocessing.queues.Queue):
+
     def _start_thread(self):
         debug('Queue._start_thread()')
 
@@ -20,7 +23,7 @@ class MPQueueFixed(multiprocessing.queues.Queue):
             args=(self._buffer, self._notempty, self._send,
                   self._wlock, self._writer.close),
             name='QueueFeederThread'
-            )
+        )
         self._thread.daemon = True
 
         debug('doing self._thread.start()')
@@ -33,14 +36,14 @@ class MPQueueFixed(multiprocessing.queues.Queue):
                 self._thread, Queue._finalize_join,
                 [weakref.ref(self._thread)],
                 exitpriority=-5
-                )
+            )
 
         # Send sentinel to the thread queue object when garbage collected
         self._close = Finalize(
             self, Queue._finalize_close,
             [self._buffer, self._notempty],
             exitpriority=10
-            )
+        )
 
     @staticmethod
     def _feed(buffer, notempty, send, writelock, close):
@@ -78,16 +81,16 @@ class MPQueueFixed(multiprocessing.queues.Queue):
                         else:
                             wacquire()
                             try:
-                                #print ('sending object of size %i"' %
-                                        #sys.getsizeof(obj, -1) )
-                                #print str(obj)[:100]
-                                #print ""
-                                #print ""
+                                # print ('sending object of size %i"' %
+                                        # sys.getsizeof(obj, -1) )
+                                # print str(obj)[:100]
+                                # print ""
+                                # print ""
                                 try:
                                     send(obj)
                                 except SystemError as e:
-                                    print 'Que sending error %s' % e
-                                    print 'error dump in %i.dump' %  (os.getpid(),)
+                                    print('Que sending error %s' % e)
+                                    print('error dump in %i.dump' % (os.getpid(),))
                                     with open("%i.dump" % (os.getpid(), ), 'wb') as op:
                                         try:
                                             pickle.dump(obj, op)
@@ -98,22 +101,20 @@ class MPQueueFixed(multiprocessing.queues.Queue):
                                         except:
                                             pass
 
-
                                     raise
                             finally:
                                 wrelease()
                 except IndexError:
                     pass
-        except Exception, e:
+        except Exception as e:
             # Since this runs in a daemon thread the resources it uses
             # may be become unusable while the process is cleaning up.
             # We ignore errors which happen after the process has
             # started to cleanup.
             try:
                 if is_exiting():
-                    info('error in queue thread: %s', e)
+                    debug('error in queue thread: %s', e)
                 else:
                     traceback.print_exc()
             except Exception:
                 pass
-

@@ -3,7 +3,7 @@ from __future__ import print_function
 """
 The MIT License (MIT)
 
-Copyright (c) 2012, Florian Finkernagel <finkernagel@imt.uni-marburg.de>
+Copyright (c) 2017, Florian Finkernagel <finkernagel@imt.uni-marburg.de>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -31,7 +31,7 @@ import os
 import codecs
 import traceback
 import multiprocessing
-from mp_queues import MPQueueFixed
+from .mp_queues import MPQueueFixed
 import threading
 import signal
 
@@ -53,16 +53,6 @@ except ImportError:
     import pickle
 from . import ppg_exceptions
 import tempfile
-
-try:
-    from twisted.internet import reactor
-    from twisted.internet.protocol import ClientCreator, ProcessProtocol
-    from twisted.protocols import amp
-    from . import messages
-    twisted_available = True
-except ImportError:
-        twisted_available = False
-
 
 
 class DummyResourceCoordinator:
@@ -132,7 +122,7 @@ class LocalSystem:
         logger.info("Starting first batch of jobs")
         self.pipegraph.start_jobs()
         if self.interactive:
-            import interactive
+            from . import interactive
             interactive_thread = threading.Thread(target = interactive.thread_loop)
             interactive_thread.start()
         s = signal.signal(signal.SIGINT, signal_handler)  # ignore ctrl-c
