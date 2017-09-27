@@ -36,8 +36,8 @@ import threading
 import signal
 
 try:
-    import kitchen
-    kitchen_available = True
+    #import kitchen
+    kitchen_available = False
 except ImportError:
     kitchen_available = False
 try:
@@ -118,7 +118,11 @@ class LocalSystem:
 
     def enter_loop(self):
         self.spawn_slaves()
-        self.que = MPQueueFixed()
+        if sys.version_info[0] == 2:
+            self.que = MPQueueFixed()
+        else:
+            self.que = multiprocessing.Queue()
+
         logger.info("Starting first batch of jobs")
         self.pipegraph.start_jobs()
         if self.interactive:
@@ -251,8 +255,8 @@ class LocalSlave:
                 stdout = tempfile.SpooledTemporaryFile(mode='w+')
                 stderr = tempfile.SpooledTemporaryFile(mode='w+')
                 if kitchen_available:
-                    stdout = kitchen.text.converters.getwriter('utf8')(stdout)
-                    stderr = kitchen.text.converters.getwriter('utf8')(stderr)
+                    stdout = kitchen.text.converters.getwriter('utf-8')(stdout)
+                    stderr = kitchen.text.converters.getwriter('utf-8')(stderr)
                 self.run_a_job(job, stdout, stderr)
                 logger.info("Slave: returned from %s in slave, data was put" % job)
             else:
@@ -260,8 +264,8 @@ class LocalSlave:
                 stdout = tempfile.TemporaryFile(mode='w+') #no more spooling - it doesn't get passed back
                 stderr = tempfile.TemporaryFile(mode='w+')
                 if kitchen_available:
-                    stdout = kitchen.text.converters.getwriter('utf8')(stdout)
-                    stderr = kitchen.text.converters.getwriter('utf8')(stderr)
+                    stdout = kitchen.text.converters.getwriter('utf-8')(stdout)
+                    stderr = kitchen.text.converters.getwriter('utf-8')(stderr)
                 stdout.fileno()
                 stderr.fileno()
                 p = multiprocessing.Process(target=self.wrap_run, args=[job, stdout, stderr, False])
@@ -276,8 +280,9 @@ class LocalSlave:
     def load_job(self, job):  # this executes a load job returns false if an error occured
         stdout = tempfile.SpooledTemporaryFile(mode='w')
         stderr = tempfile.SpooledTemporaryFile(mode='w')
-        stdout = kitchen.text.converters.getwriter('utf8')(stdout)
-        stderr = kitchen.text.converters.getwriter('utf8')(stderr)
+        if kitchen_available:
+            stdout = kitchen.text.converters.getwriter('utf-8')(stdout)
+            stderr = kitchen.text.converters.getwriter('utf-8')(stderr)
 
         old_stdout = sys.stdout
         old_stderr = sys.stderr
@@ -376,7 +381,7 @@ class LocalSlave:
             stdout_text = stdout.read()
             stdout.close()
         except ValueError as e:
-            if 'I/O operation on closed file' in e:
+            if 'I/O operation on closed file' in str(e):
                 stdout_text = "Stdout could not be captured / io operation on closed file"
             else:
                 raise
@@ -385,7 +390,7 @@ class LocalSlave:
             stderr_text = stderr.read()
             stderr.close()
         except ValueError as e:
-            if 'I/O operation on closed file' in e:
+            if 'I/O operation on closed file' in str(e):
                 stderr_text = "stderr could not be captured / io operation on closed file"
             else:
                 raise

@@ -1,4 +1,7 @@
-import cPickle as pickle
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 import subprocess
 import tempfile
 import sys
@@ -11,9 +14,10 @@ def print_usage():
     print("--status=prefix is used if the .pypipegraph_status_robust file is named differently")
     sys.exit(1)
 
+
 def print_status_not_found():
-    print "Status filename: %s  not found" % status_prefix
-    print "try passing --status="
+    print("Status filename: %s  not found" % status_prefix)
+    print("try passing --status=")
     sys.exit(1)
 
 
@@ -33,10 +37,8 @@ for x in sys.argv[1:]:
             job_id_to_compare = x
 
 
-
-
 def load_invariant(filename, job_id):
-    with open(filename) as op:
+    with open(filename, 'rb') as op:
         try:
             while True:
                 name = pickle.load(op)
@@ -52,7 +54,7 @@ if not os.path.exists(status_prefix):
         for fn in sorted(os.listdir('.')):
             if fn.startswith('.ppg_status_'):
                 status_prefix = fn
-                print 'Using %s as status filename, use --status if you want another one'  % status_prefix
+                print('Using %s as status filename, use --status if you want another one' % status_prefix)
                 break
         else:
             print_status_not_found()
@@ -61,16 +63,16 @@ if not os.path.exists(status_prefix):
     new = load_invariant(status_prefix, job_id_to_compare)
 old = load_invariant(status_prefix + '.old', job_id_to_compare)
 
-print 'New:'
-print new
-print ''
+print('New:')
+print(new)
+print('')
 if old == new:
-    print 'Identicial'
+    print('Identicial')
 else:
-    print 'Old:'
-    print old
-    print ''
-    print 'Comparison'
+    print('Old:')
+    print(old)
+    print('')
+    print('Comparison')
 
     newf = tempfile.NamedTemporaryFile(prefix='new_')
     oldf = tempfile.NamedTemporaryFile(prefix='old_')

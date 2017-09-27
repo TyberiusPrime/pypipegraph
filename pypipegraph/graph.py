@@ -789,7 +789,7 @@ class Pipegraph(object):
         print('-' * 75, file=file_handle)
         print('%s failed. Reason:' % (job, ), file=file_handle)
         if job.exception:
-            print('\tThrew an exception %s' % (unicode(job.exception).encode('ascii', errors='replace'),), file=file_handle)
+            print('\tThrew an exception %s' % (str(job.exception).encode('ascii', errors='replace'),), file=file_handle)
             print('\tTraceback: %s' % (job.trace,), file=file_handle)
 
         print('\t stdout was %s' % (job.stdout,), file=file_handle)
@@ -806,7 +806,7 @@ class Pipegraph(object):
     def dump_graph(self):
         """Dump the current graph in text format into logs/ppg_graph.txt if logs exists"""
         def do_dump():
-            import job as jobs
+            from . import job as jobs
             nodes = {}
             edges = []
             for job in self.jobs.values():
@@ -869,7 +869,7 @@ class Pipegraph(object):
         op.close()
 
     def _write_gml(self, output_filename, node_to_attribute_dict, edges):
-        op = open(output_filename, 'wb')
+        op = open(output_filename, 'w')
         op.write("""graph
 [
 """)

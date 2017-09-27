@@ -2,7 +2,7 @@ from __future__ import print_function
 import cmd
 import select
 import sys
-import util
+from . import util
 import time
 
 class SmartCMD(cmd.Cmd):
@@ -43,7 +43,10 @@ class SmartCMD(cmd.Cmd):
                         continue
                     if self.use_rawinput:
                         try:
-                            line = raw_input(self.prompt)
+                            try:
+                                line = raw_input(self.prompt) # python2
+                            except NameError:
+                                line = input(self.prompt)  # python3
                         except EOFError:
                             line = 'EOF'
                     else:
