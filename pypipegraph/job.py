@@ -53,6 +53,7 @@ import time
 import six
 
 is_pypy = platform.python_implementation() == 'PyPy'
+module_type = type(sys)
 
 register_tags = False
 
@@ -483,10 +484,17 @@ class FunctionInvariant(_InvariantJob):
                 if closure:
                     for name, cell in zip(self.function.__code__.co_freevars, closure):
                         # we ignore references to self - in that use case you're expected to make your own ParameterInvariants, and we could not detect self.parameter anyhow (only self would be bound)
-                        #we also ignore bound functions - their address changes all the time. IDEA: Make this recursive (might get to be too expensive)
+                        # we also ignore bound functions - their address changes all the time. IDEA: Make this recursive (might get to be too expensive)
                         try:
-                            if name != 'self' and not hasattr(cell.cell_contents, '__code__'):
-                                x = str(cell.cell_contents)
+                            if (
+                                name != 'self' and
+                                not hasattr(cell.cell_contents, '__code__') and
+                                not isinstance(cell.cell_contents, module_type)
+                            ):
+                                if isinstance(cell.cell_contents, dict):
+                                    x = str(sorted(list(cell.cell_contents.items())))
+                                else:
+                                    x = str(cell.cell_contents)
                                 if 'at 0x' in x:  # if you don't have a sensible str(), we'll default to the class path. This takes things like <chipseq.quality_control.AlignedLaneQualityControl at 0x73246234>.
                                     x = x[:x.find('at 0x')]
                                 if 'id=' in x:
