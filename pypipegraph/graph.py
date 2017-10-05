@@ -283,7 +283,10 @@ class Pipegraph(object):
             n = S.pop()
             L.append(n)
             for m in n.prerequisites:
-                m.dependants_copy.remove(n)
+                try:
+                    m.dependants_copy.remove(n)
+                except AttributeError:
+                    raise ValueError("Somehow a job that was created for an older pypipegraph is still around and gumming up the works. Job in question: %s" % m)
                 if not m.dependants_copy:
                     S.append(m)
         return L
