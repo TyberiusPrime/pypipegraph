@@ -953,5 +953,5 @@ class Pipegraph(object):
     def signal_finished(self):
         """If there's a .pipegraph_finished.py in ~, call it"""
         fn = os.path.expanduser("~/.pipegraph_finished.py")
-        if os.path.exists(fn) and os.access(fn, os.X_OK) :
+        if os.path.exists(fn) and not os.path.isdir(fn) and os.access(fn, os.X_OK):
             os.system(fn)

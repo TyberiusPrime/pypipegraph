@@ -98,6 +98,8 @@ class LocalSystem:
         self.physical_memory, self.swap_memory = get_memory_available()
         self.timeout = 5
         self.profile = profile
+        if multiprocessing.current_process().name != 'MainProcess':
+            interactive = False
         self.interactive = interactive
 
     def spawn_slaves(self):
@@ -129,10 +131,11 @@ class LocalSystem:
             from . import interactive
             interactive_thread = threading.Thread(target = interactive.thread_loop)
             interactive_thread.start()
-        s = signal.signal(signal.SIGINT, signal_handler)  # ignore ctrl-c
+            s = signal.signal(signal.SIGINT, signal_handler)  # ignore ctrl-c
         while True:
             self.slave.check_for_dead_jobs()  # whether time out or or job was done, let's check this...
-            self.see_if_output_is_requested()
+            if self.interactive:
+                self.see_if_output_is_requested()
             try:
                 logger.info("Listening to que")
                 r = self.que.get(block=True, timeout=self.timeout)
@@ -194,7 +197,7 @@ class LocalSystem:
             if not interactive.interpreter.stay:
                 interactive.interpreter.terminated = True
             interactive_thread.join()
-        signal.signal(signal.SIGINT, s)
+            signal.signal(signal.SIGINT, s)
         logger.info("Leaving loop")
 
     def see_if_output_is_requested(self):
@@ -328,7 +331,8 @@ class LocalSlave:
         self.temp = job.run()
 
     def wrap_run(self, job, stdout, stderr, is_local):
-        s = signal.signal(signal.SIGINT, signal.SIG_IGN) # ignore ctrl-c
+        if self.rc.interactive:
+            s = signal.signal(signal.SIGINT, signal.SIG_IGN) # ignore ctrl-c
 
         if 'PYPIPEGRAPH_DO_COVERAGE' in os.environ:
             import coverage
