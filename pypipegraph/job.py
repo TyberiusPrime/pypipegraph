@@ -177,7 +177,7 @@ class Job(object):
 
         for job in job_joblist_or_list_of_jobs:
             if not isinstance(job, Job):
-                if hasattr(job, '__iter__'):  # a nested list
+                if hasattr(job, '__iter__') and not isinstance(job, str):  # a nested list
                     self.depends_on(job)
                     pass
                 else:
