@@ -939,7 +939,7 @@ class MultiTempFileGeneratingJob(FileGeneratingJob):
             raise ValueError("function was not a callable")
         sorted_filenames = list(sorted(x for x in filenames))
         for x in sorted_filenames:
-            if not isinstance(x, string_types):
+            if not isinstance(x, six.string_types):
                 raise ValueError("Not all filenames passed to MultiTempFileGeneratingJob were string objects")
             if x in util.filename_collider_check and util.filename_collider_check[x] is not self:
                 raise ValueError("Two jobs generating the same file: %s %s - %s" % (self, util.filename_collider_check[x], x))
