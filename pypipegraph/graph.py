@@ -347,24 +347,34 @@ class Pipegraph(object):
             op.seek(0, os.SEEK_SET)
             self.invariant_status = collections.defaultdict(bool)
             leave = False
+            possible_pickle_exceptions = [TypeError]
+            try:
+                import _pickle
+                possible_pickle_exceptions.append(_pickle.UnpicklingError)
+            except ImportError:
+                pass
+            possible_pickle_exceptions = tuple(possible_pickle_exceptions)
+
             while not leave:
                 try:
                     key = None
                     key = pickle.load(op)
+                    old_pos = op.tell()
                     value = pickle.load(op)
                     self.invariant_status[key] = value
-                except TypeError as e:
-                    print(e)
+                except possible_pickle_exceptions as e:
                     if key is None:
+                        raise e
                         raise ValueError("Could not depickle invariants - even in the robust implementation (key not found")
                     logger.error("Could not depickle invariant for %s - check code for depickling bugs. Job will rerun, probably until the (de)pickling bug is fixed.\n Exception: %s" % (key, e))
                     self.invariant_loading_issues[key] = e
-                    letter = op.read(1)
-                    #at least try to find the end of the pickle... this might fail horribly though
-                    while letter and letter != pickle_stop:
-                        letter = op.read(1)
-                    if not letter:
-                        leave = True
+                    op.seek(old_pos)
+                    # use pickle tools to read the pickles op codes until
+                    # the end of the current pickle, hopefully allowing decoding of the next one
+                    # of course if the actual on disk file is messed up beyond this,
+                    # we're done for.
+                    import pickletools
+                    list(pickletools.genops(op))
                 except EOFError:
                     leave = True
             op.close()
@@ -382,6 +392,7 @@ class Pipegraph(object):
                     try:
                         pickle.dump(key, op, pickle.HIGHEST_PROTOCOL)
                         pickle.dump(value, op, pickle.HIGHEST_PROTOCOL)
+                        print("pickled", key)
                     except Exception as e:
                         print (key)
                         print (value)
