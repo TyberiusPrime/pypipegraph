@@ -37,8 +37,10 @@ import shutil
 import gc
 import subprocess
 
+
 #rc_gen = lambda : ppg.resource_coordinators.LocalTwisted()
 rc_gen = lambda: ppg.resource_coordinators.LocalSystem()
+test_count = 0
 
 
 def read(filename):
@@ -71,7 +73,6 @@ def writeappend(filename_write, filename_append, string):
 
 
 
-test_count = 0
 class PPGPerTest(unittest.TestCase):
     """For those testcases that need a new pipeline each time..."""
     def setUp(self):
@@ -81,19 +82,15 @@ class PPGPerTest(unittest.TestCase):
             os.mkdir('out')
         except OSError:
             pass
+        self.test_dir = 'out/%s' % (os.getpid() * 1000 + test_count)
+        print("test dir", self.test_dir)
         try:
-            shutil.rmtree('out/%s' % test_count) #make sure there's no old data around...
+            shutil.rmtree(self.test_dir) #make sure there's no old data around...
         except:
             pass
-        try:
-            os.mkdir('out/%s' % test_count)
-        except OSError:
-            pass
-        try:
-            os.mkdir('out/%s/out' % test_count)
-        except OSError:
-            pass
-        os.chdir('out/%s/' % test_count)
+        os.mkdir(self.test_dir)
+        os.mkdir(os.path.join(self.test_dir, 'out'))
+        os.chdir(self.test_dir)
         ppg.forget_job_status()
         ppg.new_pipegraph(rc_gen(), quiet=True, dump_graph=False)
         logger.info("Starting new test\n" + "-" * 50 + "\n\n\n")
@@ -102,16 +99,17 @@ class PPGPerTest(unittest.TestCase):
         os.chdir('../../')
         try:
             gc.collect()
-            shutil.rmtree('out/%s' % test_count)
+            #shutil.rmtree(self.test_dir)
         except:
             pass
         try:
-            shutil.rmtree('out//' % test_count)
+            #shutil.rmtree(self.test_dir)
+            pass
         except:
             pass
 
 
-class SimpleTests(unittest.TestCase):
+class SimpleTests(PPGPerTest):
 
     def test_job_creation_before_pipegraph_creation_raises(self):
         ppg.destroy_global_pipegraph()
@@ -174,21 +172,7 @@ class SimpleTests(unittest.TestCase):
             ppg.forget_job_status('shu.dat')
 
 
-class CycleTests(unittest.TestCase):
-    def setUp(self):
-        try:
-            os.mkdir('out')
-        except OSError:
-            pass
-        ppg.forget_job_status()
-        ppg.new_pipegraph(quiet=True, dump_graph=False)
-
-    def tearDown(self):
-        try:
-            shutil.rmtree('out')
-        except:
-            pass
-
+class CycleTests(PPGPerTest):
     def test_simple_cycle(self):
         def inner():
             ppg.new_pipegraph(quiet=True, dump_graph=False)
@@ -301,15 +285,8 @@ class CycleTests(unittest.TestCase):
 
 
 
-class JobTests(unittest.TestCase):
-    def setUp(self):
-        pass
-    def tearDown(self):
-        try:
-            shutil.rmtree('out')
-        except:
-            pass
-
+class JobTests(PPGPerTest):
+    
     def test_assert_singletonicity_of_jobs(self):
         ppg.forget_job_status()
         ppg.new_pipegraph(quiet=True, dump_graph=False)
@@ -3279,6 +3256,7 @@ class TestingTheUnexpectedTests(PPGPerTest):
 
 
 class NotYetImplementedTests(unittest.TestCase):
+    @unittest.expectedFailure
     def test_temp_jobs_and_gen_jobs(self):
         #DependencyInjection A creates TempJob B and job C (c is already done)
         #DependencyInjeciton D (dep on A) creates TempJob B and job E
@@ -3297,6 +3275,7 @@ class NotYetImplementedTests(unittest.TestCase):
         #what a conundrum
         raise NotImplementedError()
 
+    @unittest.expectedFailure
     def test_cached_job_done_but_gets_invalidated_by_dependency_injection_generated_job(self):
         #very similar to the previous case, this basically directly get's you into the 'Job execution order territory....'
         raise NotImplementedError

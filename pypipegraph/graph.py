@@ -377,7 +377,7 @@ class Pipegraph(object):
         finished = False
         while not finished:
             try:
-                op = open(self.invariant_status_filename + '.temp', 'wb')
+                op = open(os.path.abspath(self.invariant_status_filename + '.temp'), 'wb')
                 for key, value in self.invariant_status.items():
                     try:
                         pickle.dump(key, op, pickle.HIGHEST_PROTOCOL)
