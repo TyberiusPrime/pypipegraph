@@ -480,7 +480,7 @@ class FunctionInvariant(_InvariantJob):
             if hasattr(self.function, 'im_func') and 'cyfunction' in repr(self.function.im_func):
                 invariant = self.get_cython_source(self.function)
             else:
-                invariant = self.dis_code(self.function.__code__)
+                invariant = self.dis_code(self.function.__code__, self.function)
                 if closure:
                     for name, cell in zip(self.function.__code__.co_freevars, closure):
                         # we ignore references to self - in that use case you're expected to make your own ParameterInvariants, and we could not detect self.parameter anyhow (only self would be bound)
@@ -515,7 +515,7 @@ class FunctionInvariant(_InvariantJob):
                             '(<code\tobject\t<[^>]+>,\tfile\t\'[^\']+\',\tline\t[0-9]+)' #that's how they look like in pypy. More sensibly, actually
             )
 
-    def dis_code(self, code):
+    def dis_code(self, code, function):
         """'dissassemble' python code.
         Strips lambdas (they change address every execution otherwise)"""
         # TODO: replace with bytecode based smarter variant
@@ -534,10 +534,12 @@ class FunctionInvariant(_InvariantJob):
             res.append("\t".join(row[1:]))
         res = "\n".join(res)
         res = self.inner_code_object_re.sub('lambda', res)
+        if function and hasattr(function, '__qualname__'):
+            res = res.replace(function.__qualname__, '<func name ommited>')
         for ii, constant in enumerate(code.co_consts):
             if hasattr(constant, 'co_code'):
                 res += 'inner no %i' % ii
-                res += self.dis_code(constant)
+                res += self.dis_code(constant, None)
         return res
 
     def get_cython_source(self, cython_func):
@@ -554,7 +556,7 @@ class FunctionInvariant(_InvariantJob):
 
         #load the source code
         op = open(filename, 'rb')
-        d = op.read().split("\n")
+        d = op.read().decode('utf-8').split("\n")
         op.close()
 
         #extract the function at hand, minus doc string

@@ -37,6 +37,7 @@ import shutil
 import gc
 import subprocess
 import hashlib
+from six.moves import xrange
 import stat
 
 
@@ -133,7 +134,7 @@ class SimpleTests(PPGPerTest):
             ppg.run_pipegraph()
             self.assertTrue(False, 'Exception not correctly raised')
         except ValueError as e:
-            print (e)
+            print(e)
             self.assertTrue('Each pipegraph may be run only once.' in str(e))
 
     def test_can_not_add_jobs_after_run(self):
@@ -144,7 +145,7 @@ class SimpleTests(PPGPerTest):
             job = ppg.FileGeneratingJob('out/A', lambda: write('out/A','A'))
             self.assertTrue(False, 'Exception not correctly raised')
         except ValueError as e:
-            print (e)
+            print(e)
             self.assertTrue('This pipegraph was already run. You need to create a new one for more jobs' in str(e))
 
     def test_job_creation_after_pipegraph_run_raises(self):
@@ -272,7 +273,7 @@ class CycleTests(PPGPerTest):
         jobB = ppg.FileGeneratingJob('out/B', dump)
         jobB.ignore_code_changes()
         with open("out/B", 'wb') as op:
-           op.write("Done")
+           op.write(b"Done")
         ppg.util.global_pipegraph.connect_graph()
         ppg.util.global_pipegraph.check_cycles()
         ppg.util.global_pipegraph.load_invariant_status()
@@ -288,7 +289,7 @@ class CycleTests(PPGPerTest):
 
 
 class JobTests(PPGPerTest):
-    
+
     def test_assert_singletonicity_of_jobs(self):
         ppg.forget_job_status()
         ppg.new_pipegraph(quiet=True, dump_graph=False)
@@ -477,7 +478,6 @@ class FileGeneratingJobTests(PPGPerTest):
             ppg.run_pipegraph()
         self.assertRaises(ppg.RuntimeError, inner)
         self.assertTrue(job.failed)
-        #print 'exception is', repr(job.exception)
         self.assertTrue(isinstance(job.exception, ppg.JobContractError))
         self.assertFalse(os.path.exists(of))
 
@@ -623,7 +623,7 @@ class FileGeneratingJobTests(PPGPerTest):
         def inner():
             ppg.run_pipegraph()
         self.assertRaises(ppg.RuntimeError, inner)
-        print (jobA.exception)
+        print(jobA.exception)
         self.assertTrue(isinstance(jobA.exception, IndexError))
         self.assertFalse(os.path.exists('out/A')) #should clobber the resulting files in this case - just a double check to test_invaliding_removes_file
         self.assertEqual(read('out/Ay'), 'ax') #but the job did run, right?
@@ -635,7 +635,7 @@ class FileGeneratingJobTests(PPGPerTest):
         ppg.run_pipegraph()
         pid = ppg.util.global_pipegraph.dump_pid
         os.waitpid(pid, 0)
-        print os.listdir('logs')
+        print(os.listdir('logs'))
         self.assertTrue(os.path.exists('logs/ppg_graph.gml'))
 
 
@@ -771,7 +771,7 @@ class MultiFileGeneratingJobTests(PPGPerTest):
             jobB = ppg.MultiFileGeneratingJob(25, lambda: write('out/A', param))
             self.assertFalse("Exception not raised")
         except TypeError as e:
-            print (e)
+            print(e)
             self.assertTrue("filenames was not iterable" in str(e))
 
 
@@ -975,7 +975,7 @@ class DataLoadingJobTests(PPGPerTest):
         def inner():
             ppg.run_pipegraph()
         self.assertRaises(ppg.RuntimeError, inner)
-        print (jobA.exception)
+        print(jobA.exception)
         self.assertTrue(isinstance(jobA.exception, str))
 
 
@@ -2077,6 +2077,7 @@ class FunctionInvariantTests(PPGPerTest):
         av = a.get_invariant(False, [])
         bv = b.get_invariant(False, [])
         cv =c.get_invariant(False, [])
+        self.maxDiff = 20000
         self.assertTrue(a.get_invariant(False, []))
         self.assertEqual(bv, av)
         self.assertNotEqual(av, cv)
@@ -2232,7 +2233,7 @@ class FunctionInvariantTests(PPGPerTest):
         mi = MockImClass()
         stat.MockIM = mi
         c.im_class = mi
-        print (c.im_class.__module__ in sys.modules)
+        print(c.im_class.__module__ in sys.modules)
 
         a = ppg.FunctionInvariant('test', c)
         a._get_invariant(None, [])
@@ -3309,7 +3310,7 @@ class CantDepickle():
     """A class that can't be depickled (throws a type error,
     just like the numpy.maskedarray does occacionally)"""
     def __getstate__(self):
-        return ['5']
+        return {'shu': '5'}
 
     def __setstate__(self, state):
         print(state)
@@ -3337,7 +3338,7 @@ class TestingTheUnexpectedTests(PPGPerTest):
         def dies():
             import sys
             #logging.info("Now terminating child python")
-            print ('hello')
+            print('hello')
             sys.stderr.write("I am stderr\n")
             sys.stdout.flush()
             sys.exit(5)
@@ -3371,6 +3372,7 @@ class TestingTheUnexpectedTests(PPGPerTest):
         self.assertEqual(read('out/As'), 'A')
         self.assertEqual(read('out/B'), 'A')
         self.assertEqual(read('out/Bs'), 'A')
+        print("second run")
         ppg.new_pipegraph(dump_graph=False)
 
         job_A = ppg.FileGeneratingJob('out/A', do_a)
@@ -3388,8 +3390,8 @@ class TestingTheUnexpectedTests(PPGPerTest):
         os.chdir(os.path.dirname(__file__))
         p = subprocess.Popen(['python', '_import_does_not_hang.py'], stdout = subprocess.PIPE, stderr = subprocess.PIPE)
         stdout, stderr = p.communicate()
-        print stdout, stderr
-        self.assertTrue('OK' in stdout)
+        print(stdout, stderr)
+        self.assertTrue(b'OK' in stdout)
         os.chdir(old_dir)
 
 
@@ -3534,7 +3536,7 @@ class TestFinalJobs(PPGPerTest):
         jobB.depends_on(jobA)
         final_job = ppg.FinalJob('da_final', lambda : None)
         ppg.util.global_pipegraph.connect_graph()
-        print (final_job.prerequisites)
+        print(final_job.prerequisites)
         for x in jobB, jobC, jobD:
             self.assertTrue(x in final_job.prerequisites)
             self.assertTrue(final_job in x.dependants)
@@ -3547,7 +3549,7 @@ class TestFinalJobs(PPGPerTest):
             jobA.depends_on(final_job)
             self.assertFalse("Exception not raised")
         except ppg.JobContractError as e:
-            print (e)
+            print(e)
             self.assertTrue('No jobs can depend on FinalJobs' in str(e))
 
 class TestJobList(PPGPerTest):
