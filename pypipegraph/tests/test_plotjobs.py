@@ -211,5 +211,5 @@ class PlotJobTests(PPGPerTest):
             job = ppg.PlotJob(5, lambda: 1, lambda df: 34)
         self.assertRaises(ValueError, inner)
 
-if __name__ == '__main__': 
+if __name__ == '__main__':
     unittest.main()
