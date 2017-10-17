@@ -36,6 +36,8 @@ import os
 import shutil
 import gc
 import subprocess
+import hashlib
+import stat
 
 
 #rc_gen = lambda : ppg.resource_coordinators.LocalTwisted()
@@ -1752,6 +1754,142 @@ class InvariantTests(PPGPerTest):
         ppg.run_pipegraph()
         self.assertEqual(read(of), 'shushu') #job does get rerun
 
+    def test_robust_filechecksum_invariant(self):
+        of = 'out/a'
+        def do_write():
+            append(of, 'shu' * self.sentinel_count())
+        ftfn = 'out/ftdep'
+        write(ftfn,'hello')
+        #import stat
+        #logging.info('file time after creating %s'% os.stat(ftfn)[stat.ST_MTIME])
+
+        write(of,'hello')
+
+        job = ppg.FileGeneratingJob(of, do_write)
+        dep = ppg.RobustFileChecksumInvariant(ftfn)
+        job.depends_on(dep)
+        ppg.run_pipegraph()
+        self.assertEqual(read(of), 'shu') #job get's run though there is a file, because the FileTimeInvariant was not stored before...
+
+        ppg.new_pipegraph(rc_gen(), quiet=True, dump_graph=False)
+        job = ppg.FileGeneratingJob(of, do_write)
+        dep = ppg.RobustFileChecksumInvariant(ftfn)
+        job.depends_on(dep)
+        ppg.run_pipegraph()
+        self.assertEqual(read(of), 'shu') #job does not get rerun...
+
+        os.mkdir('out/moved_here')
+        shutil.move(ftfn, os.path.join('out/moved_here', 'ftdep'))
+        ppg.new_pipegraph(rc_gen(), quiet=True, dump_graph=False)
+        job = ppg.FileGeneratingJob(of, do_write)
+        dep = ppg.RobustFileChecksumInvariant(os.path.join('out/moved_here', 'ftdep'))
+        job.depends_on(dep)
+        ppg.run_pipegraph()
+        self.assertEqual(read(of), 'shu') #job does not get rerun...
+
+    def test_robust_filechecksum_invariant_after_normal(self):
+        of = 'out/a'
+        def do_write():
+            append(of, 'shu' * self.sentinel_count())
+        ftfn = 'out/ftdep'
+        write(ftfn,'hello')
+        #import stat
+        #logging.info('file time after creating %s'% os.stat(ftfn)[stat.ST_MTIME])
+
+        write(of,'hello')
+
+        job = ppg.FileGeneratingJob(of, do_write)
+        dep = ppg.FileChecksumInvariant(ftfn)
+        job.depends_on(dep)
+        ppg.run_pipegraph()
+        self.assertEqual(read(of), 'shu') #job get's run though there is a file, because the FileTimeInvariant was not stored before...
+
+        ppg.new_pipegraph(rc_gen(), quiet=True, dump_graph=False)
+        job = ppg.FileGeneratingJob(of, do_write)
+        dep = ppg.FileChecksumInvariant(ftfn)
+        job.depends_on(dep)
+        ppg.run_pipegraph()
+        self.assertEqual(read(of), 'shu') #job does not get rerun...
+
+        os.mkdir('out/moved_here')
+        shutil.move(ftfn, os.path.join('out/moved_here', 'ftdep'))
+        ppg.new_pipegraph(rc_gen(), quiet=True, dump_graph=False)
+        job = ppg.FileGeneratingJob(of, do_write)
+        dep = ppg.RobustFileChecksumInvariant(os.path.join('out/moved_here', 'ftdep'))
+        job.depends_on(dep)
+        ppg.run_pipegraph()
+        self.assertEqual(read(of), 'shu') #job does not get rerun...
+
+    def test_file_invariant_with_md5sum(self):
+        of = 'out/a'
+        def do_write():
+            append(of, 'shu' * self.sentinel_count())
+        ftfn = 'out/ftdep'
+        write(ftfn,'hello')
+        #import stat
+        #logging.info('file time after creating %s'% os.stat(ftfn)[stat.ST_MTIME])
+
+        write(of,'hello')
+
+        job = ppg.FileGeneratingJob(of, do_write)
+        dep = ppg.FileChecksumInvariant(ftfn)
+        job.depends_on(dep)
+        ppg.run_pipegraph()
+        self.assertEqual(read(of), 'shu') #job get's run though there is a file, because the FileTimeInvariant was not stored before...
+
+        with open(ftfn + '.md5sum', 'wb') as op:
+            op.write(hashlib.md5('hello world').hexdigest())
+        write(ftfn,'hello world') #different content
+        t = time.time()
+        # now make 
+        os.utime(ftfn, (t, t))
+        os.utime(ftfn + '.md5sum', (t, t))
+        time.sleep(1) #give the file system a second to realize the change.
+
+        ppg.new_pipegraph(rc_gen(), quiet=True, dump_graph=False)
+        job = ppg.FileGeneratingJob(of, do_write)
+        dep = ppg.FileChecksumInvariant(ftfn)
+        job.depends_on(dep)
+        ppg.run_pipegraph()
+        self.assertEqual(read(of), 'shushu') #job get's run though there is a file, because the md5sum changed.
+
+        with open(ftfn + '.md5sum', 'wb') as op:
+            op.write(hashlib.md5('hello world').hexdigest())
+        write(ftfn,'hello') #different content, but the md5sum is stil the same!
+        t = time.time()
+        # now make 
+        os.utime(ftfn, (t, t))
+        os.utime(ftfn + '.md5sum', (t, t))
+        time.sleep(1) #give the file system a second to realize the change.
+
+        ppg.new_pipegraph(rc_gen(), quiet=True, dump_graph=False)
+        job = ppg.FileGeneratingJob(of, do_write)
+        dep = ppg.FileChecksumInvariant(ftfn)
+        job.depends_on(dep)
+        ppg.run_pipegraph()
+        self.assertEqual(read(of), 'shushu') #job does not get rerun, md5sum did not change...
+
+        t = time.time() - 100  # force a file time mismatch
+        os.utime(ftfn, (t, t))  # I must change the one on the actual file, otherwise the 'size+filetime is the same' optimization bytes me
+
+        ppg.util.stat_cache = {}
+        ppg.new_pipegraph(rc_gen(), quiet=True, dump_graph=False)
+        job = ppg.FileGeneratingJob(of, do_write)
+        dep = ppg.FileChecksumInvariant(ftfn)
+        job.depends_on(dep)
+        ppg.run_pipegraph()
+        self.assertEqual(read(of), 'shushushu') #job does get rerun, md5sum and file time mismatch 
+        self.assertEqual(os.stat(ftfn)[stat.ST_MTIME], os.stat(ftfn + '.md5sum')[stat.ST_MTIME])
+
+
+
+
+
+
+
+
+
+ 
     def test_invariant_dumping_on_job_failure(self):
         def w():
             write('out/A', 'A')
