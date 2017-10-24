@@ -392,7 +392,6 @@ class Pipegraph(object):
                     try:
                         pickle.dump(key, op, pickle.HIGHEST_PROTOCOL)
                         pickle.dump(value, op, pickle.HIGHEST_PROTOCOL)
-                        print("pickled", key)
                     except Exception as e:
                         print (key)
                         print (value)
