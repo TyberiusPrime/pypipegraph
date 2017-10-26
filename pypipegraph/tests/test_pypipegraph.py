@@ -235,19 +235,21 @@ class CycleTests(PPGPerTest):
         ppg.util.global_pipegraph.connect_graph()
         ppg.util.global_pipegraph.check_cycles()
         self.assertTrue(jobD in ppg.util.global_pipegraph.possible_execution_order)
-        self.assertFalse(jobD == ppg.util.global_pipegraph.possible_execution_order[0])
-        print('before')
-        for x in ppg.util.global_pipegraph.possible_execution_order:
-            print(x.job_id)
-        print('after')
+        if jobD == ppg.util.global_pipegraph.possible_execution_order[0]:
+            to_prio = jobB
+        else:
+            to_prio = jobD
+        self.assertFalse(to_prio == ppg.util.global_pipegraph.possible_execution_order[0])
+        ppg.util.global_pipegraph.prioritize(to_prio)
 
-        ppg.util.global_pipegraph.prioritize(jobD)
-        for x in ppg.util.global_pipegraph.possible_execution_order:
-            print(x.job_id)
-
-        self.assertTrue(jobD == ppg.util.global_pipegraph.possible_execution_order[0])
+        self.assertTrue(to_prio == ppg.util.global_pipegraph.possible_execution_order[0])
 
         ppg.util.global_pipegraph.prioritize(jobB)
+        print("after prio b")
+        for x in ppg.util.global_pipegraph.possible_execution_order:
+            print(x.job_id)
+
+
         self.assertTrue(jobB == ppg.util.global_pipegraph.possible_execution_order[0])
         self.assertTrue(ppg.util.global_pipegraph.possible_execution_order.index(jobA) > ppg.util.global_pipegraph.possible_execution_order.index(jobB))
         ppg.util.global_pipegraph.prioritize(jobC)
@@ -1838,7 +1840,7 @@ class InvariantTests(PPGPerTest):
         self.assertEqual(read(of), 'shu') #job get's run though there is a file, because the FileTimeInvariant was not stored before...
 
         with open(ftfn + '.md5sum', 'wb') as op:
-            op.write(hashlib.md5('hello world').hexdigest())
+            op.write(hashlib.md5(b'hello world').hexdigest().encode('utf-8'))
         write(ftfn,'hello world') #different content
         t = time.time()
         # now make 
@@ -1854,7 +1856,7 @@ class InvariantTests(PPGPerTest):
         self.assertEqual(read(of), 'shushu') #job get's run though there is a file, because the md5sum changed.
 
         with open(ftfn + '.md5sum', 'wb') as op:
-            op.write(hashlib.md5('hello world').hexdigest())
+            op.write(hashlib.md5(b'hello world').hexdigest().encode('utf-8'))
         write(ftfn,'hello') #different content, but the md5sum is stil the same!
         t = time.time()
         # now make 

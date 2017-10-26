@@ -660,7 +660,7 @@ class FileChecksumInvariant(_InvariantJob):
             else:
                 checksum = self._calc_checksum()
                 with open(md5_file, 'wb') as op:
-                    op.write(checksum)
+                    op.write(checksum.encode('utf-8'))
                 os.utime(md5_file, (st[stat.ST_MTIME], st[stat.ST_MTIME]))
                 return checksum
         else:
