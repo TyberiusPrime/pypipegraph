@@ -283,7 +283,10 @@ class Pipegraph(object):
             n = S.pop()
             L.append(n)
             for m in n.prerequisites:
-                m.dependants_copy.remove(n)
+                try:
+                    m.dependants_copy.remove(n)
+                except AttributeError:
+                    raise ValueError("Somehow a job that was created for an older pypipegraph is still around and gumming up the works. Job in question: %s" % m)
                 if not m.dependants_copy:
                     S.append(m)
         return L
@@ -344,24 +347,34 @@ class Pipegraph(object):
             op.seek(0, os.SEEK_SET)
             self.invariant_status = collections.defaultdict(bool)
             leave = False
+            possible_pickle_exceptions = [TypeError]
+            try:
+                import _pickle
+                possible_pickle_exceptions.append(_pickle.UnpicklingError)
+            except ImportError:
+                pass
+            possible_pickle_exceptions = tuple(possible_pickle_exceptions)
+
             while not leave:
                 try:
                     key = None
                     key = pickle.load(op)
+                    old_pos = op.tell()
                     value = pickle.load(op)
                     self.invariant_status[key] = value
-                except TypeError as e:
-                    print(e)
+                except possible_pickle_exceptions as e:
                     if key is None:
+                        raise e
                         raise ValueError("Could not depickle invariants - even in the robust implementation (key not found")
                     logger.error("Could not depickle invariant for %s - check code for depickling bugs. Job will rerun, probably until the (de)pickling bug is fixed.\n Exception: %s" % (key, e))
                     self.invariant_loading_issues[key] = e
-                    letter = op.read(1)
-                    #at least try to find the end of the pickle... this might fail horribly though
-                    while letter and letter != pickle_stop:
-                        letter = op.read(1)
-                    if not letter:
-                        leave = True
+                    op.seek(old_pos)
+                    # use pickle tools to read the pickles op codes until
+                    # the end of the current pickle, hopefully allowing decoding of the next one
+                    # of course if the actual on disk file is messed up beyond this,
+                    # we're done for.
+                    import pickletools
+                    list(pickletools.genops(op))
                 except EOFError:
                     leave = True
             op.close()
@@ -374,18 +387,20 @@ class Pipegraph(object):
         finished = False
         while not finished:
             try:
-                op = open(self.invariant_status_filename + '.temp', 'wb')
+                op = open(os.path.abspath(self.invariant_status_filename + '.temp'), 'wb')
                 for key, value in self.invariant_status.items():
                     try:
                         pickle.dump(key, op, pickle.HIGHEST_PROTOCOL)
                         pickle.dump(value, op, pickle.HIGHEST_PROTOCOL)
                     except Exception as e:
-                        print( key)
-                        print( value)
-                        raise
+                        print (key)
+                        print (value)
+                        raise e
                 op.close()
+                if os.path.exists(self.invariant_status_filename + '.old'):  # we use the .old copy for comparison purposes later on
+                    os.unlink(self.invariant_status_filename + '.old')
                 if os.path.exists(self.invariant_status_filename):
-                    os.unlink(self.invariant_status_filename)
+                    os.rename(self.invariant_status_filename, self.invariant_status_filename + '.old')
                 os.rename(self.invariant_status_filename + '.temp', self.invariant_status_filename)
                 finished = True
             except KeyboardInterrupt:
@@ -405,7 +420,11 @@ class Pipegraph(object):
             old = self.invariant_status[job.job_id]
             try:
                 try:
-                    inv = job.get_invariant(old)
+                    try:
+                        inv = job.get_invariant(old, self.invariant_status)
+                    except TypeError:
+                        print(job)
+                        raise
                 except Exception as e:
                     if isinstance(e, util.NothingChanged):
                         pass
@@ -419,7 +438,7 @@ class Pipegraph(object):
                 old = inv  # so no change...
                 self.invariant_status[job.job_id] = inv  # so not to recheck next time...
             if inv != old:
-                if True:
+                if False:
                     logger.info("Invariant change for %s" % job)
                     logger.info("%s invariant was %s, is now %s" % (job, old, inv))
                     if type(old) is str and type(inv) is str:
@@ -783,7 +802,7 @@ class Pipegraph(object):
         print('-' * 75, file=file_handle)
         print('%s failed. Reason:' % (job, ), file=file_handle)
         if job.exception:
-            print('\tThrew an exception %s' % (unicode(job.exception).encode('ascii', errors='replace'),), file=file_handle)
+            print('\tThrew an exception %s' % (str(job.exception).encode('ascii', errors='replace'),), file=file_handle)
             print('\tTraceback: %s' % (job.trace,), file=file_handle)
 
         print('\t stdout was %s' % (job.stdout,), file=file_handle)
@@ -800,7 +819,7 @@ class Pipegraph(object):
     def dump_graph(self):
         """Dump the current graph in text format into logs/ppg_graph.txt if logs exists"""
         def do_dump():
-            import job as jobs
+            from . import job as jobs
             nodes = {}
             edges = []
             for job in self.jobs.values():
@@ -863,7 +882,7 @@ class Pipegraph(object):
         op.close()
 
     def _write_gml(self, output_filename, node_to_attribute_dict, edges):
-        op = open(output_filename, 'wb')
+        op = open(output_filename, 'w')
         op.write("""graph
 [
 """)
@@ -944,5 +963,5 @@ class Pipegraph(object):
     def signal_finished(self):
         """If there's a .pipegraph_finished.py in ~, call it"""
         fn = os.path.expanduser("~/.pipegraph_finished.py")
-        if os.path.exists(fn) and os.access(fn, os.X_OK) :
+        if os.path.exists(fn) and not os.path.isdir(fn) and os.access(fn, os.X_OK):
             os.system(fn)

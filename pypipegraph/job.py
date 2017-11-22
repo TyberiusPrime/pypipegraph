@@ -50,8 +50,10 @@ except ImportError:
 import traceback
 import platform;
 import time
+import six
 
 is_pypy = platform.python_implementation() == 'PyPy'
+module_type = type(sys)
 
 register_tags = False
 
@@ -175,11 +177,11 @@ class Job(object):
 
         for job in job_joblist_or_list_of_jobs:
             if not isinstance(job, Job):
-                if hasattr(job, '__iter__'):  # a nested list
+                if hasattr(job, '__iter__') and not isinstance(job, str):  # a nested list
                     self.depends_on(job)
                     pass
                 else:
-                    raise ValueError("Can only depend on Job objects")
+                    raise ValueError("Can only depend on Job objects, was: %s" % type(job))
             else:
                 if self in job.prerequisites:
                     raise ppg_exceptions.CycleError("Cycle adding %s to %s" % (self.job_id, job.job_id))
@@ -214,7 +216,7 @@ class Job(object):
         """Create the automagically generated FunctionInvariants if applicable"""
         pass
 
-    def get_invariant(self, old):
+    def get_invariant(self, old, all_invariant_stati):
         """Retrieve the invariant 'magic cookie' we should store for this Job.
         The job (and it's descendands) will be invalidated if you return anything
         but @old. You may escape this and raise a NothingChanged(new_value) exception,
@@ -227,10 +229,10 @@ class Job(object):
         _get_invariant(old) in subclasses.
         """
         if self.invariant_cache is None or self.invariant_cache[0] != old:
-            self.invariant_cache = (old, self._get_invariant(old))
+            self.invariant_cache = (old, self._get_invariant(old, all_invariant_stati))
         return self.invariant_cache[1]
 
-    def _get_invariant(self, old):
+    def _get_invariant(self, old, all_invariant_stati):
         """The actual workhorse/sub class specific function for get_invariant
         """
         return False
@@ -457,7 +459,7 @@ class FunctionInvariant(_InvariantJob):
         else:
             return "%s (job_id=%s,id=%s, Function: None)" % (self.__class__.__name__, self.job_id, id(self))
 
-    def _get_invariant(self, old):
+    def _get_invariant(self, old, all_invariant_stati):
         if self.function is None:
             return None  # since the 'default invariant' is False, this will still read 'invalidated the first time it's being used'
         if not hasattr(self.function, '__code__'):
@@ -469,18 +471,30 @@ class FunctionInvariant(_InvariantJob):
                 print (repr(self.function))
                 print (repr(self.function.im_func))
                 raise ValueError("Can't handle this object %s" % self.function)
-        if not (id(self.function.__code__), id(self.function.func_closure)) in util.func_hashes:
+        try:
+            closure = self.function.func_closure
+        except AttributeError:
+            closure = self.function.__closure__
+        key = (id(self.function.__code__), id(closure))
+        if not key in util.func_hashes:
             if hasattr(self.function, 'im_func') and 'cyfunction' in repr(self.function.im_func):
                 invariant = self.get_cython_source(self.function)
             else:
-                invariant = self.dis_code(self.function.__code__)
-                if self.function.func_closure:
-                    for name, cell in zip(self.function.__code__.co_freevars, self.function.func_closure):
+                invariant = self.dis_code(self.function.__code__, self.function)
+                if closure:
+                    for name, cell in zip(self.function.__code__.co_freevars, closure):
                         # we ignore references to self - in that use case you're expected to make your own ParameterInvariants, and we could not detect self.parameter anyhow (only self would be bound)
-                        #we also ignore bound functions - their address changes all the time. IDEA: Make this recursive (might get to be too expensive)
+                        # we also ignore bound functions - their address changes all the time. IDEA: Make this recursive (might get to be too expensive)
                         try:
-                            if name != 'self' and not hasattr(cell.cell_contents, '__code__'):
-                                x = str(cell.cell_contents)
+                            if (
+                                name != 'self' and
+                                not hasattr(cell.cell_contents, '__code__') and
+                                not isinstance(cell.cell_contents, module_type)
+                            ):
+                                if isinstance(cell.cell_contents, dict):
+                                    x = str(sorted(list(cell.cell_contents.items())))
+                                else:
+                                    x = str(cell.cell_contents)
                                 if 'at 0x' in x:  # if you don't have a sensible str(), we'll default to the class path. This takes things like <chipseq.quality_control.AlignedLaneQualityControl at 0x73246234>.
                                     x = x[:x.find('at 0x')]
                                 if 'id=' in x:
@@ -496,11 +510,12 @@ class FunctionInvariant(_InvariantJob):
             util.func_hashes[id(self.function.__code__)] = invariant
         return util.func_hashes[id(self.function.__code__)]
 
-    inner_code_object_re = re.compile('(<code	object	<[^>]+>?	at	0x[a-f0-9]+[^>]+)' + '|' +  #that's the cpython way
-                                       '(<code\tobject\t<[^>]+>,\tfile\t\'[^\']+\',\tline\t[0-9]+)' #that's how they look like in pypy. More sensibly, actually
+    inner_code_object_re = re.compile(
+                            r'(<code\sobject\s<?[^>]+>?\sat\s0x[a-f0-9]+[^>]+)' + '|' +  #that's the cpython way
+                            '(<code\tobject\t<[^>]+>,\tfile\t\'[^\']+\',\tline\t[0-9]+)' #that's how they look like in pypy. More sensibly, actually
             )
 
-    def dis_code(self, code):
+    def dis_code(self, code, function):
         """'dissassemble' python code.
         Strips lambdas (they change address every execution otherwise)"""
         # TODO: replace with bytecode based smarter variant
@@ -519,10 +534,12 @@ class FunctionInvariant(_InvariantJob):
             res.append("\t".join(row[1:]))
         res = "\n".join(res)
         res = self.inner_code_object_re.sub('lambda', res)
+        if function and hasattr(function, '__qualname__'):
+            res = res.replace(function.__qualname__, '<func name ommited>')
         for ii, constant in enumerate(code.co_consts):
             if hasattr(constant, 'co_code'):
                 res += 'inner no %i' % ii
-                res += self.dis_code(constant)
+                res += self.dis_code(constant, None)
         return res
 
     def get_cython_source(self, cython_func):
@@ -539,7 +556,7 @@ class FunctionInvariant(_InvariantJob):
 
         #load the source code
         op = open(filename, 'rb')
-        d = op.read().split("\n")
+        d = op.read().decode('utf-8').split("\n")
         op.close()
 
         #extract the function at hand, minus doc string
@@ -590,7 +607,7 @@ class ParameterInvariant(_InvariantJob):
         self.accept_as_unchanged_func = accept_as_unchanged_func
         Job.__init__(self, job_id)
 
-    def _get_invariant(self, old):
+    def _get_invariant(self, old, all_invariant_stati):
         if self.accept_as_unchanged_func is not None:
             if self.accept_as_unchanged_func(old):
                 logger.info("Nothing Changed for %s" % self)
@@ -607,7 +624,7 @@ class FileChecksumInvariant(_InvariantJob):
         Job.__init__(self, filename)
         self.input_file = filename
 
-    def _get_invariant(self, old):
+    def _get_invariant(self, old, all_invariant_stati):
         st = util.stat(self.input_file)
         filetime = st[stat.ST_MTIME]
         filesize = st[stat.ST_SIZE]
@@ -633,15 +650,66 @@ class FileChecksumInvariant(_InvariantJob):
             return filetime, filesize, chksum
 
     def checksum(self):
+        md5_file = self.input_file + '.md5sum'
+        if os.path.exists(md5_file):
+            st = util.stat(self.input_file)
+            st_md5 = util.stat(md5_file)
+            if st[stat.ST_MTIME] == st_md5[stat.ST_MTIME]:
+                with open(md5_file, 'rb') as op:
+                    return op.read()
+            else:
+                checksum = self._calc_checksum()
+                with open(md5_file, 'wb') as op:
+                    op.write(checksum.encode('utf-8'))
+                os.utime(md5_file, (st[stat.ST_MTIME], st[stat.ST_MTIME]))
+                return checksum
+        else:
+            return self._calc_checksum()
+        
+    def _calc_checksum(self):
         file_size = os.stat(self.job_id)[stat.ST_SIZE]
         if file_size > 200 * 1024 * 1024:
             print ('Taking md5 of large file', self.job_id)
-        op = open(self.job_id, 'rb')
-        res = hashlib.md5(op.read()).hexdigest()
-        op.close()
+        with open(self.job_id, 'rb') as op:
+            block_size = 1024**2 * 10
+            block = op.read(block_size)
+            _hash = hashlib.md5()
+            while block:
+                _hash.update(block)
+                block = op.read(block_size)
+            res = _hash.hexdigest()
         return res
 
 FileTimeInvariant = FileChecksumInvariant
+
+
+class RobustFileChecksumInvariant(FileChecksumInvariant):
+    """A file checksum invariant that is robust against file moves (but not against renames!"""
+
+    def _get_invariant(self, old, all_invariant_stati):
+        if old: # if we have something stored, this acts like a normal FileChecksumInvariant
+            return FileChecksumInvariant._get_invariant(self, old, all_invariant_stati)
+        else:
+            basename = os.path.basename(self.input_file)
+            st = util.stat(self.input_file)
+            filetime = st[stat.ST_MTIME]
+            filesize = st[stat.ST_SIZE]
+            checksum = self.checksum()
+            for job_id in all_invariant_stati:
+                if os.path.basename(job_id) == basename: # could be a moved file...
+                    old = all_invariant_stati[job_id]
+                    if isinstance(old, tuple):
+                        if len(old) == 2:
+                            old_filesize, old_chksum = old
+                        else:
+                            dummy_old_filetime, old_filesize, old_chksum = old
+                        if old_filesize == filesize:
+                            if old_chksum == checksum:  # don't check filetime, if the file has moved it will have changed
+                                #print("checksum hit %s" % self.input_file)
+                                raise util.NothingChanged((filetime, filesize, checksum))
+            # no suitable old job found.
+            return (filetime, filesize, checksum)
+
 
 class FileGeneratingJob(Job):
     """Create a single output file of more than 0 bytes."""
@@ -708,13 +776,17 @@ class FileGeneratingJob(Job):
             try:
                 self.callback()
             except TypeError as e:
-                if 'takes exactly 1 argument (0 given)' in str(e):
+                if (
+                'takes exactly 1 argument (0 given)' in str(e) or # python2
+                ' missing 1 required positional argument:' in str(e) # python3
+                ):
                     self.callback(self.job_id)
                 else:
                     raise
         except Exception as e:
             exc_info = sys.exc_info()
-            print(traceback.format_exc(), file=sys.stderr)
+            tb = traceback.format_exc()
+            sys.stderr.write(tb)
             try:
                 if self.rename_broken:
                     shutil.move(self.job_id, self.job_id + '.broken')
@@ -757,8 +829,8 @@ class MultiFileGeneratingJob(FileGeneratingJob):
             raise ValueError("function was not a callable")
         sorted_filenames = list(sorted(x for x in filenames))
         for x in sorted_filenames:
-            if not isinstance(x, str) and not isinstance(x, unicode):
-                raise ValueError("Not all filenames passed to MultiFileGeneratingJob were str or unicode objects")
+            if not isinstance(x, six.string_types):
+                raise ValueError("Not all filenames passed to MultiFileGeneratingJob were string objects")
             if x in util.filename_collider_check and util.filename_collider_check[x] is not self:
                 raise ValueError("Two jobs generating the same file: %s %s - %s" % (self, util.filename_collider_check[x], x))
             else:
@@ -886,8 +958,8 @@ class MultiTempFileGeneratingJob(FileGeneratingJob):
             raise ValueError("function was not a callable")
         sorted_filenames = list(sorted(x for x in filenames))
         for x in sorted_filenames:
-            if not isinstance(x, str) and not isinstance(x, unicode):
-                raise ValueError("Not all filenames passed to MultiTempFileGeneratingJob were str or unicode objects")
+            if not isinstance(x, six.string_types):
+                raise ValueError("Not all filenames passed to MultiTempFileGeneratingJob were string objects")
             if x in util.filename_collider_check and util.filename_collider_check[x] is not self:
                 raise ValueError("Two jobs generating the same file: %s %s - %s" % (self, util.filename_collider_check[x], x))
             else:
@@ -1310,8 +1382,8 @@ class PlotJob(FileGeneratingJob):
     To use these jobs, you need to have pyggplot available.
     """
     def __init__(self, output_filename, calc_function, plot_function, render_args=None, skip_table=False, skip_caching=False):
-        if not isinstance(output_filename, str) or isinstance(output_filename, unicode):
-            raise ValueError("output_filename was not a string or unicode")
+        if not isinstance(output_filename, six.string_types):
+            raise ValueError("output_filename was not a string type")
         if not (output_filename.endswith('.png') or output_filename.endswith('.pdf') or output_filename.endswith('.svg')):
             raise ValueError("Don't know how to create this file %s, must end on .png or .pdf or .svg" % output_filename)
 
@@ -1467,8 +1539,8 @@ def CombinedPlotJob(output_filename, plot_jobs, facet_arguments, render_args=Non
 
     To use these jobs, you need to have pyggplot available.
     """
-    if not isinstance(output_filename, str) or isinstance(output_filename, unicode):#FIXME
-        raise ValueError("output_filename was not a string or unicode")
+    if not isinstance(output_filename, six.string_types):
+        raise ValueError("output_filename was not a string type")
     if not (output_filename.endswith('.png') or output_filename.endswith('.pdf')):
         raise ValueError("Don't know how to create this file %s, must end on .png or .pdf" % output_filename)
 
@@ -1549,14 +1621,14 @@ class CachedAttributeLoadingJob(AttributeLoadingJob):
     a file called job_id and reread on the next run"""
 
     def __new__(cls, job_id, *args, **kwargs):
-        if not isinstance(job_id, str) and not isinstance(job_id, str): #FIXME
-            raise ValueError("cache_filename/job_id was not a str/unicode jobect")
+        if not isinstance(job_id, six.string_types):
+            raise ValueError("cache_filename/job_id was not a string i jobect")
 
         return Job.__new__(cls, job_id + '_load')
 
     def __init__(self, cache_filename, target_object, target_attribute, calculating_function):
-        if not isinstance(cache_filename, str) and not isinstance(cache_filename, str): #FIXME
-            raise ValueError("cache_filename/job_id was not a str/unicode jobect")
+        if not isinstance(cache_filename, six.string_types):
+            raise ValueError("cache_filename/job_id was not a string jobect")
         if not hasattr(calculating_function, '__call__'):
             raise ValueError("calculating_function was not a callable")
         if not isinstance(target_attribute, str):
@@ -1603,13 +1675,13 @@ class CachedDataLoadingJob(DataLoadingJob):
     a file called job_id and reread on the next run"""
 
     def __new__(cls, job_id, *args, **kwargs):
-        if not isinstance(job_id, str) and not isinstance(job_id, str): #FIXME
-            raise ValueError("cache_filename/job_id was not a str/unicode jobect")
+        if not isinstance(job_id, six.string_types):
+            raise ValueError("cache_filename/job_id was not a string object")
         return Job.__new__(cls, job_id + '_load')  # plus load, so that the cached data goes into the cache_filename passed to the constructor...
 
     def __init__(self, cache_filename, calculating_function, loading_function):
-        if not isinstance(cache_filename, str) and not isinstance(cache_filename, str): #FIXME
-            raise ValueError("cache_filename/job_id was not a str/unicode jobect")
+        if not isinstance(cache_filename, six.string_types):
+            raise ValueError("cache_filename/job_id was not a string object")
         if not hasattr(calculating_function, '__call__'):
             raise ValueError("calculating_function was not a callable")
         if not hasattr(loading_function, '__call__'):
@@ -1674,13 +1746,13 @@ class MemMappedDataLoadingJob(DataLoadingJob):
     def __new__(cls, job_id, *args, **kwargs):
         if is_pypy:
             raise NotImplementedError("Numpypy currently does not support memmap(), there is no support for MemMappedDataLoadingJob using pypy.")
-        if not isinstance(job_id, str) and not isinstance(job_id, str): #FIXME
-            raise ValueError("cache_filename/job_id was not a str/unicode jobect")
+        if not isinstance(job_id, six.string_types):
+            raise ValueError("cache_filename/job_id was not a string object")
         return Job.__new__(cls, job_id + '_load')  # plus load, so that the cached data goes into the cache_filename passed to the constructor...
 
     def __init__(self, cache_filename, calculating_function, loading_function, dtype):
-        if not isinstance(cache_filename, str) and not isinstance(cache_filename, str): #FIXME
-            raise ValueError("cache_filename/job_id was not a str/unicode jobect")
+        if not isinstance(cache_filename, six.string_types):
+            raise ValueError("cache_filename/job_id was not a string object")
         if not hasattr(calculating_function, '__call__'):
             raise ValueError("calculating_function was not a callable")
         if not hasattr(loading_function, '__call__'):

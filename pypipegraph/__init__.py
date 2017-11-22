@@ -23,9 +23,9 @@ from .job import (
     CachedAttributeLoadingJob, CachedDataLoadingJob,
     PlotJob, CombinedPlotJob,
     FunctionInvariant, ParameterInvariant,
-    FileTimeInvariant, FileChecksumInvariant,
+    FileTimeInvariant, FileChecksumInvariant, RobustFileChecksumInvariant,
     JobGeneratingJob, DependencyInjectionJob,
-    FinalJob, 
+    FinalJob,
     MemMappedDataLoadingJob,
     MultiTempFileGeneratingJob,
     NotebookJob
@@ -47,12 +47,12 @@ all = [
         CachedAttributeLoadingJob, CachedDataLoadingJob,
         PlotJob, CombinedPlotJob,
         FunctionInvariant, ParameterInvariant,
-        FileTimeInvariant, FileChecksumInvariant,
+        FileTimeInvariant, FileChecksumInvariant, RobustFileChecksumInvariant,
         JobGeneratingJob, DependencyInjectionJob,
         FinalJob,
         MemMappedDataLoadingJob,
         util,
         MultiTempFileGeneratingJob,
         NotebookJob
-        
+
         ]

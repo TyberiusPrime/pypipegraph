@@ -3,7 +3,7 @@ from __future__ import print_function
 """
 The MIT License (MIT)
 
-Copyright (c) 2012, Florian Finkernagel <finkernagel@imt.uni-marburg.de>
+Copyright (c) 2017, Florian Finkernagel <finkernagel@imt.uni-marburg.de>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -31,13 +31,13 @@ import os
 import codecs
 import traceback
 import multiprocessing
-from mp_queues import MPQueueFixed
+from .mp_queues import MPQueueFixed
 import threading
 import signal
 
 try:
-    import kitchen
-    kitchen_available = True
+    #import kitchen
+    kitchen_available = False
 except ImportError:
     kitchen_available = False
 try:
@@ -53,16 +53,6 @@ except ImportError:
     import pickle
 from . import ppg_exceptions
 import tempfile
-
-try:
-    from twisted.internet import reactor
-    from twisted.internet.protocol import ClientCreator, ProcessProtocol
-    from twisted.protocols import amp
-    from . import messages
-    twisted_available = True
-except ImportError:
-        twisted_available = False
-
 
 
 class DummyResourceCoordinator:
@@ -108,6 +98,8 @@ class LocalSystem:
         self.physical_memory, self.swap_memory = get_memory_available()
         self.timeout = 5
         self.profile = profile
+        if multiprocessing.current_process().name != 'MainProcess':
+            interactive = False
         self.interactive = interactive
 
     def spawn_slaves(self):
@@ -128,17 +120,22 @@ class LocalSystem:
 
     def enter_loop(self):
         self.spawn_slaves()
-        self.que = MPQueueFixed()
+        if sys.version_info[0] == 2:
+            self.que = MPQueueFixed()
+        else:
+            self.que = multiprocessing.Queue()
+
         logger.info("Starting first batch of jobs")
         self.pipegraph.start_jobs()
         if self.interactive:
-            import interactive
+            from . import interactive
             interactive_thread = threading.Thread(target = interactive.thread_loop)
             interactive_thread.start()
-        s = signal.signal(signal.SIGINT, signal_handler)  # ignore ctrl-c
+            s = signal.signal(signal.SIGINT, signal_handler)  # ignore ctrl-c
         while True:
             self.slave.check_for_dead_jobs()  # whether time out or or job was done, let's check this...
-            self.see_if_output_is_requested()
+            if self.interactive:
+                self.see_if_output_is_requested()
             try:
                 logger.info("Listening to que")
                 r = self.que.get(block=True, timeout=self.timeout)
@@ -200,7 +197,7 @@ class LocalSystem:
             if not interactive.interpreter.stay:
                 interactive.interpreter.terminated = True
             interactive_thread.join()
-        signal.signal(signal.SIGINT, s)
+            signal.signal(signal.SIGINT, s)
         logger.info("Leaving loop")
 
     def see_if_output_is_requested(self):
@@ -261,8 +258,8 @@ class LocalSlave:
                 stdout = tempfile.SpooledTemporaryFile(mode='w+')
                 stderr = tempfile.SpooledTemporaryFile(mode='w+')
                 if kitchen_available:
-                    stdout = kitchen.text.converters.getwriter('utf8')(stdout)
-                    stderr = kitchen.text.converters.getwriter('utf8')(stderr)
+                    stdout = kitchen.text.converters.getwriter('utf-8')(stdout)
+                    stderr = kitchen.text.converters.getwriter('utf-8')(stderr)
                 self.run_a_job(job, stdout, stderr)
                 logger.info("Slave: returned from %s in slave, data was put" % job)
             else:
@@ -270,8 +267,8 @@ class LocalSlave:
                 stdout = tempfile.TemporaryFile(mode='w+') #no more spooling - it doesn't get passed back
                 stderr = tempfile.TemporaryFile(mode='w+')
                 if kitchen_available:
-                    stdout = kitchen.text.converters.getwriter('utf8')(stdout)
-                    stderr = kitchen.text.converters.getwriter('utf8')(stderr)
+                    stdout = kitchen.text.converters.getwriter('utf-8')(stdout)
+                    stderr = kitchen.text.converters.getwriter('utf-8')(stderr)
                 stdout.fileno()
                 stderr.fileno()
                 p = multiprocessing.Process(target=self.wrap_run, args=[job, stdout, stderr, False])
@@ -279,14 +276,16 @@ class LocalSlave:
                 job.stdout_handle = stdout
                 job.stderr_handle = stderr
                 p.start()
+                logger.info("Slave pid: %s" % (p.pid,))
                 self.process_to_job[p] = job
                 logger.info("Slave, returning to start_jobs")
 
     def load_job(self, job):  # this executes a load job returns false if an error occured
         stdout = tempfile.SpooledTemporaryFile(mode='w')
         stderr = tempfile.SpooledTemporaryFile(mode='w')
-        stdout = kitchen.text.converters.getwriter('utf8')(stdout)
-        stderr = kitchen.text.converters.getwriter('utf8')(stderr)
+        if kitchen_available:
+            stdout = kitchen.text.converters.getwriter('utf-8')(stdout)
+            stderr = kitchen.text.converters.getwriter('utf-8')(stderr)
 
         old_stdout = sys.stdout
         old_stderr = sys.stderr
@@ -307,10 +306,10 @@ class LocalSlave:
             except Exception as e:  # some exceptions can't be pickled, so we send a string instead
                 exception = str(exception)
         stdout.seek(0, os.SEEK_SET)
-        stdout_text = stdout.read()
+        stdout_text = stdout.read()[-10 * 1024:]
         stdout.close()
         stderr.seek(0, os.SEEK_SET)
-        stderr_text = stderr.read()
+        stderr_text = stderr.read()[-10 * 1024:]
         stderr.close()
         sys.stdout = old_stdout
         sys.stderr = old_stderr
@@ -332,7 +331,8 @@ class LocalSlave:
         self.temp = job.run()
 
     def wrap_run(self, job, stdout, stderr, is_local):
-        s = signal.signal(signal.SIGINT, signal.SIG_IGN) # ignore ctrl-c
+        if self.rc.interactive:
+            s = signal.signal(signal.SIGINT, signal.SIG_IGN) # ignore ctrl-c
 
         if 'PYPIPEGRAPH_DO_COVERAGE' in os.environ:
             import coverage
@@ -385,7 +385,7 @@ class LocalSlave:
             stdout_text = stdout.read()
             stdout.close()
         except ValueError as e:
-            if 'I/O operation on closed file' in e:
+            if 'I/O operation on closed file' in str(e):
                 stdout_text = "Stdout could not be captured / io operation on closed file"
             else:
                 raise
@@ -394,7 +394,7 @@ class LocalSlave:
             stderr_text = stderr.read()
             stderr.close()
         except ValueError as e:
-            if 'I/O operation on closed file' in e:
+            if 'I/O operation on closed file' in str(e):
                 stderr_text = "stderr could not be captured / io operation on closed file"
             else:
                 raise
