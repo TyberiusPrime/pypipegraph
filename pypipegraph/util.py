@@ -74,7 +74,7 @@ util_logger = start_logging('util')
 
 
 def change_logging_port(port):
-    """By default, a running Pipegraph chatters to localhost:5005 via tcp 
+    """By default, a running Pipegraph chatters to localhost:5005 via tcp
     (use utils/log_listener.py to listen).
     If you want it to log to another port, use this function before createing the graph.
     """
@@ -183,6 +183,21 @@ def stat(filename):
         stat_cache[filename] = (os.stat(filename), time.time())
     s, t = stat_cache[filename]
     return s
+
+def job_or_filename(job_or_filename):
+    """Take a filename, or a job. Return filename, dependency-for-that-file
+    ie. either the job, or a FileChecksumInvariant"""
+    from job import FileGeneratingJob, FileChecksumInvariant
+    if isinstance(job_or_filename, FileGeneratingJob):
+        filename = job_or_filename.job_id
+        deps = [job_or_filename]
+    elif job_or_filename is not None:
+        filename = job_or_filename
+        deps = [FileChecksumInvariant(filename)]
+    else:
+        filename = None
+        deps = []
+    return filename, deps
 
 
 
