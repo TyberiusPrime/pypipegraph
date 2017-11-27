@@ -65,19 +65,20 @@ if modus == 'job':
         raise KeyError("Job not found in %s" % filename)
 
 
+                print('Using %s as status filename, use --status if you want another one'  % status_prefix)
     new = load_invariant(status_prefix, job_id_to_compare)
     old = load_invariant(status_prefix + '.old', job_id_to_compare)
 
-    print('New:')
-    print(new)
-    print('')
+print('New:')
+print(new)
+print('')
     if old == new:
-        print('Identicial')
+    print('Identicial')
     else:
-        print('Old:')
-        print(old)
-        print('')
-        print('Comparison')
+    print('Old:')
+    print(old)
+    print('')
+    print('Comparison')
 
         newf = tempfile.NamedTemporaryFile(prefix='new_')
         oldf = tempfile.NamedTemporaryFile(prefix='old_')
