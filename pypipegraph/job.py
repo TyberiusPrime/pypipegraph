@@ -139,6 +139,7 @@ class Job(object):
         if not hasattr(self, 'dependants'):  # test any of the following
             #else: this job was inited before, and __new__ returned an existing instance
             self.job_id = job_id
+            self.job_no = -1
             self.cores_needed = 1
             self.memory_needed = -1
             self.dependants = set()
