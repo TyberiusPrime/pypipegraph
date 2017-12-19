@@ -94,7 +94,7 @@ class MPQueueFixed(multiprocessing.queues.Queue):
                                         except:
                                             pass
                                         try:
-                                            op.write("%s" % obj)
+                                            op.write("%s" % (obj,)[:20000])
                                         except:
                                             pass
 
