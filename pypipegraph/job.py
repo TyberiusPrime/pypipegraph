@@ -665,7 +665,7 @@ class FileChecksumInvariant(_InvariantJob):
                 return checksum
         else:
             return self._calc_checksum()
-        
+
     def _calc_checksum(self):
         file_size = os.stat(self.job_id)[stat.ST_SIZE]
         if file_size > 200 * 1024 * 1024:
@@ -1425,7 +1425,7 @@ class PlotJob(FileGeneratingJob):
         def run_plot():
             df = self.get_data()
             plot = plot_function(df)
-            if not isinstance(plot, pyggplot.Plot):
+            if not isinstance(plot, pyggplot._PlotBase):
                 raise ppg_exceptions.JobContractError("%s.plot_function did not return a pyggplot.Plot " % (output_filename))
             if not 'width' in render_args and hasattr(plot, 'width'):
                 render_args['width'] = plot.width
