@@ -139,6 +139,7 @@ class Job(object):
         if not hasattr(self, 'dependants'):  # test any of the following
             #else: this job was inited before, and __new__ returned an existing instance
             self.job_id = job_id
+            self.job_no = -1
             self.cores_needed = 1
             self.memory_needed = -1
             self.dependants = set()
@@ -660,7 +661,7 @@ class FileChecksumInvariant(_InvariantJob):
             else:
                 checksum = self._calc_checksum()
                 with open(md5_file, 'wb') as op:
-                    op.write(checksum)
+                    op.write(checksum.encode('utf-8'))
                 os.utime(md5_file, (st[stat.ST_MTIME], st[stat.ST_MTIME]))
                 return checksum
         else:
