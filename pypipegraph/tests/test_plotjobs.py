@@ -2,9 +2,14 @@ from test_pypipegraph import PPGPerTest, rc_gen, append, write, read, writeappen
 import unittest
 import sys
 import os
-import exptools
-if os.path.exists(os.path.join(exptools.code_path, 'pyggplot')):
-    exptools.load_software('pyggplot')
+try:
+    import pyggplot
+    has_pyggplot = True
+except ImportError:
+    has_pyggplot = False
+    pass
+
+if has_pyggplot:
     #import R
     import pandas as pd
     import pyggplot
