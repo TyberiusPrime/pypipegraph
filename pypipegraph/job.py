@@ -616,7 +616,7 @@ class ParameterInvariant(_InvariantJob):
         return self.parameters
 
 
-class FileChecksumInvariant(_InvariantJob):
+class _FileChecksumInvariant(_InvariantJob):
     """Invalidates when the (md5) checksum of a file changed.
     Checksum only get's recalculated if the file modification time changed.
     """
@@ -681,15 +681,13 @@ class FileChecksumInvariant(_InvariantJob):
             res = _hash.hexdigest()
         return res
 
-FileTimeInvariant = FileChecksumInvariant
 
-
-class RobustFileChecksumInvariant(FileChecksumInvariant):
+class RobustFileChecksumInvariant(_FileChecksumInvariant):
     """A file checksum invariant that is robust against file moves (but not against renames!"""
 
     def _get_invariant(self, old, all_invariant_stati):
         if old: # if we have something stored, this acts like a normal FileChecksumInvariant
-            return FileChecksumInvariant._get_invariant(self, old, all_invariant_stati)
+            return _FileChecksumInvariant._get_invariant(self, old, all_invariant_stati)
         else:
             basename = os.path.basename(self.input_file)
             st = util.stat(self.input_file)
@@ -710,6 +708,31 @@ class RobustFileChecksumInvariant(FileChecksumInvariant):
                                 raise util.NothingChanged((filetime, filesize, checksum))
             # no suitable old job found.
             return (filetime, filesize, checksum)
+
+FileChecksumInvariant = RobustFileChecksumInvariant
+FileTimeInvariant = RobustFileChecksumInvariant
+
+
+if False:
+    class MultiFileChecksumInvariant(Job):
+
+        def __new__(cls, filenames, *args, **kwargs):
+            if isinstance(filenames, str):
+                raise ValueError("Filenames must be a list (or at least an iterable), not a single string")
+            if not hasattr(filenames, '__iter__'):
+                raise TypeError("filenames was not iterable")
+
+            job_id = ":".join(sorted(str(x) for x in filenames))
+            return Job.__new__(cls, job_id)
+
+        def __getnewargs__(self):   # so that unpickling works
+            return (self.filenames, )
+
+        def _get_invariant(self, old, all_invariant_stati):
+            if not old: #has never been run, so don't trigger
+                pass
+
+
 
 
 class FileGeneratingJob(Job):
