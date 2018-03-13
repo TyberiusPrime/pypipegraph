@@ -615,6 +615,22 @@ class ParameterInvariant(_InvariantJob):
                 raise util.NothingChanged(self.parameters)
         return self.parameters
 
+def checksum_file(filename):
+    file_size = os.stat(filename)[stat.ST_SIZE]
+    if file_size > 200 * 1024 * 1024:
+        print ('Taking md5 of large file', filename)
+    with open(filename, 'rb') as op:
+        block_size = 1024**2 * 10
+        block = op.read(block_size)
+        _hash = hashlib.md5()
+        while block:
+            _hash.update(block)
+            block = op.read(block_size)
+        res = _hash.hexdigest()
+    return res
+
+
+
 
 class _FileChecksumInvariant(_InvariantJob):
     """Invalidates when the (md5) checksum of a file changed.
@@ -668,20 +684,9 @@ class _FileChecksumInvariant(_InvariantJob):
             return self._calc_checksum()
 
     def _calc_checksum(self):
-        file_size = os.stat(self.job_id)[stat.ST_SIZE]
-        if file_size > 200 * 1024 * 1024:
-            print ('Taking md5 of large file', self.job_id)
-        with open(self.job_id, 'rb') as op:
-            block_size = 1024**2 * 10
-            block = op.read(block_size)
-            _hash = hashlib.md5()
-            while block:
-                _hash.update(block)
-                block = op.read(block_size)
-            res = _hash.hexdigest()
-        return res
+        return checksum_file(self.job_id)
 
-
+        
 class RobustFileChecksumInvariant(_FileChecksumInvariant):
     """A file checksum invariant that is robust against file moves (but not against renames!"""
 
@@ -713,26 +718,118 @@ FileChecksumInvariant = RobustFileChecksumInvariant
 FileTimeInvariant = RobustFileChecksumInvariant
 
 
-if False:
-    class MultiFileChecksumInvariant(Job):
+class MultiFileInvariant(Job):
+    """A (robust) FileChecksumInvariant that depends
+    on a list of files.
+    Triggers when files are added or removed,
+    or one of the files changes.
+    """
 
-        def __new__(cls, filenames, *args, **kwargs):
-            if isinstance(filenames, str):
-                raise ValueError("Filenames must be a list (or at least an iterable), not a single string")
-            if not hasattr(filenames, '__iter__'):
-                raise TypeError("filenames was not iterable")
+    def __new__(cls, filenames, *args, **kwargs):
+        if isinstance(filenames, str):
+            raise ValueError("Filenames must be a list (or at least an iterable), not a single string")
+        if not hasattr(filenames, '__iter__'):
+            raise TypeError("filenames was not iterable")
 
-            job_id = ":".join(sorted(str(x) for x in filenames))
-            return Job.__new__(cls, job_id)
+        job_id = '_MFC_' + ":".join(sorted(str(x) for x in filenames))
+        return Job.__new__(cls, job_id)
 
-        def __getnewargs__(self):   # so that unpickling works
-            return (self.filenames, )
+    def __getnewargs__(self):   # so that unpickling works
+        return (self.filenames, )
 
-        def _get_invariant(self, old, all_invariant_stati):
-            if not old: #has never been run, so don't trigger
-                pass
+    def __init__(self, filenames):
+        sorted_filenames = list(sorted(x for x in filenames))
+        for x in sorted_filenames:
+            if not isinstance(x, six.string_types):
+                raise ValueError("Not all filenames passed to MultiFileGeneratingJob were string objects")
+        job_id = '_MFC_' + ":".join(sorted_filenames)
+        Job.__init__(self, job_id)
+        self.filenames = sorted_filenames
+        if not self.filenames:
+            raise ValueError("filenames was empty!")
+        for fn in self.filenames:
+            if not os.path.exists(fn):
+                raise ValueError("File did not exist: %s" % fn)
+    
+    def _get_invariant(self, old, all_invariant_stati):
+        if not old:
+            old = self.find_matching_renamed(all_invariant_stati)
+        checksums = self.calc_checksums(old)
+        if old is False:
+            raise util.NothingChanged(checksums)
+        elif old is None:
+            return checksums
+        else:
+            old_d = {x[0]: x[1:] for x in old}
+            checksums_d = {x[0]: x[1:] for x in checksums}
+            for fn in self.filenames:
+                if old_d[fn][2] != checksums_d[fn][2]: #checksum mismatch!
+                    return checksums
+            raise util.NothingChanged(checksums)
 
+    def find_matching_renamed(self, all_invariant_stati):
+        def to_basenames(job_id):
+            fp = job_id[len('_MFC_'):].split(':')
+            return [os.path.basename(f) for f in fp]
 
+        def to_by_filename(job_id):
+            fp = job_id[len('_MFC_'):].split(':')
+            return {os.path.basename(f): f for f in fp}
+
+        my_basenames = to_basenames(self.job_id)
+        if len(my_basenames) != len(set(my_basenames)):  # can't mach if the file names are not distinct.
+            return False
+        for job_id in all_invariant_stati:
+            if job_id.startswith("_MFC_"):
+                their_basenames = to_basenames(job_id)
+                if my_basenames == their_basenames:
+                    mine_by_filename = to_by_filename(self.job_id)
+                    theirs_by_filename = to_by_filename(job_id)
+                    old = all_invariant_stati[job_id]
+                    new = []
+                    for tup in old:
+                        fn = tup[0]
+                        new_fn = mine_by_filename[os.path.basename(fn)]
+                        new_tup = (new_fn,) + tup[1:]
+                        new.append(new_tup)
+                    return new
+        #ok, no perfect match - how about a subset?
+        for job_id in all_invariant_stati:
+            if job_id.startswith("_MFC_"):
+                their_basenames = to_basenames(job_id)
+                if (len(set(their_basenames).difference(my_basenames)) == 0) and their_basenames:
+                    # less filenames, but otherwise same set...
+                    return None
+                elif (len(set(my_basenames).difference(their_basenames)) == 0):
+                    return None
+            
+        return False
+
+    def calc_checksums(self, old):
+        """return a list of tuples
+        (filename, filetime, filesize, checksum)"""
+        result = []
+        if old:
+            old_d = {x[0]: x[1:] for x in old}
+        else:
+            old_d = {}
+        for fn in self.filenames:
+            st = os.stat(fn)
+            filetime = st[stat.ST_MTIME]
+            filesize = st[stat.ST_SIZE]
+            if (fn in old_d and 
+                (old_d[fn][0] == filetime) and
+                (old_d[fn][1] == filesize)
+            ):  # we can reuse the checksum
+                result.append((
+                    fn, filetime, filesize, old_d[fn][2]
+                ))
+            else:
+                result.append((
+                fn, filetime, filesize, checksum_file(fn))
+            )
+        return result
+        
 
 
 class FileGeneratingJob(Job):
