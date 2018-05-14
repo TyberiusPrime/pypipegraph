@@ -6,11 +6,12 @@ if __name__ == '__main__':
     import coverage
     with open(".coveragerc",'wb') as op:
         op.write(b"""
-    [run]
-    data_file = /code/pypipegraph/pypipegraph/tests/.coverageX
-    parallel=True
-    [report]
-    include = *pypipegraph*
+[run]
+data_file = /code/pypipegraph/pypipegraph/tests/.coverageX
+parallel=True
+
+[report]
+include = *pypipegraph*
         """) 
 
 

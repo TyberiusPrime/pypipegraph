@@ -91,13 +91,14 @@ class MPQueueFixed(multiprocessing.queues.Queue):
                                 except SystemError as e:
                                     print('Que sending error %s' % e)
                                     print('error dump in %i.dump' % (os.getpid(),))
+                                    print('Likely source: stdout/stderr too large (gigabytes)')
                                     with open("%i.dump" % (os.getpid(), ), 'wb') as op:
                                         try:
                                             pickle.dump(obj, op)
                                         except:
                                             pass
                                         try:
-                                            op.write("%s" % obj)
+                                            op.write("%s" % (obj,)[:20000])
                                         except:
                                             pass
 
