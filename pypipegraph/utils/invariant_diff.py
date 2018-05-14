@@ -61,10 +61,8 @@ if modus == 'job':
                     if name == job_id:
                         return value
             except EOFError as e:
-                pass
-        raise KeyError("Job not found in %s" % filename)
-
-
+                raise KeyError("Job not found in %s" % filename)
+        print('Using %s as status filename, use --status if you want another one'  % status_prefix)
     new = load_invariant(status_prefix, job_id_to_compare)
     old = load_invariant(status_prefix + '.old', job_id_to_compare)
 

@@ -86,7 +86,7 @@ class PPGPerTest(unittest.TestCase):
         except OSError:
             pass
         self.test_dir = 'out/%s' % (os.getpid() * 1000 + test_count)
-        print("test dir", self.test_dir)
+        #print("test dir", self.test_dir)
         try:
             shutil.rmtree(self.test_dir) #make sure there's no old data around...
         except:
@@ -1884,13 +1884,6 @@ class InvariantTests(PPGPerTest):
         self.assertEqual(os.stat(ftfn)[stat.ST_MTIME], os.stat(ftfn + '.md5sum')[stat.ST_MTIME])
 
 
-
-
-
-
-
-
-
  
     def test_invariant_dumping_on_job_failure(self):
         def w():
@@ -2239,6 +2232,182 @@ class FunctionInvariantTests(PPGPerTest):
 
         a = ppg.FunctionInvariant('test', c)
         a._get_invariant(None, [])
+
+
+class MultiFileInvariantTests(PPGPerTest):
+
+    def test_new_raises_unchanged(self):
+        write('out/a', 'hello')
+        write('out/b', 'world')
+        jobA = ppg.MultiFileInvariant(['out/a','out/b'])
+        def inner():
+            cs = jobA.get_invariant(False, {})
+        self.assertRaises(ppg.job.util.NothingChanged, inner)
+
+    def test_no_raise_on_no_change(self):
+        write('out/a', 'hello')
+        write('out/b', 'world')
+        jobA = ppg.MultiFileInvariant(['out/a','out/b'])
+        try:
+            jobA.get_invariant(False, {})
+            self.fail("should not be reached")
+        except ppg.job.util.NothingChanged as e:
+            cs = e.new_value
+        try:
+            jobA.get_invariant(cs, {jobA.job_id: cs})
+            self.fail("should not be reached")
+        except ppg.job.util.NothingChanged as e:
+            cs2 = e.new_value
+        self.assertEqual(cs2, cs)
+
+    def test_filetime_changed_contents_the_same(self):
+        write('out/a', 'hello')
+        write('out/b', 'world')
+        jobA = ppg.MultiFileInvariant(['out/a','out/b'])
+        try:
+            jobA.get_invariant(False, {})
+            self.fail("should not be reached")
+        except ppg.job.util.NothingChanged as e:
+            cs = e.new_value
+        subprocess.check_call(['touch', '--date=2004-02-29', 'out/b'])
+        try:
+            jobA.get_invariant(cs, {jobA.job_id: cs})
+            self.fail("should not be reached")
+        except ppg.job.util.NothingChanged as e:
+            cs2 = e.new_value
+        self.assertNotEqual(cs2, cs)
+        self.assertNotEqual([x[1] for x in cs2], [x[1] for x in cs]) # times changed
+        self.assertEqual([x[2] for x in cs2], [x[2] for x in cs]) # sizes did not 
+        self.assertEqual([x[3] for x in cs2], [x[3] for x in cs])
+
+    def test_changed_file(self):
+        write('out/a', 'hello')
+        write('out/b', 'world')
+        jobA = ppg.MultiFileInvariant(['out/a','out/b'])
+        try:
+            jobA.get_invariant(False, {})
+            self.fail("should not be reached")
+        except ppg.job.util.NothingChanged as e:
+            cs = e.new_value
+        write('out/b', 'world!')
+        cs2 = jobA.get_invariant(cs, {jobA.job_id: cs})
+        self.assertNotEqual(cs2, cs)
+        self.assertEqual([x[0] for x in cs2], [x[0] for x in cs]) # file names the same
+        #self.assertNotEqual([x[1] for x in cs2], [x[1] for x in cs]) # don't test times, might not have changed
+        self.assertNotEqual([x[2] for x in cs2], [x[2] for x in cs]) # sizes changed
+        self.assertNotEqual([x[3] for x in cs2], [x[2] for x in cs]) # checksums changed
+
+    def test_changed_file_same_size(self):
+        write('out/a', 'hello')
+        write('out/b', 'world')
+        jobA = ppg.MultiFileInvariant(['out/a','out/b'])
+        try:
+            jobA.get_invariant(False, {})
+            self.fail("should not be reached")
+        except ppg.job.util.NothingChanged as e:
+            cs = e.new_value
+        time.sleep(2)  # must be certain we have a changed filetime!
+        write('out/b', 'worlt')
+        cs2 = jobA.get_invariant(cs, {jobA.job_id: cs})
+        self.assertNotEqual(cs2, cs)
+        self.assertEqual([x[0] for x in cs2], [x[0] for x in cs]) # file names the same
+        #self.assertNotEqual([x[1] for x in cs2], [x[1] for x in cs]) # don't test times, might not have changed
+        self.assertEqual([x[2] for x in cs2], [x[2] for x in cs]) # sizes the same
+        self.assertNotEqual([x[3] for x in cs2], [x[2] for x in cs]) # checksums changed
+
+    def test_rehome_no_change(self):
+        write('out/a', 'hello')
+        write('out/b', 'world')
+        jobA = ppg.MultiFileInvariant(['out/a','out/b'])
+        try:
+            jobA.get_invariant(False, {})
+            self.fail("should not be reached")
+        except ppg.job.util.NothingChanged as e:
+            cs = e.new_value
+        try:
+            jobA.get_invariant(cs, {jobA.job_id: cs})
+            self.fail("should not be reached")
+        except ppg.job.util.NothingChanged as e:
+            cs2 = e.new_value
+        self.assertEqual(cs2, cs)
+        os.makedirs("out2")
+        write('out2/a', 'hello')
+        write('out2/b', 'world')
+        jobB = ppg.MultiFileInvariant(['out2/a','out2/b'])
+        def inner():
+            jobB.get_invariant(False, {jobA.job_id: cs})
+        self.assertRaises(ppg.job.util.NothingChanged, inner)
+
+    def test_rehome_and_change(self):
+        write('out/a', 'hello')
+        write('out/b', 'world')
+        jobA = ppg.MultiFileInvariant(['out/a','out/b'])
+        try:
+            jobA.get_invariant(False, {})
+            self.fail("should not be reached")
+        except ppg.job.util.NothingChanged as e:
+            cs = e.new_value
+        try:
+            jobA.get_invariant(cs, {jobA.job_id: cs})
+            self.fail("should not be reached")
+        except ppg.job.util.NothingChanged as e:
+            cs2 = e.new_value
+        self.assertEqual(cs2, cs)
+        os.makedirs("out2")
+        write('out2/a', 'hello')
+        write('out2/b', 'worl!x') # either change the length, or wait 2 seconds...
+        jobB = ppg.MultiFileInvariant(['out2/a','out2/b'])
+        cs3 = jobB.get_invariant(False, {jobA.job_id: cs})
+        self.assertNotEqual([x[3] for x in cs2], [x[2] for x in cs3]) # checksums changed
+
+    def test_non_existant_file_raises(self):
+        def inner():
+            jobA = ppg.MultiFileInvariant(['out/a'])
+        self.assertRaises(ValueError, inner)
+
+    def test_rehome_and_additional_file(self):
+        write('out/a', 'hello')
+        write('out/b', 'world')
+        jobA = ppg.MultiFileInvariant(['out/a','out/b'])
+        try:
+            jobA.get_invariant(False, {})
+            self.fail("should not be reached")
+        except ppg.job.util.NothingChanged as e:
+            cs = e.new_value
+        try:
+            jobA.get_invariant(cs, {jobA.job_id: cs})
+            self.fail("should not be reached")
+        except ppg.job.util.NothingChanged as e:
+            cs2 = e.new_value
+        self.assertEqual(cs2, cs)
+        os.makedirs("out2")
+        write('out2/a', 'hello')
+        write('out2/b', 'world')
+        write('out2/c', 'worl!x') # either change the length, or wait 2 seconds...
+        jobB = ppg.MultiFileInvariant(['out2/a','out2/b', 'out2/c'])
+        cs3 = jobB.get_invariant(False, {jobA.job_id: cs})
+        self.assertNotEqual([x[3] for x in cs2], [x[2] for x in cs3]) # checksums changed
+
+    def test_rehome_and_missing_file(self):
+        write('out/a', 'hello')
+        write('out/b', 'world')
+        jobA = ppg.MultiFileInvariant(['out/a','out/b'])
+        try:
+            jobA.get_invariant(False, {})
+            self.fail("should not be reached")
+        except ppg.job.util.NothingChanged as e:
+            cs = e.new_value
+        try:
+            jobA.get_invariant(cs, {jobA.job_id: cs})
+            self.fail("should not be reached")
+        except ppg.job.util.NothingChanged as e:
+            cs2 = e.new_value
+        self.assertEqual(cs2, cs)
+        os.makedirs("out2")
+        write('out2/a', 'hello')
+        jobB = ppg.MultiFileInvariant(['out2/a'])
+        cs3 = jobB.get_invariant(False, {jobA.job_id: cs})
+        self.assertNotEqual([x[3] for x in cs2], [x[2] for x in cs3]) # checksums changed
 
 class DependencyTests(PPGPerTest):
     def test_simple_chain(self):
