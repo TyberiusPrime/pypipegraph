@@ -61,6 +61,9 @@ class DummyLogger(object):
         pass
     def error(self, *args):
         pass
+    def exception(self, *args):
+        pass
+
 
 
 def start_logging(module, other_file = None):
