@@ -187,7 +187,7 @@ def stat(filename):
 def job_or_filename(job_or_filename):
     """Take a filename, or a job. Return filename, dependency-for-that-file
     ie. either the job, or a FileChecksumInvariant"""
-    from job import FileGeneratingJob, FileChecksumInvariant
+    from .job import FileGeneratingJob, FileChecksumInvariant
     if isinstance(job_or_filename, FileGeneratingJob):
         filename = job_or_filename.job_id
         deps = [job_or_filename]

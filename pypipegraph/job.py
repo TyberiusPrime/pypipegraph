@@ -494,6 +494,8 @@ class FunctionInvariant(_InvariantJob):
                             ):
                                 if isinstance(cell.cell_contents, dict):
                                     x = str(sorted(list(cell.cell_contents.items())))
+                                elif isinstance(cell.cell_contents, set) or isinstance(cell.cell_contents, frozenset)::
+                                    x = str(sorted(list(cell.cell_contents)))
                                 else:
                                     x = str(cell.cell_contents)
                                 if 'at 0x' in x:  # if you don't have a sensible str(), we'll default to the class path. This takes things like <chipseq.quality_control.AlignedLaneQualityControl at 0x73246234>.
