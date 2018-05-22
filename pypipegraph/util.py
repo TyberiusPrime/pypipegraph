@@ -39,16 +39,36 @@ reactor_was_started = False
 #import gc
 #gc.set_debug(gc.DEBUG_UNCOLLECTABLE)
 
-default_logging_handler = logging.handlers.SocketHandler('localhost', 5005)
-if os.path.exists('logs'):
-    file_logging_handler = logging.FileHandler("logs/ppg_run.txt", mode="w")
-else:
+
+if os.environ.get("PYPIPEGRAPH_NO_LOGGING", False):
+    default_logging_handler = logging.NullHandler()
     file_logging_handler = None
+else:
+    default_logging_handler = logging.handlers.SocketHandler('localhost', 5005)
+    if os.path.exists('logs'):
+        file_logging_handler = logging.FileHandler("logs/ppg_run.txt", mode="w")
+    else:
+        file_logging_handler = None
 loggers = {}
 file_logging_handlers = {}
 
+class DummyLogger(object):
+    def warn(self, *args):
+        pass
+    def info(self, *args):
+        pass
+    def debug(self, *args):
+        pass
+    def error(self, *args):
+        pass
+    def exception(self, *args):
+        pass
+
+
 
 def start_logging(module, other_file = None):
+    if os.environ.get("PYPIPEGRAPH_NO_LOGGING", False):
+        return DummyLogger()
     key = 'rem' if is_remote else 'ppg'
     name = "%s.%s" % (key, module)
     if not name in loggers:
