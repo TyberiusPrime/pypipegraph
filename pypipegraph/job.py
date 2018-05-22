@@ -493,11 +493,11 @@ class FunctionInvariant(_InvariantJob):
                                 not isinstance(cell.cell_contents, module_type)
                             ):
                                 if isinstance(cell.cell_contents, dict):
-                                    x = str(sorted(list(cell.cell_contents.items())))
-                                elif isinstance(cell.cell_contents, set) or isinstance(cell.cell_contents, frozenset)::
-                                    x = str(sorted(list(cell.cell_contents)))
+                                    x = repr(sorted(list(cell.cell_contents.items())))
+                                elif isinstance(cell.cell_contents, set) or isinstance(cell.cell_contents, frozenset):
+                                    x = repr(sorted(list(cell.cell_contents)))
                                 else:
-                                    x = str(cell.cell_contents)
+                                    x = repr(cell.cell_contents)
                                 if 'at 0x' in x:  # if you don't have a sensible str(), we'll default to the class path. This takes things like <chipseq.quality_control.AlignedLaneQualityControl at 0x73246234>.
                                     x = x[:x.find('at 0x')]
                                 if 'id=' in x:
