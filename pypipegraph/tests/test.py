@@ -7,13 +7,14 @@ if __name__ == '__main__':
     with open(".coveragerc",'wb') as op:
         op.write(b"""
 [run]
-data_file = /code/pypipegraph/pypipegraph/tests/.coverageX
+data_file = %s
 parallel=True
 
 [report]
 include = *pypipegraph*
-        """) 
-
+        """ % (
+            os.path.join(os.path.dirname(os.path.abspath(__file__)),'.coverageX').encode('utf-8') 
+))
 
     cov = coverage.coverage(source = [os.path.abspath('../')], config_file = '.coveragerc', data_suffix=True)
     cov.start()
