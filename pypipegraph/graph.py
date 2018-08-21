@@ -200,6 +200,10 @@ class Pipegraph(object):
             any_failed = False
             try:
                 try:
+                    if os.path.exists('logs/ppg_errors.txt.1'):
+                        os.unlink('logs/ppg_errors.txt.1')
+                    if os.path.exists('logs/ppg_errors.txt'):
+                        os.rename('logs/ppg_errors.txt', 'logs/ppg_errors.txt.1')
                     error_log = open("logs/ppg_errors.txt", 'w')
                 except:
                     error_log = open("/dev/null", 'w')
