@@ -222,7 +222,7 @@ def job_or_filename(job_or_filename):
 
 
 def checksum_file(filename):
-    file_size = os.stat(filename)[stat.ST_SIZE]
+    file_size = os.stat(filename)[stat_module.ST_SIZE]
     if file_size > 200 * 1024 * 1024:
         print ('Taking md5 of large file', filename)
     with open(filename, 'rb') as op:
