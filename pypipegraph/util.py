@@ -27,6 +27,7 @@ import logging
 import logging.handlers
 import sys
 import atexit
+import hashlib
 import time
 
 global_pipegraph = None
@@ -220,7 +221,19 @@ def job_or_filename(job_or_filename):
     return filename, deps
 
 
-
+def checksum_file(filename):
+    file_size = os.stat(filename)[stat_module.ST_SIZE]
+    if file_size > 200 * 1024 * 1024:
+        print ('Taking md5 of large file', filename)
+    with open(filename, 'rb') as op:
+        block_size = 1024**2 * 10
+        block = op.read(block_size)
+        _hash = hashlib.md5()
+        while block:
+            _hash.update(block)
+            block = op.read(block_size)
+        res = _hash.hexdigest()
+    return res
 
 
 #Compatibility shims from six
