@@ -181,7 +181,7 @@ class GraphCmd(SmartCMD):
             print ("Could not understand  which job to kill")
 
     def do_spy(self, line):
-        """use py-sp to profile a job"""
+        """use py-sp to profile a job - watch interactively"""
         try:
             job_no = int(line)
             for job in util.global_pipegraph.running_jobs:
@@ -205,6 +205,29 @@ class GraphCmd(SmartCMD):
             print (e)
             print ("Could not understand which job to spy on")
 
+    def do_spy_flame(self, line):
+        """use py-sp to profile a job - sample the next 10s and dump into pyspy_flame_%i.svg % job_id"""
+        try:
+            job_no = int(line)
+            for job in util.global_pipegraph.running_jobs:
+                if job.job_no == job_no:
+                    pid = util.global_pipegraph.rc.get_job_pid(job)
+                    import subprocess
+                    import os
+                    try:
+                        p = subprocess.Popen(['sudo', 'py-spy', '--pid', str(pid), '-d=10', '-f', 'pyspy_flame_%i.svg' % pid])
+                        print("Spy output in 'pyspy_flame_%i.svg'" % pid)
+                    except subprocess.CalledProcessError as e:
+                        if 'SIG_INT' in str(e):
+                            pass
+                        else:
+                            raise
+                    break
+            else:
+                print ("Could not find that job running")
+        except Exception as e:
+            print (e)
+            print ("Could not understand which job to spy on")
 
     def do_open_jobs(self, line):
         """Print all jobs that are yet to be executed"""
@@ -238,8 +261,12 @@ class GraphCmd(SmartCMD):
 
 interpreter = GraphCmd()
 def thread_loop():
-    interpreter.cmdloop("\nPipeline now running\nType help<enter> for a list of commands")
-
+    try:
+        interpreter.cmdloop("\nPipeline now running\nType help<enter> for a list of commands")
+    except Exception as e:
+        print(e)
+        raise
+        
 
 if __name__ == '__main__':
     HelloWorld().cmdloop()
