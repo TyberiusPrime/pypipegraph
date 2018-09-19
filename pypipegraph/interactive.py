@@ -180,6 +180,32 @@ class GraphCmd(SmartCMD):
             print (e)
             print ("Could not understand  which job to kill")
 
+    def do_spy(self, line):
+        """use py-sp to profile a job"""
+        try:
+            job_no = int(line)
+            for job in util.global_pipegraph.running_jobs:
+                print (job.job_no)
+                if job.job_no == job_no:
+                    pid = util.global_pipegraph.rc.get_job_pid(job)
+                    import subprocess
+                    import os
+                    print("my pid is %s" % os.getpid())
+                    try:
+                        p = subprocess.Popen(['sudo', 'py-spy', '--pid', str(pid)])
+                    except subprocess.CalledProcessError as e:
+                        if 'SIG_INT' in str(e):
+                            pass
+                        else:
+                            raise
+                    break
+            else:
+                print ("Could not find that job running")
+        except Exception as e:
+            print (e)
+            print ("Could not understand which job to spy on")
+
+
     def do_open_jobs(self, line):
         """Print all jobs that are yet to be executed"""
         print ('Executing jobs in the following order:')
