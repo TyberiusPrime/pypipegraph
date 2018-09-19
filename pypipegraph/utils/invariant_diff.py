@@ -83,8 +83,13 @@ if modus == 'job':
         oldf.write(str(old).encode('utf-8'))
         newf.flush()
         oldf.flush()
-        p = subprocess.Popen(['diff', newf.name, oldf.name, '-c5'])
+        try:
+            subprocess.check_call(['which', 'icdiff'])
+            p = subprocess.Popen(['icdiff', newf.name, oldf.name])
+        except subprocess.CalledProcessError:
+            p = subprocess.Popen(['diff', newf.name, oldf.name, '-c5'])
         p.communicate()
+
 elif modus == 'all':
     with open(status_prefix, 'rb') as op:
         new = {}

@@ -54,6 +54,7 @@ import six
 
 is_pypy = platform.python_implementation() == 'PyPy'
 module_type = type(sys)
+checksum_file = util.checksum_file
 
 register_tags = False
 
@@ -617,19 +618,7 @@ class ParameterInvariant(_InvariantJob):
                 raise util.NothingChanged(self.parameters)
         return self.parameters
 
-def checksum_file(filename):
-    file_size = os.stat(filename)[stat.ST_SIZE]
-    if file_size > 200 * 1024 * 1024:
-        print ('Taking md5 of large file', filename)
-    with open(filename, 'rb') as op:
-        block_size = 1024**2 * 10
-        block = op.read(block_size)
-        _hash = hashlib.md5()
-        while block:
-            _hash.update(block)
-            block = op.read(block_size)
-        res = _hash.hexdigest()
-    return res
+
 
 
 
@@ -849,6 +838,7 @@ class FileGeneratingJob(Job):
         else:
             util.filename_collider_check[output_filename] = self
         self.empty_file_allowed = empty_file_allowed
+        self.filenames = [output_filename] # so the downstream can treat this one and MultiFileGeneratingJob identically
         Job.__init__(self, output_filename)
         self.callback = function
         self.rename_broken = rename_broken
