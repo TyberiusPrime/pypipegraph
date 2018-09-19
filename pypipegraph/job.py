@@ -241,9 +241,9 @@ class Job(object):
 
     def is_done(self, depth = 0):
         if not self.do_cache or self._is_done is None:
-            logger.info("recalc is_done %s" % self)
+            # logger.info("recalc is_done %s" % self)
             self._is_done = self.calc_is_done(depth)
-        logger.info("called %s.is_done - result %s" % (self, self._is_done))
+        # logger.info("called %s.is_done - result %s" % (self, self._is_done))
         return self._is_done
 
     def calc_is_done(self, depth=0):
