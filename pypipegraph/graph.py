@@ -485,8 +485,8 @@ class Pipegraph(object):
                 ):
                 needs_to_be_run.add(job.job_id)
             elif (not job.runs_in_slave()):
-                logger.info("Mark was_run before running: %s" % job)
-                logger.info("job.was_invalidated %s, job.runs_in_slave %s, job.is_loadable: %s" % (job.was_invalidated, job.runs_in_slave(), job.is_loadable()))
+                # logger.info("Mark was_run before running: %s" % job)
+                # logger.info("job.was_invalidated %s, job.runs_in_slave %s, job.is_loadable: %s" % (job.was_invalidated, job.runs_in_slave(), job.is_loadable()))
                 job.was_run = True  # invarites get marked as ran..
             #job.do_cache = False
         #now prune the possible_execution_order
