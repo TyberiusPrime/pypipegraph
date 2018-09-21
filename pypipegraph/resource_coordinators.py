@@ -217,6 +217,9 @@ class LocalSystem:
     def kill_job(self, job):
         self.slave.kill_job(job)
 
+    def get_job_pid(self, job):
+        return self.slave.get_job_pid(job)
+
 
 class LocalSlave:
 
@@ -272,10 +275,12 @@ class LocalSlave:
                 stdout.fileno()
                 stderr.fileno()
                 p = multiprocessing.Process(target=self.wrap_run, args=[job, stdout, stderr, False])
-                job.run_info = "pid = %s" % (p.pid, )
                 job.stdout_handle = stdout
                 job.stderr_handle = stderr
                 p.start()
+                job.run_info = "pid = %s" % (p.pid, )
+                job.pid = p.pid
+                
                 logger.info("Slave pid: %s" % (p.pid,))
                 self.process_to_job[p] = job
                 logger.info("Slave, returning to start_jobs")
@@ -469,3 +474,10 @@ class LocalSlave:
         print ("Killing %i running children" % len(self.process_to_job))
         for proc in self.process_to_job:
             proc.terminate()
+
+    def get_job_pid(self, target_job):
+        print(target_job)
+        print(target_job.run_info)
+        print(target_job.pid)
+        return target_job.pid
+
