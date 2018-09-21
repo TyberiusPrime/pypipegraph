@@ -629,6 +629,8 @@ class _FileChecksumInvariant(_InvariantJob):
     """
 
     def __init__(self, filename):
+        if len(filename) < 3:
+            raise ValueError()
         Job.__init__(self, filename)
         self.input_file = filename
 
