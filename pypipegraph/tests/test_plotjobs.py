@@ -1,4 +1,4 @@
-from test_pypipegraph import PPGPerTest, rc_gen, append, write, read, writeappend
+from .test_pypipegraph import PPGPerTest, rc_gen, append, write, read, writeappend
 import unittest
 import sys
 import os
