@@ -67,7 +67,10 @@ def run_pipegraph():
 
 
 def new_pipegraph(resource_coordinator=None, quiet=False,
-        invariant_status_filename=invariant_status_filename_default, dump_graph = True, interactive = True):
+        invariant_status_filename=invariant_status_filename_default,
+        dump_graph = True,
+        interactive = True,
+        cache_folder='cache'):
     """Create a new global pipegraph.
     New jobs will automagically be attached to this pipegraph.
     Default ResourceCoordinator is L{LocalSystem}
@@ -75,7 +78,8 @@ def new_pipegraph(resource_coordinator=None, quiet=False,
     if resource_coordinator is None:
         resource_coordinator = resource_coordinators.LocalSystem(interactive=interactive)
     util.global_pipegraph = Pipegraph(resource_coordinator, quiet=quiet,
-            invariant_status_filename=invariant_status_filename, dump_graph = dump_graph)
+            invariant_status_filename=invariant_status_filename, dump_graph = dump_graph,
+                                      cache_folder=cache_folder)
     util.job_uniquifier = {}
     util.filename_collider_check = {}
     util.func_hashes = {}
@@ -111,7 +115,8 @@ class Pipegraph(object):
     (Default ResourceCoordinator does so).
     Abort run with ctrl-c.
     """
-    def __init__(self, resource_coordinator, quiet=False, invariant_status_filename=invariant_status_filename_default, dump_graph = True):
+    def __init__(self, resource_coordinator, quiet=False, invariant_status_filename=invariant_status_filename_default, dump_graph = True,
+                 cache_folder='cache'):
         self.rc = resource_coordinator
         self.rc.pipegraph = self
         self.jobs = {}
@@ -123,8 +128,9 @@ class Pipegraph(object):
         self.invariant_loading_issues = {}  # jobs whose invariant could not be unpickled for some reason - and the exception.
         self._distribute_invariant_changes_count = 0
         self.invariant_status_filename = invariant_status_filename
-        self.do_dump_graph = True
+        self.do_dump_graph = dump_graph
         self.restart_afterwards = False
+        self.cache_folder = cache_folder
 
     def __del__(self):
         # remove circle link between rc and pipegraph
