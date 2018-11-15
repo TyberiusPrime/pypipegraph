@@ -1,0 +1,14 @@
+*.pyc
+readme.html
+pypipegraph/tests/htmlcov
+pypipegraph/tests/out/*
+pypipegraph/tests/logs/*
+pypipegraph/tests/cache/*
+pypipegraph/tests/.*
+pypipegraph/tests/a
+pypipegraph/tests/.*
+docs/_build/*
+build/*
+pypipegraph/tests/covhtml/*
+.pytest_cache/
+__pycache__/
