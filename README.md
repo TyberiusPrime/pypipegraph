@@ -1,7 +1,7 @@
 Introduction
 ============
 
-\[pypipegraph\](<https://github.com/IMTMarburg/pypipegraph>): is an
+[pypipegraph](https://github.com/IMTMarburg/pypipegraph): is an
 MIT-licensed library for constructing a workflow piece by piece and
 executing just the parts of it that need to be (re-)done. It supports
 using multiple cores (SMP) and (eventually, alpha code right now)
@@ -29,6 +29,7 @@ pypipegraph supports Python 3.
 30 second summary
 =================
 
+```python
     pypipegraph.new_pipeline()
     output_filenameA = 'sampleA.txt'
     def do_the_work():
@@ -43,6 +44,7 @@ pypipegraph supports Python 3.
     print 'the pipegraph is done and has returned control to you.'
     print 'sampleA.txt contains "hello world"'
     print 'sampleB.txt contains "hello world, once again"
+```
 
 Jobs
 ====
