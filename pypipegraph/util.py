@@ -124,6 +124,25 @@ def output_file_exists(filename):
         return False
     return True
 
+def ensure_path(path):
+    """Makes sure a given path exists.
+    """
+    result = True
+    try:
+        if not os.path.exists(path):
+            os.makedirs(path)
+            result = False
+    except OSError as e:
+        print(e)
+        if str(e).find('File exists') != -1:
+            result = False
+        else:
+            raise e
+    if not os.path.exists(path) and os.path.isdir(path):
+        raise ValueError("Failed to create %s" % path)
+    return result
+
+
 
 class NothingChanged(Exception):
     """For Invariant communication where
