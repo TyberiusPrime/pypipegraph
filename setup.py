@@ -9,7 +9,7 @@ setup(
     author='Florian Finkernagel',
     author_email='finkernagel@imt.uni-marburg.de',
     description = "A workflow (job) engine/pipeline for bioinformatics and scientific computing.",
-    long_description=open('README.txt').read(),
+    long_description=open('README.md').read(),
     requires = ['kitchen'],
     classifiers = [
       'Programming Language :: Python',
