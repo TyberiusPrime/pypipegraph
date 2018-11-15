@@ -34,6 +34,7 @@ import multiprocessing
 from .mp_queues import MPQueueFixed
 import threading
 import signal
+import sys
 
 try:
     #import kitchen
@@ -98,7 +99,10 @@ class LocalSystem:
         self.physical_memory, self.swap_memory = get_memory_available()
         self.timeout = 5
         self.profile = profile
-        if multiprocessing.current_process().name != 'MainProcess':
+        if (
+                (multiprocessing.current_process().name != 'MainProcess') or 
+                ('pytest' in sys.modules)
+        ):
             interactive = False
         self.interactive = interactive
 

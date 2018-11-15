@@ -72,7 +72,6 @@ def writeappend(filename_write, filename_append, string):
     write(filename_write, string)
     append(filename_append, string)
 
-    import test_pypipegraph
 
 
 
@@ -227,6 +226,7 @@ class CycleTests(PPGPerTest):
 
     @unittest.expectedFailure  # just to silence it for now, the prioritizing does *not* work!
     def test_prioritize_simple(self):
+        raise NotImplementedError()
         jobA = ppg.Job('A')
         jobB = ppg.Job('B')
         jobA.depends_on(jobB)
