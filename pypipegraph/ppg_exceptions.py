@@ -22,19 +22,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
+
 class PyPipeGraphError(ValueError):
     """Base class for all PyPipelineGraph exceptions"""
+
     pass
 
 
 class CycleError(PyPipeGraphError):
     """You created a cycle in your pipegraph,
     this is not supported"""
+
     pass
 
 
 class RuntimeError(PyPipeGraphError):
     """A job died for whatever reason. All unaffected jobs will have been done."""
+
     pass
 
 
@@ -46,6 +50,7 @@ class RuntimeException(PyPipeGraphError):
 
 class JobContractError(PyPipeGraphError):
     """One of the jobs did not confirm to it's supposed behaviour"""
+
     pass
 
 
@@ -60,4 +65,5 @@ class JobDiedException(PyPipeGraphError):
 
 class CommunicationFailure(PyPipeGraphError):
     """something went wrong talking to a slave"""
+
     pass

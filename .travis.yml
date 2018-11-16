@@ -60,7 +60,7 @@ script:
       #make html && popd
     elif [[ "$JOB" == "LINT" ]]; then
     #make lint
-    flake8
+    flake8 
     fi
 
 

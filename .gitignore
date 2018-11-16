@@ -12,3 +12,5 @@ build/*
 pypipegraph/tests/covhtml/*
 .pytest_cache/
 __pycache__/
+MANIFEST
+
