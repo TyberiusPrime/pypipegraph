@@ -26,56 +26,65 @@ import stat as stat_module
 import logging
 import logging.handlers
 import sys
-import atexit
 import hashlib
 import time
 
 global_pipegraph = None
 is_remote = False
 job_uniquifier = {}  # to singletonize jobs on job_id
-filename_collider_check = {} # to check wether theres' an overlap in filenames between FileGeneratingJob and MultiFileGeneratingJob
-func_hashes = {}  # to calculate invarionts on functions in a slightly more efficent manner
+filename_collider_check = (
+    {}
+)  # to check wether theres' an overlap in filenames between FileGeneratingJob and MultiFileGeneratingJob
+func_hashes = (
+    {}
+)  # to calculate invarionts on functions in a slightly more efficent manner
 reactor_was_started = False
 
-#import gc
-#gc.set_debug(gc.DEBUG_UNCOLLECTABLE)
+# import gc
+# gc.set_debug(gc.DEBUG_UNCOLLECTABLE)
 
 
 if os.environ.get("PYPIPEGRAPH_NO_LOGGING", False):
     default_logging_handler = logging.NullHandler()
     file_logging_handler = None
 else:
-    default_logging_handler = logging.handlers.SocketHandler('localhost', 5005)
-    if os.path.exists('logs'):
+    default_logging_handler = logging.handlers.SocketHandler("localhost", 5005)
+    if os.path.exists("logs"):
         file_logging_handler = logging.FileHandler("logs/ppg_run.txt", mode="w")
     else:
         file_logging_handler = None
 loggers = {}
 file_logging_handlers = {}
 
+
 class DummyLogger(object):
     def warn(self, *args):
         pass
+
     def info(self, *args):
         pass
+
     def debug(self, *args):
         pass
+
     def error(self, *args):
         pass
+
     def exception(self, *args):
         pass
 
 
-
-def start_logging(module, other_file = None):
+def start_logging(module, other_file=None):
     if os.environ.get("PYPIPEGRAPH_NO_LOGGING", False):
         return DummyLogger()
-    key = 'rem' if is_remote else 'ppg'
+    key = "rem" if is_remote else "ppg"
     name = "%s.%s" % (key, module)
-    if not name in loggers:
+    if name not in loggers:
         logger = logging.getLogger(name)
         logger.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
         if default_logging_handler:
             default_logging_handler.setFormatter(formatter)
             logger.addHandler(default_logging_handler)
@@ -83,15 +92,18 @@ def start_logging(module, other_file = None):
             file_logging_handler.setFormatter(formatter)
             logger.addHandler(file_logging_handler)
         if other_file:
-            if not other_file in file_logging_handlers:
-                file_logging_handlers[other_file] = logging.FileHandler(os.path.join(logs, other_file), mode = "w")
+            if other_file not in file_logging_handlers:
+                file_logging_handlers[other_file] = logging.FileHandler(
+                    os.path.join('logs', other_file), mode="w"
+                )
                 file_logging_handlers[other_file].setFormatter(formatter)
             logger.addHandler(file_logging_handlers[other_file])
 
         loggers[name] = logger
     return loggers[name]
 
-util_logger = start_logging('util')
+
+util_logger = start_logging("util")
 
 
 def change_logging_port(port):
@@ -100,7 +112,7 @@ def change_logging_port(port):
     If you want it to log to another port, use this function before createing the graph.
     """
     global default_logging_handler
-    new_handler = logging.handlers.SocketHandler('127.0.0.1', port)
+    new_handler = logging.handlers.SocketHandler("127.0.0.1", port)
     for logger in list(loggers.values()):
         logger.removeHandler(default_logging_handler)
         logger.addHandler(new_handler)
@@ -116,13 +128,14 @@ def flush_logging():
 def output_file_exists(filename):
     """Check if a file exists and its size is > 0"""
     if not file_exists(filename):
-        util_logger.info('did not exist %s'% filename)
+        util_logger.info("did not exist %s" % filename)
         return False
     st = stat(filename)
     if st[stat_module.ST_SIZE] == 0:
-        util_logger.info('stat size 0 %s - %s'% (os.path.abspath(filename), st))
+        util_logger.info("stat size 0 %s - %s" % (os.path.abspath(filename), st))
         return False
     return True
+
 
 def ensure_path(path):
     """Makes sure a given path exists.
@@ -134,14 +147,13 @@ def ensure_path(path):
             result = False
     except OSError as e:
         print(e)
-        if str(e).find('File exists') != -1:
+        if str(e).find("File exists") != -1:
             result = False
         else:
             raise e
     if not os.path.exists(path) and os.path.isdir(path):
         raise ValueError("Failed to create %s" % path)
     return result
-
 
 
 class NothingChanged(Exception):
@@ -159,7 +171,9 @@ class NothingChanged(Exception):
         self.new_value = new_value
 
 
-def assert_uniqueness_of_object(object_with_name_attribute, pipeline=None, also_check = None):
+def assert_uniqueness_of_object(
+    object_with_name_attribute, pipeline=None, also_check=None
+):
     """Makes certain there is only one object with this class & .name.
 
     This is necesarry so the pipeline jobs assign their data only to the
@@ -167,19 +181,30 @@ def assert_uniqueness_of_object(object_with_name_attribute, pipeline=None, also_
     if pipeline is None:
         pipeline = global_pipegraph
 
-    if object_with_name_attribute.name.find('/') != -1:
-        raise ValueError("Names must not contain /, it confuses the directory calculations")
+    if object_with_name_attribute.name.find("/") != -1:
+        raise ValueError(
+            "Names must not contain /, it confuses the directory calculations"
+        )
     typ = object_with_name_attribute.__class__
-    if not typ in pipeline.object_uniquifier:
+    if typ not in pipeline.object_uniquifier:
         pipeline.object_uniquifier[typ] = {}
     if object_with_name_attribute.name in pipeline.object_uniquifier[typ]:
-        raise ValueError("Doublicate object: %s, %s" % (typ, object_with_name_attribute.name))
+        raise ValueError(
+            "Doublicate object: %s, %s" % (typ, object_with_name_attribute.name)
+        )
     if also_check:
         if not isinstance(also_check, list):
             also_check = [also_check]
         for other_typ in also_check:
-            if other_typ in pipeline.object_uniquifier and object_with_name_attribute.name in pipeline.object_uniquifier[other_typ]:
-                raise ValueError("Doublicate object: %s, %s" % (other_typ, object_with_name_attribute.name))
+            if (
+                other_typ in pipeline.object_uniquifier
+                and object_with_name_attribute.name
+                in pipeline.object_uniquifier[other_typ]
+            ):
+                raise ValueError(
+                    "Doublicate object: %s, %s"
+                    % (other_typ, object_with_name_attribute.name)
+                )
     object_with_name_attribute.unique_id = len(pipeline.object_uniquifier[typ])
     pipeline.object_uniquifier[typ][object_with_name_attribute.name] = True
 
@@ -203,19 +228,23 @@ def CPUs():
                     cpu_count = ncpus
             else:  # OSX:
                 cpu_count = int(os.popen2("sysctl -n hw.ncpu")[1].read())
-         # Windows:
+        # Windows:
         if "NUMBER_OF_PROCESSORS" in os.environ:
             ncpus = int(os.environ["NUMBER_OF_PROCESSORS"])
             if ncpus > 0:
                 cpu_count = ncpus
     return cpu_count
 
+
 def file_exists(filename):
     return os.path.exists(filename)
 
+
 stat_cache = {}
+
+
 def stat(filename):
-    if not filename in stat_cache:
+    if filename not in stat_cache:
         stat_cache[filename] = (os.stat(filename), time.time())
         return stat_cache[filename][0]
     s, t = stat_cache[filename]
@@ -224,10 +253,12 @@ def stat(filename):
     s, t = stat_cache[filename]
     return s
 
+
 def job_or_filename(job_or_filename):
     """Take a filename, or a job. Return filename, dependency-for-that-file
     ie. either the job, or a FileChecksumInvariant"""
     from .job import FileGeneratingJob, FileChecksumInvariant
+
     if isinstance(job_or_filename, FileGeneratingJob):
         filename = job_or_filename.job_id
         deps = [job_or_filename]
@@ -243,9 +274,9 @@ def job_or_filename(job_or_filename):
 def checksum_file(filename):
     file_size = os.stat(filename)[stat_module.ST_SIZE]
     if file_size > 200 * 1024 * 1024:
-        print ('Taking md5 of large file', filename)
-    with open(filename, 'rb') as op:
-        block_size = 1024**2 * 10
+        print("Taking md5 of large file", filename)
+    with open(filename, "rb") as op:
+        block_size = 1024 ** 2 * 10
         block = op.read(block_size)
         _hash = hashlib.md5()
         while block:
@@ -255,7 +286,7 @@ def checksum_file(filename):
     return res
 
 
-#Compatibility shims from six
+# Compatibility shims from six
 """Copyright (c) 2010-2011 Benjamin Peterson
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -276,11 +307,15 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."""
 PY3 = sys.version_info[0] == 3
 if PY3:
+
     def reraise(tp, value, tb=None):
         if tb:
             raise tp.with_traceback(tb)
         raise tp
+
+
 else:
+
     def exec_(code, globs=None, locs=None):
         """Execute code in a namespace."""
         if globs is None:
@@ -293,7 +328,9 @@ else:
             locs = globs
         exec("""exec code in globs, locs""")
 
-    exec_("""def reraise(tp, value, tb=None):
+    exec_(
+        """def reraise(tp, value, tb=None):
     raise tp, value, tb
-""")
-#end shims from six
+"""
+    )
+# end shims from six

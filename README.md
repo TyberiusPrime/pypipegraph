@@ -1,5 +1,6 @@
 Introduction
 ============
+[![Build Status](https://travis-ci.com/TyberiusPrime/pypipegraph.svg?branch=master)](https://travis-ci.com/TyberiusPrime/pypipegraph)<Paste>
 
 [pypipegraph](https://github.com/IMTMarburg/pypipegraph): is an
 MIT-licensed library for constructing a workflow piece by piece and
