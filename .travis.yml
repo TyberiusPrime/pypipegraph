@@ -32,39 +32,21 @@ notifications:
 # miniconda recipe
 # http://conda.pydata.org/docs/travis.html#using-conda-with-travis-ci
 before_install:
-  - echo "before install"
+  - |
+      echo "before install"
 
 # Install packages
 install:
   # Install dependencies
-   - echo "install"
-     #- conda create -q -n plotnine-test python=$TRAVIS_PYTHON_VERSION
-     #- source activate plotnine-test
-     #- |
-     #if [[ "$FULL_DEPS" ]]; then
-     #conda install scipy pandas statsmodels scikit-learn
-     #export MPLLOCALFREETYPE=1
-     #pip install matplotlib --no-binary matplotlib
-     #pip install scikit-misc
-     #pip install geopandas
-     #pip install adjustText
-     #pip install -e .
-     #fi
+  - |
+     echo "install"
   - |
     if [[ "$JOB" == "UNITTEST" ]]; then
       pip install pytest-cov
-      #conda install pytest-cov
-      #conda install -c conda-forge "pyshp>=2.0.0" # temporary
-      #pip install coveralls
-      #elif [[ "$JOB" == "DOCS" ]]; then
-    #pip install -r requirements/doc.txt
     elif [[ "$JOB" == "LINT" ]]; then
       pip install flake8
     fi
-  # List all conda and pip packages
-  ###- conda list
   - pip list
-    ###- export MATPLOTLIB_BACKEND=agg
 
 script:
   - |
