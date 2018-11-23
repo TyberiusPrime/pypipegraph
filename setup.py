@@ -2,7 +2,7 @@ from distutils.core import setup
 
 setup(
     name="pypipegraph",
-    version="0.171",
+    version="0.172",
     packages=["pypipegraph"],
     license="MIT",
     url="http://https://github.com/IMTMarburg/pypipegraph",
