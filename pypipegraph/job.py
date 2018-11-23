@@ -2047,6 +2047,8 @@ class CachedAttributeLoadingJob(AttributeLoadingJob):
     a file called job_id and reread on the next run"""
 
     def __new__(cls, job_id, *args, **kwargs):
+        if isinstance(job_id, pathlib.Path):
+            job_id = str(job_id)
         if not isinstance(job_id, six.string_types):
             raise ValueError("cache_filename/job_id was not a string i jobect")
 
@@ -2055,6 +2057,8 @@ class CachedAttributeLoadingJob(AttributeLoadingJob):
     def __init__(
         self, cache_filename, target_object, target_attribute, calculating_function
     ):
+        if isinstance(cache_filename, pathlib.Path):
+            cache_filename = str(cache_filename)
         if not isinstance(cache_filename, six.string_types):
             raise ValueError("cache_filename/job_id was not a string jobect")
         if not hasattr(calculating_function, "__call__"):
@@ -2105,6 +2109,8 @@ class CachedDataLoadingJob(DataLoadingJob):
     a file called job_id and reread on the next run"""
 
     def __new__(cls, job_id, *args, **kwargs):
+        if isinstance(job_id, pathlib.Path):
+            job_id = str(job_id)
         if not isinstance(job_id, six.string_types):
             raise ValueError("cache_filename/job_id was not a string object")
         return Job.__new__(
@@ -2112,6 +2118,8 @@ class CachedDataLoadingJob(DataLoadingJob):
         )  # plus load, so that the cached data goes into the cache_filename passed to the constructor...
 
     def __init__(self, cache_filename, calculating_function, loading_function):
+        if isinstance(cache_filename, pathlib.Path):
+            cache_filename = str(cache_filename)
         if not isinstance(cache_filename, six.string_types):
             raise ValueError("cache_filename/job_id was not a string object")
         if not hasattr(calculating_function, "__call__"):
@@ -2204,6 +2212,8 @@ class MemMappedDataLoadingJob(DataLoadingJob):
             raise NotImplementedError(
                 "Numpypy currently does not support memmap(), there is no support for MemMappedDataLoadingJob using pypy."
             )
+        if isinstance(job_id, pathlib.Path):
+            job_id = str(job_id)
         if not isinstance(job_id, six.string_types):
             raise ValueError("cache_filename/job_id was not a string object")
         return Job.__new__(
@@ -2211,6 +2221,8 @@ class MemMappedDataLoadingJob(DataLoadingJob):
         )  # plus load, so that the cached data goes into the cache_filename passed to the constructor...
 
     def __init__(self, cache_filename, calculating_function, loading_function, dtype):
+        if isinstance(cache_filename, pathlib.Path):
+            cache_filename = str(cache_filename)
         if not isinstance(cache_filename, six.string_types):
             raise ValueError("cache_filename/job_id was not a string object")
         if not hasattr(calculating_function, "__call__"):

@@ -4685,10 +4685,12 @@ class PathLibTests(PPGPerTest):
         )
         b.depends_on(a)
         b.depends_on(a1)
-
+        class Dummy():
+            pass
+        dd = Dummy()
         def mf():
             write("c", "cc" + read("g"))
-            write("d", "dd" + read("h"))
+            write("d", "dd" + read("h") + dd.attr)
             write("e", "ee" + read("i") + read("j"))
 
         c = ppg.MultiFileGeneratingJob([pathlib.Path("c"), "d", pathlib.Path("e")], mf)
@@ -4713,11 +4715,18 @@ class PathLibTests(PPGPerTest):
 
         h = ppg.TempFilePlusGeneratingJob(pathlib.Path("j"), pathlib.Path("k"), tpf)
         c.depends_on(h)
+
+        i = ppg.CachedDataLoadingJob(pathlib.Path('l'), lambda: write('l','llll'), lambda res: res)
+        c.depends_on(i)
+
+        
+        l = ppg.CachedAttributeLoadingJob(pathlib.Path('m'), dd, 'attr', lambda: '55')
+        c.depends_on(l)
         ppg.run_pipegraph()
         self.assertEqual(read("aaa"), "hello")
         self.assertEqual(read("b"), "bbhellohellohello")
         self.assertEqual(read("c"), "ccgg")
-        self.assertEqual(read("d"), "ddhh")
+        self.assertEqual(read("d"), "ddhh55")
         self.assertEqual(read("e"), "eeiijjjj")
         self.assertFalse(os.path.exists("g"))
         self.assertFalse(os.path.exists("h"))
