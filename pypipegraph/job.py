@@ -29,6 +29,7 @@ SOFTWARE.
 
 from . import ppg_exceptions
 from . import util
+import pathlib
 
 logger = util.start_logging("job")
 import re
@@ -122,9 +123,12 @@ class Job(object):
         """Handles the singletonization on the job_id"""
         # logger.info("New for %s %s" % (cls, job_id))
         if not isinstance(job_id, str):
-            raise ValueError(
-                "Job_id must be a string, was %s %s" % (job_id, type(job_id))
-            )
+            if isinstance(job_id, pathlib.Path):
+                job_id = str(job_id)
+            else:
+                raise ValueError(
+                    "Job_id must be a string, was %s %s" % (job_id, type(job_id))
+                )
         if job_id not in util.job_uniquifier:
             util.job_uniquifier[job_id] = object.__new__(cls)
             util.job_uniquifier[
@@ -162,6 +166,8 @@ class Job(object):
 
     def __init__(self, job_id):
         # logger.info("init for %s" % job_id)
+        if isinstance(job_id, pathlib.Path):
+            job_id = str(job_id)
         if not hasattr(self, "dependants"):  # test any of the following
             # else: this job was inited before, and __new__ returned an existing instance
             self.job_id = job_id
@@ -462,7 +468,7 @@ def get_cython_filename_and_line_no(cython_func):
     line_no = int(
         first_doc_line[
             first_doc_line.find("starting at line ")
-            + len("starting at line "): first_doc_line.find(")")
+            + len("starting at line ") : first_doc_line.find(")")
         ]
     )
 
@@ -682,9 +688,9 @@ class FunctionInvariant(_InvariantJob):
             text = "\n".join(remaining_lines).strip()
             text = text[3:]  # cut of initial ###
             if starts_with_single_quote:
-                text = text[text.find("'''") + 3:]
+                text = text[text.find("'''") + 3 :]
             else:
-                text = text[text.find('"""') + 3:]
+                text = text[text.find('"""') + 3 :]
             remaining_lines = text.split("\n")
         last_line = len(remaining_lines)
         for ii, line in enumerate(remaining_lines):
@@ -711,11 +717,11 @@ class ParameterInvariant(_InvariantJob):
     """
 
     def __new__(cls, job_id, *parameters, **kwargs):
-        job_id = "PI" + job_id
+        job_id = "PI" + str(job_id)
         return Job.__new__(cls, job_id)
 
     def __init__(self, job_id, parameters, accept_as_unchanged_func=None):
-        job_id = "PI" + job_id
+        job_id = "PI" + str(job_id)
         self.parameters = parameters
         self.accept_as_unchanged_func = accept_as_unchanged_func
         Job.__init__(self, job_id)
@@ -734,14 +740,14 @@ class _FileChecksumInvariant(_InvariantJob):
     """
 
     def __init__(self, filename):
-        if len(filename) < 3:
+        Job.__init__(self, filename)
+        if len(self.job_id) < 3:
             raise ValueError(
                 "This is probably not the filename you intend to use: {}".format(
                     filename
                 )
             )
-        Job.__init__(self, filename)
-        self.input_file = filename
+        self.input_file = self.job_id
 
     def _get_invariant(self, old, all_invariant_stati):
         st = util.stat(self.input_file)
@@ -849,7 +855,7 @@ class MultiFileInvariant(Job):
         return (self.filenames,)
 
     def __init__(self, filenames):
-        sorted_filenames = list(sorted(x for x in filenames))
+        sorted_filenames = list(sorted(str(x) for x in filenames))
         for x in sorted_filenames:
             if not isinstance(x, six.string_types):
                 raise ValueError(
@@ -882,11 +888,11 @@ class MultiFileInvariant(Job):
 
     def find_matching_renamed(self, all_invariant_stati):
         def to_basenames(job_id):
-            fp = job_id[len("_MFC_"):].split(":")
+            fp = job_id[len("_MFC_") :].split(":")
             return [os.path.basename(f) for f in fp]
 
         def to_by_filename(job_id):
-            fp = job_id[len("_MFC_"):].split(":")
+            fp = job_id[len("_MFC_") :].split(":")
             return {os.path.basename(f): f for f in fp}
 
         my_basenames = to_basenames(self.job_id)
@@ -901,12 +907,13 @@ class MultiFileInvariant(Job):
                     mine_by_filename = to_by_filename(self.job_id)
                     old = all_invariant_stati[job_id]
                     new = []
-                    for tup in old:
-                        fn = tup[0]
-                        new_fn = mine_by_filename[os.path.basename(fn)]
-                        new_tup = (new_fn,) + tup[1:]
-                        new.append(new_tup)
-                    return new
+                    if old is not False:
+                        for tup in old:
+                            fn = tup[0]
+                            new_fn = mine_by_filename[os.path.basename(fn)]
+                            new_tup = (new_fn,) + tup[1:]
+                            new.append(new_tup)
+                        return new
         # ok, no perfect match - how about a subset?
         for job_id in all_invariant_stati:
             if job_id.startswith("_MFC_"):
@@ -954,6 +961,8 @@ class FileGeneratingJob(Job):
         when the job crashes will be renamed to output_filename + '.broken'
         (overwriting whatever was there before)
         """
+        if isinstance(output_filename, pathlib.Path):
+            output_filename = str(output_filename)
         if not hasattr(function, "__call__"):
             raise ValueError("function was not a callable")
         if (
@@ -968,7 +977,7 @@ class FileGeneratingJob(Job):
             util.filename_collider_check[output_filename] = self
         self.empty_file_allowed = empty_file_allowed
         self.filenames = [
-            output_filename
+            self.job_id
         ]  # so the downstream can treat this one and MultiFileGeneratingJob identically
         Job.__init__(self, output_filename)
         self.callback = function
@@ -1068,6 +1077,9 @@ class MultiFileGeneratingJob(FileGeneratingJob):
             )
         if not hasattr(filenames, "__iter__"):
             raise TypeError("filenames was not iterable")
+        for x in filenames:
+            if not (isinstance(x, six.string_types) or isinstance(x, pathlib.Path)):
+                raise ValueError("filenames must be a list of strings or pathlib.Path")
 
         job_id = ":".join(sorted(str(x) for x in filenames))
         return Job.__new__(cls, job_id)
@@ -1082,12 +1094,10 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         """
         if not hasattr(function, "__call__"):
             raise ValueError("function was not a callable")
-        sorted_filenames = list(sorted(x for x in filenames))
+        sorted_filenames = list(
+            sorted(str(x) for x in filenames)
+        )  # type checking in __new__
         for x in sorted_filenames:
-            if not isinstance(x, six.string_types):
-                raise ValueError(
-                    "Not all filenames passed to MultiFileGeneratingJob were string objects"
-                )
             if (
                 x in util.filename_collider_check
                 and util.filename_collider_check[x] is not self
@@ -1212,6 +1222,9 @@ class MultiTempFileGeneratingJob(FileGeneratingJob):
             )
         if not hasattr(filenames, "__iter__"):
             raise TypeError("filenames was not iterable")
+        for x in filenames:
+            if not (isinstance(x, six.string_types) or isinstance(x, pathlib.Path)):
+                raise ValueError("filenames must be a list of strings or pathlib.Path")
 
         job_id = ":".join(sorted(str(x) for x in filenames))
         return Job.__new__(cls, job_id)
@@ -1227,12 +1240,9 @@ class MultiTempFileGeneratingJob(FileGeneratingJob):
         self.is_temp_job = True
         if not hasattr(function, "__call__"):
             raise ValueError("function was not a callable")
-        sorted_filenames = list(sorted(x for x in filenames))
+        sorted_filenames = list(sorted(str(x) for x in filenames))
         for x in sorted_filenames:
-            if not isinstance(x, six.string_types):
-                raise ValueError(
-                    "Not all filenames passed to MultiTempFileGeneratingJob were string objects"
-                )
+            # type checking happens in __new__
             if (
                 x in util.filename_collider_check
                 and util.filename_collider_check[x] is not self
@@ -1378,9 +1388,13 @@ class TempFilePlusGeneratingJob(FileGeneratingJob):
             util.reraise(exc_info[1], None, exc_info[2])
         self._is_done = None
         if not os.path.exists(self.output_filename):
-            raise ppg_exceptions.JobContractError("%s did not create it's output file")
+            raise ppg_exceptions.JobContractError(
+                "%s did not create it's output file" % self.job_id
+            )
         if not os.path.exists(self.log_file):
-            raise ppg_exceptions.JobContractError("%s did not create it's log file")
+            raise ppg_exceptions.JobContractError(
+                "%s did not create it's log file" % self.job_id
+            )
 
 
 class DataLoadingJob(Job):
@@ -2279,7 +2293,7 @@ def NotebookJob(notebook_filename, auto_detect_dependencies=True):
     changed"""
     notebook_name = notebook_filename
     if "/" in notebook_name:
-        notebook_name = notebook_name[notebook_name.rfind("/") + 1:]
+        notebook_name = notebook_name[notebook_name.rfind("/") + 1 :]
     if not os.path.exists("cache/notebooks"):
         os.mkdir("cache/notebooks")
     sentinel_file = os.path.join(

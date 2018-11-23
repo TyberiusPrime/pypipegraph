@@ -4653,6 +4653,79 @@ class DefinitionErrorsTests(PPGPerTest):
         self.assertRaises(ppg.JobContractError, inner)
 
 
+class PathLibTests(PPGPerTest):
+    def test_multifilegenerating_job_requires_string_filenames(self):
+        import pathlib
+
+        x = lambda: 5  # noqa:E731
+        ppg.MultiFileGeneratingJob(["a"], x)
+        ppg.MultiFileGeneratingJob([pathlib.Path("a")], x)
+
+        def inner():
+            ppg.MultiFileGeneratingJob([0])
+
+        self.assertRaises(ValueError, inner)
+
+        def inner():
+            ppg.MultiFileGeneratingJob([b"a"])  # bytes is not a string type
+
+        self.assertRaises(ValueError, inner)
+
+    def test_accepts(self):
+        import pathlib
+
+        write("aaa", "hello")
+        write("bbb", "hello")
+        write("ccc", "hello")
+        a = ppg.FileTimeInvariant(pathlib.Path("aaa"))
+        a1 = ppg.MultiFileInvariant([pathlib.Path("bbb"), "ccc"])
+        b = ppg.FileGeneratingJob(
+            pathlib.Path("b"),
+            lambda of: write(of, "bb" + read("aaa") + read("bbb") + read("ccc")),
+        )
+        b.depends_on(a)
+        b.depends_on(a1)
+
+        def mf():
+            write("c", "cc" + read("g"))
+            write("d", "dd" + read("h"))
+            write("e", "ee" + read("i") + read("j"))
+
+        c = ppg.MultiFileGeneratingJob([pathlib.Path("c"), "d", pathlib.Path("e")], mf)
+        c.depends_on(b)
+        d = ppg.FunctionInvariant(pathlib.Path("f"), lambda x: x + 1)
+        c.depends_on(d)
+        e = ppg.ParameterInvariant(pathlib.Path("c"), "hello")
+        c.depends_on(e)
+        f = ppg.TempFileGeneratingJob(pathlib.Path("g"), lambda: write("g", "gg"))
+        c.depends_on(f)
+
+        def tmf():
+            write("h", "hh")
+            write("i", "ii")
+
+        g = ppg.MultiTempFileGeneratingJob([pathlib.Path("h"), "i"], tmf)
+        c.depends_on(g)
+
+        def tpf():
+            write("j", "jjjj")
+            write("k", "kkkk")
+
+        h = ppg.TempFilePlusGeneratingJob(pathlib.Path("j"), pathlib.Path("k"), tpf)
+        c.depends_on(h)
+        ppg.run_pipegraph()
+        self.assertEqual(read("aaa"), "hello")
+        self.assertEqual(read("b"), "bbhellohellohello")
+        self.assertEqual(read("c"), "ccgg")
+        self.assertEqual(read("d"), "ddhh")
+        self.assertEqual(read("e"), "eeiijjjj")
+        self.assertFalse(os.path.exists("g"))
+        self.assertFalse(os.path.exists("h"))
+        self.assertFalse(os.path.exists("i"))
+        self.assertFalse(os.path.exists("j"))
+        self.assertEqual(read("k"), "kkkk")
+
+
 if __name__ == "__main__":
     unittest.main()
     print(" left unittest.main()")
