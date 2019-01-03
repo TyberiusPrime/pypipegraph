@@ -3126,7 +3126,37 @@ class DependencyTests(PPGPerTest):
         self.assertTrue(read("out/B"), "B")
         self.assertTrue(read("out/C"), "C")
 
-    def test_depends_on_exclodes_on_non_jobs(self):
+    def test_depends_on_accepts_multiple_values(self):
+        jobA = ppg.FileGeneratingJob("out/A", lambda: write("out/A", "A"))
+        jobB = ppg.FileGeneratingJob("out/B", lambda: write("out/B", "B"))
+        jobC = ppg.FileGeneratingJob("out/C", lambda: write("out/C", "C"))
+        jobC.depends_on(jobA, jobB)
+        ppg.run_pipegraph()
+        self.assertTrue(read("out/A"), "A")
+        self.assertTrue(read("out/B"), "B")
+        self.assertTrue(read("out/C"), "C")
+
+    def test_depends_on_accepts_multiple_values_mixed(self):
+        jobA = ppg.FileGeneratingJob("out/A", lambda: write("out/A", "A"))
+        jobB = ppg.FileGeneratingJob("out/B", lambda: write("out/B", "B"))
+        jobC = ppg.FileGeneratingJob("out/C", lambda: write("out/C", "C"))
+        jobC.depends_on(jobA, [jobB])
+        ppg.run_pipegraph()
+        self.assertTrue(read("out/A"), "A")
+        self.assertTrue(read("out/B"), "B")
+        self.assertTrue(read("out/C"), "C")
+
+    def test_depends_on_none_ignored(self):
+        jobA = ppg.FileGeneratingJob("out/A", lambda: write("out/A", "A"))
+        jobB = ppg.FileGeneratingJob("out/B", lambda: write("out/B", "B"))
+        jobC = ppg.FileGeneratingJob("out/C", lambda: write("out/C", "C"))
+        jobC.depends_on(jobA, [jobB], None, [None])
+        ppg.run_pipegraph()
+        self.assertTrue(read("out/A"), "A")
+        self.assertTrue(read("out/B"), "B")
+        self.assertTrue(read("out/C"), "C")
+ 
+    def test_depends_on_excludes_on_non_jobs(self):
         jobA = ppg.FileGeneratingJob("out/A", lambda: write("out/A", "A"))
 
         def inner():

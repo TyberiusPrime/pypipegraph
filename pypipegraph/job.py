@@ -201,13 +201,15 @@ class Job(object):
         # logger.info("adding self %s to %s" % (job_id, id(util.global_pipegraph)))
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
 
-    def depends_on(self, job_joblist_or_list_of_jobs):
-        """Declare that this job depends on the ones passed in (which must be Jobs, JobLists or iterables of tsuch).
+    def depends_on(self, *job_joblist_or_list_of_jobs):
+        """Declare that this job depends on the ones passed in (which must be Jobs, JobLists or iterables of such).
         This means that this job can only run, if all previous ones have been done sucessfully.
         """
         # if isinstance(job_joblist_or_list_of_jobs, Job):
         # job_joblist_or_list_of_jobs = [job_joblist_or_list_of_jobs]
-        if job_joblist_or_list_of_jobs is self:
+        if not job_joblist_or_list_of_jobs: # nothing to do
+            return
+        if job_joblist_or_list_of_jobs[0] is self:
             raise ppg_exceptions.CycleError(
                 "job.depends_on(self) would create a cycle: %s" % (self.job_id)
             )
@@ -217,12 +219,15 @@ class Job(object):
                 if hasattr(job, "__iter__") and not isinstance(
                     job, str
                 ):  # a nested list
-                    self.depends_on(job)
+                    self.depends_on(*job)
                     pass
+                elif job is None:
+                    continue
                 else:
                     raise ValueError(
                         "Can only depend on Job objects, was: %s" % type(job)
                     )
+            
             else:
                 if self in job.prerequisites:
                     raise ppg_exceptions.CycleError(
