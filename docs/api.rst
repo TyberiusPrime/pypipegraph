@@ -23,14 +23,15 @@ File generating jobs
 .. autoclass:: pypipegraph.MultiFileGeneratingJob
 .. autoclass:: pypipegraph.TempFileGeneratingJob
 .. autoclass:: pypipegraph.PlotJob
-.. autoclass:: pypipegraph.CombinedPlotJob
+.. autofunction:: pypipegraph.CombinedPlotJob
 
 Invariant checking jobs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 .. autoclass:: pypipegraph.FunctionInvariant
+.. autoclass:: pypipegraph.ParameterInvariant
+.. autoclass:: pypipegraph.RobustFileChecksumInvariant
 .. autoclass:: pypipegraph.FileTimeInvariant
 .. autoclass:: pypipegraph.FileChecksumInvariant
-.. autoclass:: pypipegraph.ParameterInvariant
 
 Job graph modifiying jobs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -41,6 +42,7 @@ Job graph modifiying jobs
 Exceptions:
 ------------------------------
 A Pipegraph may throw the following exceptions:
+
 .. autoclass:: pypipegraph.ppg_exceptions.PyPipeGraphError
 .. autoclass:: pypipegraph.ppg_exceptions.CycleError
 .. autoclass:: pypipegraph.ppg_exceptions.RuntimeError
