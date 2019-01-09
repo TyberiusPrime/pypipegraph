@@ -4,6 +4,7 @@ import shutil
 import os
 import pypipegraph as ppg
 
+
 @pytest.fixture
 def new_pipegraph(request):
     if request.cls is None:
@@ -44,4 +45,3 @@ def new_pipegraph(request):
             pass
     finally:
         os.chdir(old_dir)
-

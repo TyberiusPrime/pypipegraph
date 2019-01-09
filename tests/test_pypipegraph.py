@@ -31,7 +31,6 @@ import pypipegraph as ppg
 logger = ppg.util.start_logging("test")
 import os
 import shutil
-import gc
 import subprocess
 import hashlib
 from six.moves import xrange
@@ -3138,7 +3137,7 @@ class DependencyTests(unittest.TestCase):
         self.assertTrue(read("out/A"), "A")
         self.assertTrue(read("out/B"), "B")
         self.assertTrue(read("out/C"), "C")
- 
+
     def test_depends_on_excludes_on_non_jobs(self):
         jobA = ppg.FileGeneratingJob("out/A", lambda: write("out/A", "A"))
 
@@ -4710,9 +4709,12 @@ class PathLibTests(unittest.TestCase):
         )
         b.depends_on(a)
         b.depends_on(a1)
-        class Dummy():
+
+        class Dummy:
             pass
+
         dd = Dummy()
+
         def mf():
             write("c", "cc" + read("g"))
             write("d", "dd" + read("h") + dd.attr)
@@ -4741,12 +4743,13 @@ class PathLibTests(unittest.TestCase):
         h = ppg.TempFilePlusGeneratingJob(pathlib.Path("j"), pathlib.Path("k"), tpf)
         c.depends_on(h)
 
-        i = ppg.CachedDataLoadingJob(pathlib.Path('l'), lambda: write('l','llll'), lambda res: res)
+        i = ppg.CachedDataLoadingJob(
+            pathlib.Path("l"), lambda: write("l", "llll"), lambda res: res
+        )
         c.depends_on(i)
 
-        
-        l = ppg.CachedAttributeLoadingJob(pathlib.Path('m'), dd, 'attr', lambda: '55')
-        c.depends_on(l)
+        m = ppg.CachedAttributeLoadingJob(pathlib.Path("m"), dd, "attr", lambda: "55")
+        c.depends_on(m)
         ppg.run_pipegraph()
         self.assertEqual(read("aaa"), "hello")
         self.assertEqual(read("b"), "bbhellohellohello")
