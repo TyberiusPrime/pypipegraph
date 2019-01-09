@@ -9,7 +9,7 @@ import pathlib
 import subprocess
 import sys
 
-cmd = ["pytest", '--durations=5']
+cmd = ["pytest", "--durations=5"]
 cmd.extend(sys.argv[1:])
 hashes = collections.defaultdict(lambda: "")
 

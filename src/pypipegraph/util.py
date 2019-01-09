@@ -94,7 +94,7 @@ def start_logging(module, other_file=None):
         if other_file:
             if other_file not in file_logging_handlers:
                 file_logging_handlers[other_file] = logging.FileHandler(
-                    os.path.join('logs', other_file), mode="w"
+                    os.path.join("logs", other_file), mode="w"
                 )
                 file_logging_handlers[other_file].setFormatter(formatter)
             logger.addHandler(file_logging_handlers[other_file])

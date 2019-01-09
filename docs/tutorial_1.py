@@ -31,7 +31,7 @@ job_download = pypipegraph.FileGeneratingJob(target_file, download)
 def count_characters_and_write_output():
     file_handle = open(target_file, "rb")
     data = file_handle.read()
-    count = len(data[data.find("<body"):])
+    count = len(data[data.find("<body") :])
     file_handle.close()
     file_handle = open(output_filename, "wb")
     file_handle.write("%s\t%i\n" % (url, count))

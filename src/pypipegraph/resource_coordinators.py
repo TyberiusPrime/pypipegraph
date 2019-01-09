@@ -63,9 +63,9 @@ def get_memory_available():
             op = open("/proc/meminfo", "r")
             d = op.read()
             op.close()
-            mem_total = d[d.find("MemTotal:") + len("MemTotal:"):]
+            mem_total = d[d.find("MemTotal:") + len("MemTotal:") :]
             mem_total = mem_total[: mem_total.find("kB")].strip()
-            swap_total = d[d.find("SwapTotal:") + len("SwapTotal:"):]
+            swap_total = d[d.find("SwapTotal:") + len("SwapTotal:") :]
             swap_total = swap_total[: swap_total.find("kB")].strip()
             physical_memory = int(mem_total) * 1024
             swap_memory = int(swap_total) * 1024
@@ -333,10 +333,10 @@ class LocalSlave:
             except Exception as e:  # some exceptions can't be pickled, so we send a string instead
                 exception = str(e)
         stdout.seek(0, os.SEEK_SET)
-        stdout_text = stdout.read()[-10 * 1024:]
+        stdout_text = stdout.read()[-10 * 1024 :]
         stdout.close()
         stderr.seek(0, os.SEEK_SET)
-        stderr_text = stderr.read()[-10 * 1024:]
+        stderr_text = stderr.read()[-10 * 1024 :]
         stderr.close()
         sys.stdout = old_stdout
         sys.stderr = old_stderr

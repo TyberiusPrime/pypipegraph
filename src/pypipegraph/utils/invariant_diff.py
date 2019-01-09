@@ -35,7 +35,7 @@ status_prefix = default_status_prefix
 job_id_to_compare = None
 for x in sys.argv[1:]:
     if x.startswith("--status="):
-        status_prefix = x[x.find("=") + 1:]
+        status_prefix = x[x.find("=") + 1 :]
     elif x.startswith("--all"):
         modus = "all"
     else:
@@ -52,8 +52,7 @@ if not os.path.exists(status_prefix):
                 status_prefix = fn
                 print(
                     "Using %s as status filename,"
-                    " use --status if you want another one"
-                    % status_prefix
+                    " use --status if you want another one" % status_prefix
                 )
                 break
         else:
