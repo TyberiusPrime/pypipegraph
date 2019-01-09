@@ -26,7 +26,7 @@ if has_pyggplot:  # noqa C901
         return stdout
 
     @pytest.mark.usefixtures("new_pipegraph")
-    class PlotJobTests(unittest.TestCase):
+    class TestPlotJob:
         def test_basic(self):
             ppg.new_pipegraph(rc_gen(), quiet=False)
 
@@ -41,7 +41,7 @@ if has_pyggplot:  # noqa C901
             of = "out/test.png"
             ppg.PlotJob(of, calc, plot)
             ppg.run_pipegraph()
-            self.assertTrue(magic(of).find(b"PNG image") != -1)
+            assert magic(of).find(b"PNG image") != -1
 
         def test_pdf(self):
             def calc():
@@ -55,7 +55,7 @@ if has_pyggplot:  # noqa C901
             of = "out/test.pdf"
             ppg.PlotJob(of, calc, plot)
             ppg.run_pipegraph()
-            self.assertTrue(magic(of).find(b"PDF document") != -1)
+            assert magic(of).find(b"PDF document") != -1
 
         def test_raises_on_invalid_filename(self):
             def calc():
@@ -71,7 +71,8 @@ if has_pyggplot:  # noqa C901
             def inner():
                 ppg.PlotJob(of, calc, plot)
 
-            self.assertRaises(ValueError, inner)
+            with pytest.raises(ValueError):
+                inner()
 
         def test_reruns_just_plot_if_plot_changed(self):
             def calc():
@@ -87,9 +88,9 @@ if has_pyggplot:  # noqa C901
             of = "out/test.png"
             ppg.PlotJob(of, calc, plot)
             ppg.run_pipegraph()
-            self.assertTrue(magic(of).find(b"PNG image") != -1)
-            self.assertEqual(read("out/calc"), "A")
-            self.assertEqual(read("out/plot"), "B")
+            assert magic(of).find(b"PNG image") != -1
+            assert read("out/calc") == "A"
+            assert read("out/plot") == "B"
 
             ppg.new_pipegraph(rc_gen(), quiet=True)
 
@@ -99,9 +100,9 @@ if has_pyggplot:  # noqa C901
 
             ppg.PlotJob(of, calc, plot2)
             ppg.run_pipegraph()
-            self.assertTrue(magic(of).find(b"PNG image") != -1)
-            self.assertEqual(read("out/calc"), "A")
-            self.assertEqual(read("out/plot"), "BB")
+            assert magic(of).find(b"PNG image") != -1
+            assert read("out/calc") == "A"
+            assert read("out/plot") == "BB"
 
         def test_no_rerun_if_ignore_code_changes_and_plot_changes(self):
             def calc():
@@ -117,9 +118,9 @@ if has_pyggplot:  # noqa C901
             of = "out/test.png"
             job = ppg.PlotJob(of, calc, plot)
             ppg.run_pipegraph()
-            self.assertTrue(magic(of).find(b"PNG image") != -1)
-            self.assertEqual(read("out/calc"), "A")
-            self.assertEqual(read("out/plot"), "B")
+            assert magic(of).find(b"PNG image") != -1
+            assert read("out/calc") == "A"
+            assert read("out/plot") == "B"
 
             ppg.new_pipegraph(rc_gen(), quiet=True)
 
@@ -130,9 +131,9 @@ if has_pyggplot:  # noqa C901
             job = ppg.PlotJob(of, calc, plot2)
             job.ignore_code_changes()
             ppg.run_pipegraph()
-            self.assertTrue(magic(of).find(b"PNG image") != -1)
-            self.assertEqual(read("out/calc"), "A")
-            self.assertEqual(read("out/plot"), "B")
+            assert magic(of).find(b"PNG image") != -1
+            assert read("out/calc") == "A"
+            assert read("out/plot") == "B"
 
         def test_reruns_both_if_calc_changed(self):
             def calc():
@@ -148,9 +149,9 @@ if has_pyggplot:  # noqa C901
             of = "out/test.png"
             ppg.PlotJob(of, calc, plot)
             ppg.run_pipegraph()
-            self.assertTrue(magic(of).find(b"PNG image") != -1)
-            self.assertEqual(read("out/calc"), "A")
-            self.assertEqual(read("out/plot"), "B")
+            assert magic(of).find(b"PNG image") != -1
+            assert read("out/calc") == "A"
+            assert read("out/plot") == "B"
 
             ppg.new_pipegraph(rc_gen(), quiet=True)
 
@@ -163,9 +164,9 @@ if has_pyggplot:  # noqa C901
 
             ppg.PlotJob(of, calc2, plot)
             ppg.run_pipegraph()
-            self.assertTrue(magic(of).find(b"PNG image") != -1)
-            self.assertEqual(read("out/calc"), "AA")
-            self.assertEqual(read("out/plot"), "BB")
+            assert magic(of).find(b"PNG image") != -1
+            assert read("out/calc") == "AA"
+            assert read("out/plot") == "BB"
 
         def test_no_rerun_if_calc_change_but_ignore_codechanges(self):
             def calc():
@@ -181,9 +182,9 @@ if has_pyggplot:  # noqa C901
             of = "out/test.png"
             job = ppg.PlotJob(of, calc, plot)
             ppg.run_pipegraph()
-            self.assertTrue(magic(of).find(b"PNG image") != -1)
-            self.assertEqual(read("out/calc"), "A")
-            self.assertEqual(read("out/plot"), "B")
+            assert magic(of).find(b"PNG image") != -1
+            assert read("out/calc") == "A"
+            assert read("out/plot") == "B"
 
             ppg.new_pipegraph(rc_gen(), quiet=True)
 
@@ -197,10 +198,9 @@ if has_pyggplot:  # noqa C901
             job = ppg.PlotJob(of, calc2, plot)
             job.ignore_code_changes()
             ppg.run_pipegraph()
-            self.assertTrue(magic(of).find(b"PNG image") != -1)
-            self.assertEqual(read("out/calc"), "A")
-
-            self.assertEqual(read("out/plot"), "B")
+            assert magic(of).find(b"PNG image") != -1
+            assert read("out/calc") == "A"
+            assert read("out/plot") == "B"
 
         def test_plot_job_dependencies_are_added_to_just_the_cache_job(self):
             def calc():
@@ -215,8 +215,7 @@ if has_pyggplot:  # noqa C901
             job = ppg.PlotJob(of, calc, plot)
             dep = ppg.FileGeneratingJob("out/A", lambda: write("out/A", "A"))
             job.depends_on(dep)
-            # self.assertTrue(dep in job.prerequisites)
-            self.assertTrue(dep in job.cache_job.prerequisites)
+            assert dep in job.cache_job.prerequisites
 
         def test_raises_if_calc_returns_non_df(self):
             def calc():
@@ -233,7 +232,7 @@ if has_pyggplot:  # noqa C901
                 raise ValueError("should not be reached")
             except ppg.RuntimeError:
                 pass
-            self.assertTrue(isinstance(job.cache_job.exception, ppg.JobContractError))
+            assert isinstance(job.cache_job.exception, ppg.JobContractError)
 
         def test_raises_if_plot_returns_non_plot(self):
             # import pyggplot
@@ -252,25 +251,28 @@ if has_pyggplot:  # noqa C901
                 raise ValueError("should not be reached")
             except ppg.RuntimeError:
                 pass
-            self.assertTrue(isinstance(job.exception, ppg.JobContractError))
+            assert isinstance(job.exception, ppg.JobContractError)
 
         def test_passing_non_function_for_calc(self):
             def inner():
                 ppg.PlotJob("out/a", "shu", lambda df: 1)
 
-            self.assertRaises(ValueError, inner)
+            with pytest.raises(ValueError):
+                inner()
 
         def test_passing_non_function_for_plot(self):
             def inner():
                 ppg.PlotJob("out/a", lambda: 55, "shu")
 
-            self.assertRaises(ValueError, inner)
+            with pytest.raises(ValueError):
+                inner()
 
         def test_passing_non_string_as_jobid(self):
             def inner():
                 ppg.PlotJob(5, lambda: 1, lambda df: 34)
 
-            self.assertRaises(ValueError, inner)
+            with pytest.raises(ValueError):
+                inner()
 
 
 if __name__ == "__main__":

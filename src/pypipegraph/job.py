@@ -824,20 +824,26 @@ class RobustFileChecksumInvariant(_FileChecksumInvariant):
             checksum = self.checksum()
             for job_id in all_invariant_stati:
                 if os.path.basename(job_id) == basename:  # could be a moved file...
+                    print("found potentially moved file!", basename)
                     old = all_invariant_stati[job_id]
+                    print(old)
                     if isinstance(old, tuple):
                         if len(old) == 2:
                             old_filesize, old_chksum = old
                         else:
                             dummy_old_filetime, old_filesize, old_chksum = old
                         if old_filesize == filesize:
+                            print('had same size')
                             if (
                                 old_chksum == checksum
                             ):  # don't check filetime, if the file has moved it will have changed
                                 # print("checksum hit %s" % self.input_file)
+                                print('had same checksum')
                                 raise util.NothingChanged(
                                     (filetime, filesize, checksum)
                                 )
+                        else:
+                            print('file size changed', old_filesize, filesize)
             # no suitable old job found.
             return (filetime, filesize, checksum)
 
