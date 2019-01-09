@@ -51,6 +51,7 @@ except ImportError:
 from . import ppg_exceptions
 from . import util
 import sys
+from io import StringIO
 
 logger = util.start_logging("graph")
 
@@ -242,6 +243,7 @@ class Pipegraph(object):
         try:
             any_failed = False
             try:
+                str_error_log = StringIO()
                 try:
                     if os.path.exists("logs/ppg_errors.txt.1"):
                         os.unlink("logs/ppg_errors.txt.1")
@@ -259,6 +261,7 @@ class Pipegraph(object):
                         if job.error_reason != "Indirect" and not self.quiet:
                             self.print_failed_job(job, sys.stderr)
                             self.print_failed_job(job, error_log)
+                            self.print_failed_job(job, str_error_log)
                         if job in self.invariant_loading_issues:
                             print(
                                 "Could not unpickle invariant for %s - exception was %s"
@@ -279,7 +282,7 @@ class Pipegraph(object):
                                 "\n failed job log in logs/ppg_erros", file=sys.stderr
                             )
                     if not self.restart_afterwards:
-                        raise ppg_exceptions.RuntimeError()
+                        raise ppg_exceptions.RuntimeError(str_error_log.getvalue())
                 else:
                     self.cleanup_jobs_that_requested_it()
             finally:
@@ -1178,7 +1181,8 @@ class Pipegraph(object):
                 )
         op.write("]\n")
         op.flush()
-        print("wrote gml")
+        if not self.quiet:
+            print("wrote gml")
         op.close()
 
     def install_signals(self):

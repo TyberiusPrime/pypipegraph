@@ -37,6 +37,7 @@ import hashlib
 from six.moves import xrange
 import stat
 import platform
+import pytest
 
 
 # rc_gen = lambda : ppg.resource_coordinators.LocalTwisted()
@@ -71,39 +72,8 @@ def writeappend(filename_write, filename_append, string):
     append(filename_append, string)
 
 
-class PPGPerTest(unittest.TestCase):
-    """For those testcases that need a new pipeline each time..."""
-
-    def setUp(self):
-        global test_count
-        test_count += 1
-        try:
-            os.mkdir("out")
-        except OSError:
-            pass
-        self.test_dir = "out/%s" % (os.getpid() * 1000 + test_count)
-        # print("test dir", self.test_dir)
-        try:
-            shutil.rmtree(self.test_dir)  # make sure there's no old data around...
-        except IOError:
-            pass
-        os.mkdir(self.test_dir)
-        os.mkdir(os.path.join(self.test_dir, "out"))
-        os.chdir(self.test_dir)
-        ppg.forget_job_status()
-        ppg.new_pipegraph(rc_gen(), quiet=True, dump_graph=False)
-        logger.info("Starting new test\n" + "-" * 50 + "\n\n\n")
-
-    def tearDown(self):
-        os.chdir("../../")
-        try:
-            gc.collect()
-            # shutil.rmtree(self.test_dir)
-        except IOError:
-            pass
-
-
-class SimpleTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class SimpleTests(unittest.TestCase):
     def test_job_creation_before_pipegraph_creation_raises(self):
         ppg.destroy_global_pipegraph()
 
@@ -179,7 +149,8 @@ class SimpleTests(PPGPerTest):
             ppg.forget_job_status("shu.dat")
 
 
-class CycleTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class CycleTests(unittest.TestCase):
     def test_simple_cycle(self):
         def inner():
             ppg.new_pipegraph(quiet=True, dump_graph=False)
@@ -316,7 +287,8 @@ class CycleTests(PPGPerTest):
         self.assertRaises(ValueError, inner)
 
 
-class JobTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class JobTests(unittest.TestCase):
     def test_assert_singletonicity_of_jobs(self):
         ppg.forget_job_status()
         ppg.new_pipegraph(quiet=True, dump_graph=False)
@@ -413,7 +385,8 @@ class JobTests(PPGPerTest):
         self.assertTrue(hasattr(jobA, "__hash__"))
 
 
-class JobTests2(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class JobTests2(unittest.TestCase):
     def test_ignore_code_changes_raises(self):
         jobA = ppg.Job("shu")
 
@@ -461,7 +434,8 @@ class JobTests2(PPGPerTest):
         self.assertTrue(isinstance(str(a), str))
 
 
-class FileGeneratingJobTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class FileGeneratingJobTests(unittest.TestCase):
     def test_basic(self):
         of = "out/a"
         data_to_write = "hello"
@@ -707,7 +681,6 @@ class FileGeneratingJobTests(PPGPerTest):
         self.assertEqual(read("out/Ay"), "ax")  # but the job did run, right?
 
     def test_dumping_graph(self):
-        os.makedirs("logs")
         ppg.new_pipegraph(
             quiet=True, invariant_status_filename="shu.dat", dump_graph=True
         )
@@ -719,7 +692,8 @@ class FileGeneratingJobTests(PPGPerTest):
         self.assertTrue(os.path.exists("logs/ppg_graph.gml"))
 
 
-class MultiFileGeneratingJobTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class MultiFileGeneratingJobTests(unittest.TestCase):
     def test_basic(self):
         of = ["out/a", "out/b"]
 
@@ -873,7 +847,7 @@ class MultiFileGeneratingJobTests(PPGPerTest):
         def inner():
             ppg.MultiFileGeneratingJob([25], lambda: write("out/A", param))
 
-        self.assertRaises(ValueError, inner)
+        self.assertRaises(TypeError, inner)
 
     def test_non_iterable(self):
         param = "A"
@@ -896,7 +870,8 @@ class MultiFileGeneratingJobTests(PPGPerTest):
 test_modifies_shared_global = []
 
 
-class DataLoadingJobTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class DataLoadingJobTests(unittest.TestCase):
     def test_modifies_slave(self):
         # global shared
         # shared = "I was the the global in the mcp"
@@ -1156,7 +1131,8 @@ class Dummy(object):
     pass
 
 
-class AttributeJobTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class AttributeJobTests(unittest.TestCase):
     def test_basic_attribute_loading(self):
         o = Dummy()
 
@@ -1360,7 +1336,8 @@ class AttributeJobTests(PPGPerTest):
         self.assertRaises(ValueError, inner)
 
 
-class TempFileGeneratingJobTest(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class TempFileGeneratingJobTest(unittest.TestCase):
     def test_basic(self):
         temp_file = "out/temp"
 
@@ -1713,7 +1690,8 @@ class TempFileGeneratingJobTest(PPGPerTest):
         self.assertFalse(os.path.exists("out/temp"))
 
 
-class MultipTempFileGeneratingJobTest(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class MultipTempFileGeneratingJobTest(unittest.TestCase):
     def test_basic(self):
         ppg.new_pipegraph(rc_gen(), quiet=False, dump_graph=False)
 
@@ -1737,7 +1715,8 @@ class MultipTempFileGeneratingJobTest(PPGPerTest):
         self.assertFalse(os.path.exists(temp_files[1]))
 
 
-class TempFilePlusGeneratingJobTest(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class TempFilePlusGeneratingJobTest(unittest.TestCase):
     def test_basic(self):
         ppg.new_pipegraph(quiet=False, dump_graph=False)
         temp_file = "out/temp"
@@ -1898,7 +1877,8 @@ class TempFilePlusGeneratingJobTest(PPGPerTest):
         self.assertTrue(os.path.exists(keep_file))
 
 
-class InvariantTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class InvariantTests(unittest.TestCase):
     def sentinel_count(self):
         sentinel = "out/sentinel"
         try:
@@ -2404,7 +2384,8 @@ class InvariantTests(PPGPerTest):
         self.assertRaises(ValueError, inner)
 
 
-class FunctionInvariantTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class FunctionInvariantTests(unittest.TestCase):
     # most of the function invariant testing is handled by other test classes.
     # but these are more specialized.
 
@@ -2773,7 +2754,8 @@ class FunctionInvariantTests(PPGPerTest):
         self.assertNotEqual(av, cv)
 
 
-class MultiFileInvariantTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class MultiFileInvariantTests(unittest.TestCase):
     def test_new_raises_unchanged(self):
         write("out/a", "hello")
         write("out/b", "world")
@@ -2963,7 +2945,8 @@ class MultiFileInvariantTests(PPGPerTest):
         )  # checksums changed
 
 
-class DependencyTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class DependencyTests(unittest.TestCase):
     def test_simple_chain(self):
         o = Dummy()
 
@@ -3192,7 +3175,8 @@ class DependencyTests(PPGPerTest):
         self.assertTrue(read("out/D"), "D")
 
 
-class DependencyInjectionJobTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class DependencyInjectionJobTests(unittest.TestCase):
     def test_basic(self):
         # TODO: there is a problem with this apporach. The AttributeLoadingJob
         # references different objects, since it get's pickled alongside with the method,
@@ -3363,7 +3347,8 @@ class DependencyInjectionJobTests(PPGPerTest):
         self.assertEqual(read("out/B"), "XX")  # one rerun...
 
 
-class JobGeneratingJobTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class JobGeneratingJobTests(unittest.TestCase):
     def test_basic(self):
         def gen():
             ppg.FileGeneratingJob("out/A", lambda: write("out/A", "A"))
@@ -3596,7 +3581,8 @@ class JobGeneratingJobTests(PPGPerTest):
         self.assertEqual(read("out/Cx"), "CC")
 
 
-class CachedAttributeJobTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class CachedAttributeJobTests(unittest.TestCase):
     def test_simple(self):
         o = Dummy()
 
@@ -3868,7 +3854,8 @@ class CachedAttributeJobTests(PPGPerTest):
         self.assertRaises(ValueError, inner)
 
 
-class CachedDataLoadingJobTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class CachedDataLoadingJobTests(unittest.TestCase):
     def test_simple(self):
         o = Dummy()
 
@@ -4092,7 +4079,8 @@ if (  # noqa: C901
 
 else:
 
-    class MemMappedDataLoadingJobTests(PPGPerTest):
+    @pytest.mark.usefixtures("new_pipegraph")
+    class MemMappedDataLoadingJobTests(unittest.TestCase):
         """Similar to a CachedDataLoadingJob, except that the data in question is a numpy
         array that get's memmapped in later on"""
 
@@ -4236,7 +4224,8 @@ else:
             self.assertTrue(dl.failed)
 
 
-class TestResourceCoordinator(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class TestResourceCoordinator(unittest.TestCase):
     def test_jobs_that_need_all_cores_are_spawned_one_by_one(self):
         # we'll determine this by the start respective end times..
         ppg.new_pipegraph(
@@ -4312,7 +4301,8 @@ class CantDepickle:
         raise TypeError("I can be pickled, but not unpickled")
 
 
-class TestingTheUnexpectedTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class TestingTheUnexpectedTests(unittest.TestCase):
     def test_job_killing_python(self):
         def dies():
             import sys
@@ -4432,7 +4422,8 @@ class NotYetImplementedTests(unittest.TestCase):
         raise NotImplementedError
 
 
-class TestUtils(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class TestUtils(unittest.TestCase):
     def test_assert_uniqueness_simple(self):
         class Dummy:
             def __init__(self, name):
@@ -4549,7 +4540,8 @@ class TestUtils(PPGPerTest):
         self.assertRaises(ValueError, inner)
 
 
-class TestFinalJobs(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class TestFinalJobs(unittest.TestCase):
     def test_correct_dependencies(self):
         o = Dummy()
 
@@ -4595,7 +4587,8 @@ class TestFinalJobs(PPGPerTest):
             self.assertTrue("No jobs can depend on FinalJobs" in str(e))
 
 
-class TestJobList(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class TestJobList(unittest.TestCase):
     def raises_on_non_job(self):
         def inner():
             ppg.JobList("shu")
@@ -4651,7 +4644,8 @@ class TestJobList(PPGPerTest):
         self.assertEqual(len(x), 2)
 
 
-class DefinitionErrorsTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class DefinitionErrorsTests(unittest.TestCase):
     def test_defining_function_invariant_twice(self):
         a = lambda: 55  # noqa:E731
         b = lambda: 66  # noqa:E731
@@ -4683,7 +4677,8 @@ class DefinitionErrorsTests(PPGPerTest):
         self.assertRaises(ppg.JobContractError, inner)
 
 
-class PathLibTests(PPGPerTest):
+@pytest.mark.usefixtures("new_pipegraph")
+class PathLibTests(unittest.TestCase):
     def test_multifilegenerating_job_requires_string_filenames(self):
         import pathlib
 
@@ -4694,12 +4689,12 @@ class PathLibTests(PPGPerTest):
         def inner():
             ppg.MultiFileGeneratingJob([0])
 
-        self.assertRaises(ValueError, inner)
+        self.assertRaises(TypeError, inner)
 
         def inner():
             ppg.MultiFileGeneratingJob([b"a"])  # bytes is not a string type
 
-        self.assertRaises(ValueError, inner)
+        self.assertRaises(TypeError, inner)
 
     def test_accepts(self):
         import pathlib

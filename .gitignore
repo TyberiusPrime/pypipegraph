@@ -13,4 +13,10 @@ pypipegraph/tests/covhtml/*
 .pytest_cache/
 __pycache__/
 MANIFEST
-
+dist/
+logs/
+out/
+pypipegraph/logs
+pypipegraph/tests/run
+*.egg-info
+.pypipegraph_status_robust*
