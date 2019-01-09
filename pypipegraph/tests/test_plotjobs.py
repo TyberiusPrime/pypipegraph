@@ -1,4 +1,5 @@
-from .test_pypipegraph import PPGPerTest, rc_gen, append, write, read
+import pytest
+from .test_pypipegraph import rc_gen, append, write, read
 import unittest
 import os
 
@@ -24,7 +25,8 @@ if has_pyggplot:  # noqa C901
         stdout, stderr = p.communicate()
         return stdout
 
-    class PlotJobTests(PPGPerTest):
+    @pytest.mark.usefixtures("new_pipegraph")
+    class PlotJobTests(unittest.TestCase):
         def test_basic(self):
             ppg.new_pipegraph(rc_gen(), quiet=False)
 

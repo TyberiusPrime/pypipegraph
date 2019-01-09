@@ -207,7 +207,7 @@ class Job(object):
         """
         # if isinstance(job_joblist_or_list_of_jobs, Job):
         # job_joblist_or_list_of_jobs = [job_joblist_or_list_of_jobs]
-        if not job_joblist_or_list_of_jobs: # nothing to do
+        if not job_joblist_or_list_of_jobs:  # nothing to do
             return
         if job_joblist_or_list_of_jobs[0] is self:
             raise ppg_exceptions.CycleError(
@@ -227,7 +227,7 @@ class Job(object):
                     raise ValueError(
                         "Can only depend on Job objects, was: %s" % type(job)
                     )
-            
+
             else:
                 if self in job.prerequisites:
                     raise ppg_exceptions.CycleError(
@@ -243,6 +243,12 @@ class Job(object):
             ):  # skip the lists here, they will be delegated to further calls during the checking...
                 self.prerequisites.add(job)
         return self
+
+    def depends_on_params(self, params):
+        """Create a ParameterInvariant(job_id, params) and have this job
+        depend on it"""
+        p = ParameterInvariant(self.job_id, params)
+        self.depends_on(p)
 
     def is_in_dependency_chain(self, other_job, max_depth):
         """check wether the other job is in this job's dependency chain.
@@ -639,7 +645,8 @@ class FunctionInvariant(_InvariantJob):
         + "(<code\tobject\t<[^>]+>,\tfile\t'[^']+',\tline\t[0-9]+)"  # that's the cpython way  # that's how they look like in pypy. More sensibly, actually
     )
 
-    def dis_code(self, code, function):
+    @classmethod
+    def dis_code(cls, code, function):
         """'dissassemble' python code.
         Strips lambdas (they change address every execution otherwise)"""
         # TODO: replace with bytecode based smarter variant
@@ -657,16 +664,17 @@ class FunctionInvariant(_InvariantJob):
             row = row.split()
             res.append("\t".join(row[1:]))
         res = "\n".join(res)
-        res = self.inner_code_object_re.sub("lambda", res)
+        res = cls.inner_code_object_re.sub("lambda", res)
         if function and hasattr(function, "__qualname__"):
             res = res.replace(function.__qualname__, "<func name ommited>")
         for ii, constant in enumerate(code.co_consts):
             if hasattr(constant, "co_code"):
                 res += "inner no %i" % ii
-                res += self.dis_code(constant, None)
+                res += cls.dis_code(constant, None)
         return res
 
-    def get_cython_source(self, cython_func):
+    @staticmethod
+    def get_cython_source(cython_func):
         """Attemp to get the cython source for a function.
         Requires cython code to be compiled with -p or #embed_pos_in_docstring=True in the source file
 
@@ -1084,7 +1092,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
             raise TypeError("filenames was not iterable")
         for x in filenames:
             if not (isinstance(x, six.string_types) or isinstance(x, pathlib.Path)):
-                raise ValueError("filenames must be a list of strings or pathlib.Path")
+                raise TypeError("filenames must be a list of strings or pathlib.Path")
 
         job_id = ":".join(sorted(str(x) for x in filenames))
         return Job.__new__(cls, job_id)
@@ -1149,7 +1157,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
             if self.rename_broken:
                 for fn in self.filenames:
                     try:
-                        shutil.move(fn, fn + ".broken")
+                        shutil.move(fn, str(fn) + ".broken")
                     except IOError:
                         pass
             else:
