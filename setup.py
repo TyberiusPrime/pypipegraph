@@ -1,18 +1,24 @@
-from distutils.core import setup
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+    Use setup.cfg to configure your project.
 
-setup(
-    name="pypipegraph",
-    version="0.175",
-    packages=["pypipegraph"],
-    license="MIT",
-    url="http://https://github.com/IMTMarburg/pypipegraph",
-    author="Florian Finkernagel",
-    author_email="finkernagel@imt.uni-marburg.de",
-    description="A workflow (job) engine/pipeline for bioinformatics and scientific computing.",
-    long_description=open("README").read(),
-    requires=["kitchen"],
-    classifiers=[
-        "Programming Language :: Python",
-        "Programming Language :: Python :: 3",
-    ],
-)
+    This file was generated with PyScaffold 3.1.
+    PyScaffold helps you to put up the scaffold of your new Python project.
+    Learn more under: https://pyscaffold.org/
+"""
+import sys
+
+from pkg_resources import require, VersionConflict
+from setuptools import setup
+
+
+try:
+    require("setuptools>=38.3")
+except VersionConflict:
+    print("Error: version of setuptools is too old (<38.3)!")
+    sys.exit(1)
+
+
+if __name__ == "__main__":
+    setup(use_pyscaffold=True)

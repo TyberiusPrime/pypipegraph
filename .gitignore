@@ -20,3 +20,7 @@ pypipegraph/logs
 pypipegraph/tests/run
 *.egg-info
 .pypipegraph_status_robust*
+.coverage
+.eggs
+tests/run
+

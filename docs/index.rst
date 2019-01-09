@@ -7,7 +7,7 @@ Welcome to pypipegraph's documentation!
 =======================================
 
 This document describes the current pipegraph api as you'd use it.
-Please see http://code.google.com/p/pypipegraph for the project's homepage.
+Please see http://github.com/TyberiusPrime/pypipegraph for the project's homepage.
 
 .. toctree::
    :maxdepth: 2
@@ -15,9 +15,10 @@ Please see http://code.google.com/p/pypipegraph for the project's homepage.
    tutorial
    api
 
+
 Readme
 ======================================
-.. include:: ../README.txt
+.. include:: ../README
 
 
 

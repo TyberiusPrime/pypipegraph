@@ -7,10 +7,10 @@ import pypipegraph as ppg
 @pytest.fixture
 def new_pipegraph(request):
     if request.cls is None:
-        target_path = Path(__file__).parent / "run" / ("." + request.node.name)
+        target_path = Path(request.fspath).parent / "run" / ("." + request.node.name)
     else:
         target_path = (
-            Path(__file__).parent
+            Path(request.fspath).parent
             / "run"
             / (request.cls.__name__ + "." + request.node.name)
         )
