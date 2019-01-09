@@ -58,6 +58,9 @@ file_logging_handlers = {}
 
 
 class DummyLogger(object):
+    def __init__(self):
+        raise ValueError("dummy logging!")
+
     def warn(self, *args):
         pass
 
@@ -283,6 +286,7 @@ def checksum_file(filename):
             _hash.update(block)
             block = op.read(block_size)
         res = _hash.hexdigest()
+    print('checksuming', os.path.abspath(filename), file_size, res)
     return res
 
 

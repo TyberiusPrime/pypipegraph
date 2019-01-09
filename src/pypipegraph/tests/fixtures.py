@@ -5,6 +5,22 @@ import os
 import pypipegraph as ppg
 
 
+# support code to remove test created files
+# only if the test suceeded
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    # execute all other hooks to obtain the report object
+    outcome = yield
+    rep = outcome.get_result()
+
+    # set a report attribute for each phase of a call, which can
+    # be "setup", "call", "teardown"
+
+    setattr(item, "rep_" + rep.when, rep)
+
+
 @pytest.fixture
 def new_pipegraph(request):
     if request.cls is None:
@@ -33,15 +49,23 @@ def new_pipegraph(request):
         def np():
             ppg.new_pipegraph(rc, quiet=True)
             ppg.util.global_pipegraph.result_dir = Path("results")
+            ppg.util.stat_cache.clear()
+            print('new pipegraph', Path(ppg.util.global_pipegraph.invariant_status_filename).absolute())
             g = ppg.util.global_pipegraph
-            g.new_pipeline = np
+            g.new_pipegraph = np
             return g
 
+        def finalize():
+            if hasattr(request.node, "rep_setup"):
+                if request.node.rep_setup.passed and request.node.rep_call.passed:
+                    print("executing test succeeded", request.node.nodeid)
+                    try:
+                        shutil.rmtree(target_path)
+                    except OSError:
+                        pass
+
+        request.addfinalizer(finalize)
         yield np()
-        try:
-            # shutil.rmtree(Path(__file__).parent / "run")
-            pass
-        except OSError:
-            pass
+
     finally:
         os.chdir(old_dir)

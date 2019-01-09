@@ -1,6 +1,8 @@
 #!/usr/bin/python3
 
 # run tests whenever a file changes
+# smarter than pytest-xdist -f
+# which monitors all files - even the test generated ones
 import hashlib
 import collections
 import itertools
