@@ -23,7 +23,6 @@ SOFTWARE.
 """
 
 import os
-import sys
 import stat
 import time
 import hashlib
@@ -32,6 +31,17 @@ import shutil
 import pytest
 import pypipegraph as ppg
 from .shared import write, assertRaises, read, append, Dummy
+
+
+class Undepickable(object):
+    def __getstate__(self):
+        return {"shu": 123}  # must not return falsey value
+
+    def __setstate__(self, state):
+        self.sha = state["shu"]
+        import pickle
+
+        raise pickle.UnpicklingError("SHU")
 
 
 @pytest.mark.usefixtures("new_pipegraph")
@@ -135,6 +145,45 @@ class TestInvariant:
         ppg.run_pipegraph()
         assert read("out/A") == param
 
+    def test_depends_on_params(self):
+        a = ppg.FileGeneratingJob("out/A", lambda: write("a"))
+        b = a.depends_on_params(23)
+        assert b.job_id == "PIout/A"
+        assert b.parameters == 23
+        assert b in a.prerequisites
+
+    def test_parameter_dependency_accepts_as_unchanged(self, new_pipegraph):
+        write("out/A", "x")
+        job = ppg.FileGeneratingJob("out/A", lambda: append("out/A", "A"))
+        p = ppg.ParameterInvariant("myparam", (1, 2, 3))
+        job.depends_on(p)
+        ppg.run_pipegraph()
+        assert read("out/A") == "A"  # invalidation unlinks!
+
+        new_pipegraph.new_pipegraph()
+
+        def is_prefix(new):
+            def inner(old):
+                write("inner_check", "yes")
+                if len(old) > len(new):
+                    return False
+                for ii in range(len(old)):
+                    if new[ii] != old[ii]:
+                        return False
+                return True
+
+            return inner
+
+        job = ppg.FileGeneratingJob("out/A", lambda: append("out/A", "A"))
+        param = (1, 2, 3, 4)
+        p = ppg.ParameterInvariant(
+            "myparam", param, accept_as_unchanged_func=is_prefix(param)
+        )
+        job.depends_on(p)
+        ppg.run_pipegraph()
+        assert read("out/A") == "A"  # no change
+        assert read("inner_check") == "yes"
+
     def test_filetime_dependency(self, new_pipegraph):
         of = "out/a"
 
@@ -169,6 +218,14 @@ class TestInvariant:
         assert (
             read(of) == "shu"
         )  # job does not get rerun - filetime invariant is now filechecksum invariant...
+
+    def test_filechecksum_dependency_raises_on_too_short_a_filename(self):
+        with pytest.raises(ValueError):
+            ppg.RobustFileChecksumInvariant("a")
+
+        with pytest.raises(ValueError):
+            ppg.RobustFileChecksumInvariant("sh")
+        ppg.RobustFileChecksumInvariant("shu")
 
     def test_filechecksum_dependency(self, new_pipegraph):
         of = "out/a"
@@ -492,6 +549,15 @@ class TestInvariant:
         assert read("out/A") == "A"
         assert read("out/B") == "BB"
 
+    def test_job_not_setting_invalidated_after_was_invalidated_raises(self):
+        class BadJob(ppg.FileGeneratingJob):
+            def invalidated(self, reason):
+                pass
+
+        BadJob("out/A", lambda: write("out/A", "a"))
+        with pytest.raises(ppg.JobContractError):
+            ppg.run_pipegraph()
+
     def test_FileTimeInvariant_cant_have_dependencies(self):
         # invariants are always roots of the DAG - they can't have any dependencies themselves
         write("out/shu", "shu")
@@ -535,6 +601,68 @@ class TestInvariant:
             ppg.run_pipegraph()
 
         assertRaises(ValueError, inner)
+
+    def test_invariant_loading_issues_on_value_catastrophic(self):
+        a = ppg.DataLoadingJob("a", lambda: 5)
+        b = ppg.FileGeneratingJob("out/b", lambda: write("out/b", "b"))
+        b.ignore_code_changes()
+        b.depends_on(a)
+        write("out/b", "a")
+        import pickle
+
+        with open(ppg.util.global_pipegraph.invariant_status_filename, "wb") as op:
+            pickle.dump(a.job_id, op, pickle.HIGHEST_PROTOCOL)
+            op.write(b"This breaks")
+        with pytest.raises(ppg.PyPipeGraphError):
+            ppg.run_pipegraph()
+        assert read("out/b") == "a"  # job was not run
+
+    def test_invariant_loading_issues_on_value_undepickableclass(self):
+        import tempfile
+        import pickle
+
+        ppg.util.global_pipegraph.quiet = False
+
+        # make sure Undepickable is Undepickable
+        with tempfile.TemporaryFile("wb+") as tf:
+            o = Undepickable()
+            pickle.dump(o, tf, pickle.HIGHEST_PROTOCOL)
+            with pytest.raises(pickle.UnpicklingError):
+                tf.seek(0, 0)
+                pickle.load(tf)
+
+        a = ppg.ParameterInvariant("a", 5)
+        b = ppg.FileGeneratingJob("out/b", lambda: write("out/b", "b"))
+        b.ignore_code_changes()
+        c = ppg.ParameterInvariant("c", 23)
+        b.depends_on(a)
+        write("out/b", "a")
+
+        with open(ppg.util.global_pipegraph.invariant_status_filename, "wb") as op:
+            pickle.dump(a.job_id, op, pickle.HIGHEST_PROTOCOL)
+            pickle.dump(Undepickable(), op, pickle.HIGHEST_PROTOCOL)
+            pickle.dump(c.job_id, op, pickle.HIGHEST_PROTOCOL)
+            pickle.dump(23, op, pickle.HIGHEST_PROTOCOL)
+        with pytest.raises(ppg.RuntimeError):
+            ppg.run_pipegraph()
+        assert read("out/b") == "b"  # job was run
+        print(ppg.util.global_pipegraph.invariant_status)
+        assert a.job_id in ppg.util.global_pipegraph.invariant_loading_issues
+        assert ppg.util.global_pipegraph.invariant_status["PIc"] == 23
+
+    def test_invariant_loading_issues_on_key(self):
+        a = ppg.DataLoadingJob("a", lambda: 5)
+        b = ppg.FileGeneratingJob("out/b", lambda: write("out/b", "b"))
+        b.ignore_code_changes()
+        b.depends_on(a)
+        write("out/b", "a")
+
+        with open(ppg.util.global_pipegraph.invariant_status_filename, "wb") as op:
+            op.write(b"key breaks already")
+            op.write(b"This breaks")
+        with pytest.raises(ppg.PyPipeGraphError):
+            ppg.run_pipegraph()
+        assert read("out/b") == "a"  # job was not run
 
 
 @pytest.mark.usefixtures("new_pipegraph")
@@ -725,7 +853,7 @@ class TestFunctionInvariant:
         def inner():
             ppg.FunctionInvariant(5, lambda: 1)
 
-        assertRaises(ValueError, inner)
+        assertRaises(TypeError, inner)
 
     def test_cant_have_dependencies(self):
         # invariants are always roots of the DAG - they can't have any dependencies themselves
@@ -795,7 +923,18 @@ class TestFunctionInvariant:
             __name__ = "MockIM"
 
         class MockCython:
-            __doc__ = "File:stat.py starting at line 0)\nHello world"
+            __doc__ = "File:stat.py starting at line 22)\nHello world"
+            im_func = "cyfunction shu"
+            im_class = MockImClass
+
+            def __call__(self):
+                pass
+
+            def __repr__(self):
+                return "cyfunction mockup"
+
+        class MockCythonWithoutFileInfo:
+            __doc__ = "Hello world"
             im_func = "cyfunction shu"
             im_class = MockImClass
 
@@ -806,13 +945,36 @@ class TestFunctionInvariant:
                 return "cyfunction mockup"
 
         c = MockCython()
+        c2 = MockCythonWithoutFileInfo
         mi = MockImClass()
         stat.MockIM = mi
         c.im_class = mi
-        print(c.im_class.__module__ in sys.modules)
 
+        assert len(ppg.util.func_hashes) == 0
         a = ppg.FunctionInvariant("test", c)
         a._get_invariant(None, [])
+        assert len(ppg.util.func_hashes) == 0
+
+        b = ppg.FunctionInvariant("test2", c2)
+        with pytest.raises(ValueError):
+            b._get_invariant(None, [])
+        assert len(ppg.util.func_hashes) == 0
+
+        assert ppg.job.function_to_str(c).endswith("stat.py 22")
+        assert ppg.FunctionInvariant.get_cython_source(c) == "return mode & 0o7777"
+
+    def test_buildin_function(self):
+        a = ppg.FunctionInvariant("a", open)
+        assert "<built-in" in str(a)
+
+    def test_function_invariant_non_function(self):
+        class CallMe:
+            def __call__(self):
+                raise ValueError()
+
+        a = ppg.FunctionInvariant("a", CallMe)
+        with pytest.raises(ValueError):
+            a._get_invariant([], None)
 
     def test_closure_capturing(self):
         def func(da_list):
@@ -834,6 +996,9 @@ class TestFunctionInvariant:
         assert a.get_invariant(False, [])
         assert bv == av
         assert not (av == cv)
+
+    def test_function_to_str_builtin(self):
+        assert ppg.job.function_to_str(open) == "<built-in function open>"
 
     def test_closure_capturing_dict(self):
         def func(da_list):
@@ -909,6 +1074,19 @@ class TestFunctionInvariant:
 
 @pytest.mark.usefixtures("new_pipegraph")
 class TestMultiFileInvariant:
+    def test_input_checking(self):
+        with pytest.raises(TypeError):
+            ppg.MultiFileInvariant("out/A", lambda: write("out/A", "A"))
+        with pytest.raises(TypeError):
+            ppg.MultiFileInvariant(34, lambda: write("out/A", "A"))
+        with pytest.raises(TypeError):
+            alist = ["out/A", "out/B"]
+            ppg.MultiFileInvariant((x for x in alist), lambda: write("out/A", "A"))
+        with pytest.raises(ValueError):
+            ppg.MultiFileInvariant(["out/A", "out/A"], lambda: write("out/A", "A"))
+        with pytest.raises(ValueError):
+            ppg.MultiFileInvariant([], lambda: write("out/A", "A"))
+
     def test_new_raises_unchanged(self):
         write("out/a", "hello")
         write("out/b", "world")
@@ -1085,6 +1263,35 @@ class TestMultiFileInvariant:
         jobB = ppg.MultiFileInvariant(["out2/a"])
         cs3 = jobB.get_invariant(False, {jobA.job_id: cs})
         assert not ([x[3] for x in cs2] == [x[2] for x in cs3])  # checksums changed
+
+    def test_rehome_same_filenames_gives_up(self, new_pipegraph):
+        from pathlib import Path
+
+        write("out/counter", "0")
+        Path("out/A").mkdir()
+        Path("out/B").mkdir()
+        Path("out/C").mkdir()
+        Path("out/D").mkdir()
+        write("out/A/A", "hello")
+        write("out/B/A", "world")
+        jobA = ppg.MultiFileInvariant(["out/A/A", "out/B/A"])
+
+        def of():
+            append("out/counter", "x")
+            write("out/x", "ok")
+
+        jobB = ppg.FileGeneratingJob("out/x", of)
+        jobB.depends_on(jobA)
+        ppg.run_pipegraph()
+        assert read("out/counter") == "0x"
+        new_pipegraph.new_pipegraph()
+        shutil.move("out/A/A", "out/C/A")
+        shutil.move("out/B/A", "out/D/A")
+        jobA = ppg.MultiFileInvariant(["out/C/A", "out/D/A"])
+        jobB = ppg.FileGeneratingJob("out/x", of)
+        jobB.depends_on(jobA)
+        ppg.run_pipegraph()
+        assert read("out/counter") == "0xx"
 
 
 @pytest.mark.usefixtures("new_pipegraph")
@@ -1274,6 +1481,8 @@ class TestDependency:
         jobB = ppg.FileGeneratingJob("out/B", lambda: write("out/B", "B"))
         jobC = ppg.FileGeneratingJob("out/C", lambda: write("out/C", "C"))
         jobC.depends_on(jobA, [jobB], None, [None])
+        jobC.depends_on(None)
+        jobC.depends_on()
         ppg.run_pipegraph()
         assert read("out/A") == "A"
         assert read("out/B") == "B"
@@ -1289,11 +1498,14 @@ class TestDependency:
 
     def test_depends_on_instant_cycle_check(self):
         jobA = ppg.FileGeneratingJob("out/A", lambda: write("out/A", "A"))
+        jobB = ppg.FileGeneratingJob("out/b", lambda: write("out/B", "b"))
+        jobB.depends_on(jobA)
 
-        def inner():
+        with pytest.raises(ppg.CycleError):
             jobA.depends_on(jobA)
 
-        assertRaises(ppg.CycleError, inner)
+        with pytest.raises(ppg.CycleError):
+            jobA.depends_on(jobB)
 
     def test_depends_on_accepts_a_list_of_lists(self):
         jobA = ppg.FileGeneratingJob("out/A", lambda: write("out/A", "A"))

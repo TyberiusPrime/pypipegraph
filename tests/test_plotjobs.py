@@ -294,7 +294,7 @@ if has_pyggplot:  # noqa C901
             def inner():
                 ppg.PlotJob(5, lambda: 1, lambda df: 34)
 
-            with pytest.raises(ValueError):
+            with pytest.raises(TypeError):
                 inner()
 
 

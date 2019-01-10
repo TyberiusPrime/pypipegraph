@@ -143,3 +143,8 @@ class TestUtils:
             Dummy2("shu")
 
         assertRaises(ValueError, inner)
+
+    def test_exception_on_run_without_previous_new_pipegraph(self):
+        ppg.util.global_pipegraph = None
+        with pytest.raises(ValueError):
+            ppg.run_pipegraph()

@@ -24,6 +24,7 @@ File generating jobs
 .. autoclass:: pypipegraph.TempFileGeneratingJob
 .. autoclass:: pypipegraph.PlotJob
 .. autofunction:: pypipegraph.CombinedPlotJob
+.. autofunction:: pypipegraph.NotebookJob
 
 Invariant checking jobs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

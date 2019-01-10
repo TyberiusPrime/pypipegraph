@@ -220,7 +220,7 @@ class TestJobGeneratingJob:
         def inner():
             ppg.JobGeneratingJob(5, lambda: 1)
 
-        assertRaises(ValueError, inner)
+        assertRaises(TypeError, inner)
 
     def test_generated_jobs_that_can_not_run_right_away_because_of_dataloading_do_not_crash(
         self
@@ -268,6 +268,31 @@ class TestJobGeneratingJob:
         ppg.run_pipegraph()
         assert read("out/Ac") == "AA"
         assert read("out/Cx") == "CC"
+
+    def test_raises_if_generating_within_dataload(self):
+        ppg.util.global_pipegraph.quiet = False
+        write_job = ppg.FileGeneratingJob("out/A", lambda: write("out/A", "aa"))
+
+        def load():
+            ppg.FileGeneratingJob("out/B", lambda: write("out/B", "aa"))
+
+        dl = ppg.DataLoadingJob("load_data", load)
+        write_job.depends_on(dl)
+        with pytest.raises(ppg.RuntimeError):
+            ppg.run_pipegraph()
+        assert "Trying to add new jobs to running pipeline" in str(dl.exception)
+
+    def test_ignored_if_generating_within_filegenerating(self):
+        write_job = ppg.FileGeneratingJob("out/A", lambda: write("out/A", "aa"))
+
+        def load():
+            ppg.FileGeneratingJob("out/B", lambda: write("out/B", "aa"))
+            write("out/C", "c")
+
+        dl = ppg.FileGeneratingJob("out/C", load)
+        write_job.depends_on(dl)
+        ppg.run_pipegraph()
+        assert read("out/C") == "c"
 
 
 @pytest.mark.usefixtures("new_pipegraph")
@@ -381,7 +406,7 @@ class TestDependencyInjectionJob:
         def inner():
             ppg.DependencyInjectionJob(5, lambda: 1)
 
-        assertRaises(ValueError, inner)
+        assertRaises(TypeError, inner)
 
     def test_injecting_into_data_loading_does_not_retrigger(self, new_pipegraph):
         o = Dummy()

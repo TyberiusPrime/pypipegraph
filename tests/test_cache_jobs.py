@@ -141,13 +141,10 @@ class TestCachedAttributeJob:
     def test_throws_on_non_function_func(self):
         o = Dummy()
 
-        def calc():
-            return 55
-
-        def inner():
-            ppg.CachedAttributeLoadingJob("out/mycalc", calc, o, "a")
-
-        assertRaises(ValueError, inner)
+        with pytest.raises(ValueError):
+            ppg.CachedAttributeLoadingJob(
+                "out/mycalc", lambda: 5, o, "a"
+            )  # wrong argument order
 
     def test_calc_depends_on_added_dependencies(self):
         o = Dummy()
@@ -188,7 +185,7 @@ class TestCachedAttributeJob:
         def inner():
             ppg.CachedAttributeLoadingJob(5, o, "a", lambda: 55)
 
-        assertRaises(ValueError, inner)
+        assertRaises(TypeError, inner)
 
     def test_no_swapping_attributes_for_one_job(self):
         def cache():
@@ -236,7 +233,9 @@ class TestCachedAttributeJob:
         assert jobB.was_invalidated
         assert job.was_invalidated
 
-    def test_cached_attribute_job_does_not_load_its_preqs_on_cached(self, new_pipegraph):
+    def test_cached_attribute_job_does_not_load_its_preqs_on_cached(
+        self, new_pipegraph
+    ):
         o = Dummy()
 
         def a():
@@ -276,7 +275,7 @@ class TestCachedAttributeJob:
             o = Dummy()
             ppg.CachedAttributeLoadingJob(55, o, "c", lambda: 55)
 
-        assertRaises(ValueError, inner)
+        assertRaises(TypeError, inner)
 
     def test_raises_on_non_string_attribute(self):
         def inner():
@@ -297,7 +296,7 @@ class TestCachedAttributeJob:
             o = Dummy()
             ppg.CachedAttributeLoadingJob(123, o, "a", lambda: 123)
 
-        assertRaises(ValueError, inner)
+        assertRaises(TypeError, inner)
 
 
 @pytest.mark.usefixtures("new_pipegraph")
@@ -442,7 +441,9 @@ class CachedDataLoadingJobTests:
         assert not (jobB in job.prerequisites)
         assert jobB in job.lfg.prerequisites
 
-    def test_cached_dataloading_job_does_not_load_its_preqs_on_cached(self, new_pipegraph):
+    def test_cached_dataloading_job_does_not_load_its_preqs_on_cached(
+        self, new_pipegraph
+    ):
         o = Dummy()
 
         def a():
@@ -484,11 +485,35 @@ class CachedDataLoadingJobTests:
         assert read("out/Cx") == "CC"  # did run the load job again
 
     def test_name_must_be_str(self):
-        def inner():
-            o = Dummy()
-            ppg.CachedDataLoadingJob(123, o, "a", lambda: 123)
+        with pytest.raises(TypeError):
+            ppg.CachedDataLoadingJob(123, lambda: 123, lambda: 5)
+        with pytest.raises(ValueError):
+            ppg.CachedDataLoadingJob("123", 123, lambda: 5)
+        with pytest.raises(ValueError):
+            ppg.CachedDataLoadingJob("123", lambda: 5, 123)
 
-        assertRaises(ValueError, inner)
+    def test_cant_unpickle(self):
+        o = Dummy()
+
+        def calc():
+            return ", ".join(str(x) for x in range(0, 100))
+
+        def store(value):
+            o.a = value
+
+        job = ppg.CachedDataLoadingJob("out/mycalc", calc, store)
+        job.ignore_code_changes()
+        write("out/mycalc", "no unpickling this")
+        of = "out/A"
+
+        def do_write():
+            write(of, o.a)
+
+        ppg.FileGeneratingJob(of, do_write).depends_on(job)
+        with pytest.raises(ValueError):
+            ppg.run_pipegraph()
+        assert isinstance(job.exception, ValueError)
+        assert "Unpickling error" in str(job.exception)
 
 
 is_pypy = platform.python_implementation() == "PyPy"
@@ -554,8 +579,113 @@ else:
                 write(of, ",".join(str(x) for x in o[0]))
 
             ppg.FileGeneratingJob(of, do_write).depends_on(dl)
+            dl.depends_on_params(123)
             ppg.run_pipegraph()
             assert read("out/B") == "0,1,2,3,4,5,6,7,8,9"
+
+        def test_raises_on_non_string(self):
+            import numpy
+
+            with pytest.raises(TypeError):
+                ppg.MemMappedDataLoadingJob(55, lambda: 5, lambda: 5, numpy.uint32)
+            with pytest.raises(ValueError):
+                ppg.MemMappedDataLoadingJob("shu", 5, lambda: 5, numpy.uint32)
+            with pytest.raises(ValueError):
+                ppg.MemMappedDataLoadingJob("shu", lambda: 5, 5, numpy.uint32)
+
+        def test_ignore_code_changes(self, new_pipegraph):
+            import numpy
+            import pathlib
+
+            o = []
+
+            def calc():
+                return numpy.array(range(0, 10), dtype=numpy.uint32)
+
+            def store(value):
+                o.append(value)
+
+            def cleanup():
+                o.clear()
+
+            dl = ppg.MemMappedDataLoadingJob("out/A", calc, store, numpy.uint32)
+            dl.cleanup = cleanup
+            of = "out/B"
+
+            def do_write():
+                assert isinstance(o[0], numpy.core.memmap)
+                write(of, ",".join(str(x) for x in o[0]))
+
+            ppg.FileGeneratingJob(of, do_write).depends_on(dl)
+            dl.depends_on_params(123)
+            ppg.run_pipegraph()
+            assert read("out/B") == "0,1,2,3,4,5,6,7,8,9"
+
+            new_pipegraph.new_pipegraph()
+
+            def calc2():
+                return numpy.array(range(0, 10), dtype=numpy.uint32) + 1
+
+            dl = ppg.MemMappedDataLoadingJob("out/A", calc2, store, numpy.uint32)
+            dl.cleanup = cleanup
+            of = "out/B"
+            ppg.FileGeneratingJob(of, do_write).depends_on(dl)
+            dl.depends_on_params(123)
+            ppg.run_pipegraph()
+            assert read("out/B") == "1,2,3,4,5,6,7,8,9,10"
+
+            new_pipegraph.new_pipegraph()
+
+            def calc3():
+                return numpy.array(range(0, 10), dtype=numpy.uint32) + 1
+
+            dl = ppg.MemMappedDataLoadingJob("out/A", calc3, store, numpy.uint32)
+            dl.ignore_code_changes()
+            dl.cleanup = cleanup
+            of = "out/B"
+            ppg.FileGeneratingJob(of, do_write).depends_on(dl)
+            dl.depends_on_params(123)
+            ppg.run_pipegraph()
+            assert read("out/B") == "1,2,3,4,5,6,7,8,9,10"  # jup, no rerun
+
+            new_pipegraph.new_pipegraph()
+
+            def store2(value):
+                o.append(value)
+                o.append(value)
+
+            dl = ppg.MemMappedDataLoadingJob("out/A", calc2, store2, numpy.uint32)
+            dl.ignore_code_changes()
+            dl.cleanup = cleanup
+            of = "out/B"
+            ppg.FileGeneratingJob(of, do_write).depends_on(dl)
+            dl.depends_on_params(123)
+            ppg.run_pipegraph()
+            assert read("out/B") == "1,2,3,4,5,6,7,8,9,10"  # jup, no rerun
+
+            new_pipegraph.new_pipegraph()
+            dl = ppg.MemMappedDataLoadingJob("out/A", calc2, store2, numpy.uint32)
+            dl.cleanup = cleanup
+            of = "out/B"
+            ppg.FileGeneratingJob(of, do_write).depends_on(dl)
+            dl.depends_on_params(123)
+            write("out/B", "replace me")
+            ppg.run_pipegraph()
+            assert read("out/B") == "1,2,3,4,5,6,7,8,9,10"  # jup, no rerun
+            new_pipegraph.new_pipegraph()
+            dl = ppg.MemMappedDataLoadingJob(
+                pathlib.Path("out/A"), calc2, store2, numpy.uint32
+            )
+            dl.cleanup = cleanup
+            of = "out/B"
+            ppg.FileGeneratingJob(of, do_write).depends_on(dl)
+            dl.depends_on_params(123)
+            ppg.Job.depends_on_params(
+                dl, 456
+            )  # this should trigger just the load invalidation
+            write("out/B", "replace me")
+            ppg.run_pipegraph()
+            assert read("out/B") == "1,2,3,4,5,6,7,8,9,10"  # jup, no rerun
 
         def test_invalidation(self, new_pipegraph):
             import numpy

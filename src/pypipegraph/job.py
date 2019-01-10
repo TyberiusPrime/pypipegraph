@@ -27,37 +27,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-from . import ppg_exceptions
-from . import util
 import pathlib
-
-logger = util.start_logging("job")
 import re
-
-try:
-    import cStringIO
-
-    io = cStringIO
-except ImportError:
-    import io
 import os
 import stat
-from . import util
 import sys
 import dis
 import shutil
 import hashlib
-
-try:
-    import cPickle
-
-    pickle = cPickle
-except ImportError:
-    import pickle
 import traceback
 import platform
 import time
 import six
+from six.moves import cPickle as pickle
+from six import StringIO
+from . import ppg_exceptions
+from . import util
+
+logger = util.start_logging("job")
 
 is_pypy = platform.python_implementation() == "PyPy"
 module_type = type(sys)
@@ -75,7 +62,7 @@ class JobList(object):
         jobs = list(jobs)
         for job in jobs:
             if not isinstance(job, Job):
-                raise ppg_exceptions.ValueError("%s was not a job object" % job)
+                raise ValueError("%s was not a job object" % job)
         self.jobs = set(jobs)
 
     def __iter__(self):
@@ -111,6 +98,17 @@ class JobList(object):
         )
 
 
+def verify_job_id(job_id):
+    if not isinstance(job_id, str):
+        if isinstance(job_id, pathlib.Path):
+            job_id = str(job_id)
+        else:
+            raise TypeError(
+                "Job_id must be a string, was %s %s" % (job_id, type(job_id))
+            )
+    return job_id
+
+
 class Job(object):
     """Base class for all Jobs - never instanciated itself.
 
@@ -122,13 +120,7 @@ class Job(object):
     def __new__(cls, job_id, *args, **kwargs):
         """Handles the singletonization on the job_id"""
         # logger.info("New for %s %s" % (cls, job_id))
-        if not isinstance(job_id, str):
-            if isinstance(job_id, pathlib.Path):
-                job_id = str(job_id)
-            else:
-                raise ValueError(
-                    "Job_id must be a string, was %s %s" % (job_id, type(job_id))
-                )
+        job_id = verify_job_id(job_id)
         if job_id not in util.job_uniquifier:
             util.job_uniquifier[job_id] = object.__new__(cls)
             util.job_uniquifier[
@@ -166,13 +158,12 @@ class Job(object):
 
     def __init__(self, job_id):
         # logger.info("init for %s" % job_id)
-        if isinstance(job_id, pathlib.Path):
-            job_id = str(job_id)
+        job_id = verify_job_id(job_id)
         if not hasattr(self, "dependants"):  # test any of the following
             # else: this job was inited before, and __new__ returned an existing instance
             self.job_id = job_id
             self.job_no = -1
-            self.cores_needed = 1
+            self._cores_needed = 1
             self.memory_needed = -1
             self.dependants = set()
             self.prerequisites = set()
@@ -200,6 +191,24 @@ class Job(object):
             self.do_cache = False
         # logger.info("adding self %s to %s" % (job_id, id(util.global_pipegraph)))
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
+
+    @property
+    def cores_needed(self):
+        return self._cores_needed
+
+    @cores_needed.setter
+    def cores_needed(self, value):
+        ok = True
+        if not isinstance(value, int):
+            ok = False
+        else:
+            if value < -2 or value == 0:
+                ok = False
+        if not ok:
+            raise ValueError(
+                "cores_needed must be a positive integer, or -1 (allow one other job to run) or -2 (use all cores"
+            )
+        self._cores_needed = value
 
     def depends_on(self, *job_joblist_or_list_of_jobs):
         """Declare that this job depends on the ones passed in (which must be Jobs, JobLists or iterables of such).
@@ -229,6 +238,10 @@ class Job(object):
                     )
 
             else:
+                if job.prerequisites is None:
+                    raise ppg_exceptions.PyPipeGraphError(
+                        "Mixing jobs from different piepgraphs not supported."
+                    )
                 if self in job.prerequisites:
                     raise ppg_exceptions.CycleError(
                         "Cycle adding %s to %s" % (self.job_id, job.job_id)
@@ -241,6 +254,10 @@ class Job(object):
             if isinstance(
                 job, Job
             ):  # skip the lists here, they will be delegated to further calls during the checking...
+                if self.prerequisites is None:
+                    raise ppg_exceptions.PyPipeGraphError(
+                        "Mixing jobs from different piepgraphs not supported"
+                    )
                 self.prerequisites.add(job)
         return self
 
@@ -249,6 +266,7 @@ class Job(object):
         depend on it"""
         p = ParameterInvariant(self.job_id, params)
         self.depends_on(p)
+        return p
 
     def is_in_dependency_chain(self, other_job, max_depth):
         """check wether the other job is in this job's dependency chain.
@@ -268,7 +286,7 @@ class Job(object):
 
     def ignore_code_changes(self):
         """Tell the job not to autogenerate a FunctionInvariant for it's callback(s)"""
-        raise ValueError("This job does not support ignore_code_changes")
+        pass
 
     def inject_auto_invariants(self):
         """Create the automagically generated FunctionInvariants if applicable"""
@@ -319,7 +337,7 @@ class Job(object):
         """Actually modify the in memory data"""
         if not self.is_loadable():
             raise ValueError("Called load() on a job that was not loadable")
-        raise ValueError(
+        raise ValueError(  # pragma: no cover
             "Called load() on a j'ob that had is_loadable, but did not overwrite load() as it should"
         )
 
@@ -352,14 +370,17 @@ class Job(object):
             # logger.info("checking preq %s" % preq)
             if preq.is_done():
                 if preq.was_invalidated and not preq.was_run and not preq.is_loadable():
-                    # was_run is necessary, a filegen job might have already created the file (and written a bit to it), but that does not mean that it's done enough to start the next one. Was_run means it has returned.
+                    # was_run is necessary, a filegen job might have already created the file (and written a bit to it),
+                    # but that does not mean that it's done enough to start the next one. Was_run means it has returned.
                     # On the other hand, it might have been a job that didn't need to run, then was_invalidated should be false.
                     # or it was a loadable job anyhow, then it doesn't matter.
                     # logger.info("case 1 - false %s" % preq)
-                    return False  # false means no way
-                else:  # pragma: no cover
-                    # logger.info("case 2 - delay") #but we still need to try the other preqs if it was ok
-                    pass
+                    return (
+                        False
+                    )  # pragma: no cover - there is a test case, it triggers, but coverage misses it apperantly
+                # else:
+                # logger.info("case 2 - delay") #but we still need to try the other preqs if it was ok
+                # continue  # go and check the next one
             else:
                 # logger.info("case 3 - not done")
                 return False
@@ -499,7 +520,7 @@ def get_cython_filename_and_line_no(cython_func):
                 continue
         elif hasattr(sys.modules[name], module_name):
             sub_module = getattr(sys.modules[name], module_name)
-            try:
+            try:  # pragma: no cover
                 if (
                     getattr(sub_module, cython_func.im_class.__name__)
                     == cython_func.im_class
@@ -508,7 +529,7 @@ def get_cython_filename_and_line_no(cython_func):
                     break
             except AttributeError:
                 continue
-    if not found:
+    if not found:  # pragma: no cover
         raise ValueError("Could not find module for %s" % cython_func)
     filename = found.__file__.replace(".so", ".pyx").replace(
         ".pyc", ".py"
@@ -589,8 +610,8 @@ class FunctionInvariant(_InvariantJob):
             ):
                 return self.get_cython_source(self.function)
             else:
-                print(repr(self.function))
-                print(repr(self.function.im_func))
+                # print(repr(self.function))
+                # print(repr(self.function.im_func))
                 raise ValueError("Can't handle this object %s" % self.function)
         try:
             closure = self.function.func_closure
@@ -598,43 +619,42 @@ class FunctionInvariant(_InvariantJob):
             closure = self.function.__closure__
         key = (id(self.function.__code__), id(closure))
         if key not in util.func_hashes:
-            if hasattr(self.function, "im_func") and "cyfunction" in repr(
-                self.function.im_func
-            ):
-                invariant = self.get_cython_source(self.function)
-            else:
-                invariant = self.dis_code(self.function.__code__, self.function)
-                if closure:
-                    for name, cell in zip(self.function.__code__.co_freevars, closure):
-                        # we ignore references to self - in that use case you're expected to make your own ParameterInvariants, and we could not detect self.parameter anyhow (only self would be bound)
-                        # we also ignore bound functions - their address changes all the time. IDEA: Make this recursive (might get to be too expensive)
-                        try:
-                            if (
-                                name != "self"
-                                and not hasattr(cell.cell_contents, "__code__")
-                                and not isinstance(cell.cell_contents, module_type)
+            invariant = self.dis_code(self.function.__code__, self.function)
+            if closure:
+                for name, cell in zip(self.function.__code__.co_freevars, closure):
+                    # we ignore references to self - in that use case you're expected
+                    # to make your own ParameterInvariants, and we could not detect
+                    # self.parameter anyhow (only self would be bound)
+                    # we also ignore bound functions - their address changes
+                    # every run.
+                    # IDEA: Make this recursive (might get to be too expensive)
+                    try:
+                        if (
+                            name != "self"
+                            and not hasattr(cell.cell_contents, "__code__")
+                            and not isinstance(cell.cell_contents, module_type)
+                        ):
+                            if isinstance(cell.cell_contents, dict):
+                                x = repr(sorted(list(cell.cell_contents.items())))
+                            elif isinstance(cell.cell_contents, set) or isinstance(
+                                cell.cell_contents, frozenset
                             ):
-                                if isinstance(cell.cell_contents, dict):
-                                    x = repr(sorted(list(cell.cell_contents.items())))
-                                elif isinstance(cell.cell_contents, set) or isinstance(
-                                    cell.cell_contents, frozenset
-                                ):
-                                    x = repr(sorted(list(cell.cell_contents)))
-                                else:
-                                    x = repr(cell.cell_contents)
-                                if (
-                                    "at 0x" in x
-                                ):  # if you don't have a sensible str(), we'll default to the class path. This takes things like <chipseq.quality_control.AlignedLaneQualityControl at 0x73246234>.
-                                    x = x[: x.find("at 0x")]
-                                if "id=" in x:
-                                    print(x)
-                                    raise ValueError("Still an issue")
-                                invariant += "\n" + x
-                        except ValueError as e:
-                            if str(e) == "Cell is empty":
-                                pass
+                                x = repr(sorted(list(cell.cell_contents)))
                             else:
-                                raise
+                                x = repr(cell.cell_contents)
+                            if (
+                                "at 0x" in x
+                            ):  # if you don't have a sensible str(), we'll default to the class path. This takes things like <chipseq.quality_control.AlignedLaneQualityControl at 0x73246234>.
+                                x = x[: x.find("at 0x")]
+                            if "id=" in x:  # pragma: no cover - defensive
+                                print(x)
+                                raise ValueError("Still an issue")
+                            invariant += "\n" + x
+                    except ValueError as e:  # pragma: no cover - defensive
+                        if str(e) == "Cell is empty":
+                            pass
+                        else:
+                            raise
 
             util.func_hashes[id(self.function.__code__)] = invariant
         return util.func_hashes[id(self.function.__code__)]
@@ -650,7 +670,7 @@ class FunctionInvariant(_InvariantJob):
         """'dissassemble' python code.
         Strips lambdas (they change address every execution otherwise)"""
         # TODO: replace with bytecode based smarter variant
-        out = io.StringIO()
+        out = StringIO()
         old_stdout = sys.stdout
         try:
             sys.stdout = out
@@ -692,18 +712,19 @@ class FunctionInvariant(_InvariantJob):
         op.close()
 
         # extract the function at hand, minus doc string
-        remaining_lines = d[line_no:]
+        remaining_lines = d[line_no - 1 :]  # lines start couting at 1
         first_line = remaining_lines[0]
         first_line_indent = len(first_line) - len(first_line.lstrip())
-        starts_with_double_quote = first_line.strip().startswith('"""')
-        starts_with_single_quote = first_line.strip().startswith("'''")
-        if starts_with_single_quote or starts_with_double_quote:  # there is a docstring
+        start_tags = '"""', "'''"
+        start_tag = False
+        for st in start_tags:
+            if first_line.strip().startswith(st):
+                start_tag = st
+                break
+        if start_tag:  # there is a docstring
             text = "\n".join(remaining_lines).strip()
             text = text[3:]  # cut of initial ###
-            if starts_with_single_quote:
-                text = text[text.find("'''") + 3 :]
-            else:
-                text = text[text.find('"""') + 3 :]
+            text = text[text.find(start_tag) + 3 :]
             remaining_lines = text.split("\n")
         last_line = len(remaining_lines)
         for ii, line in enumerate(remaining_lines):
@@ -747,9 +768,11 @@ class ParameterInvariant(_InvariantJob):
         return self.parameters
 
 
-class _FileChecksumInvariant(_InvariantJob):
-    """Invalidates when the (md5) checksum of a file changed.
+class RobustFileChecksumInvariant(_InvariantJob):
+    """ Invalidates when the (md5) checksum of a file changed.
     Checksum only get's recalculated if the file modification time changed.
+    RobustFileChecksumInvariant can find a file again if it was moved
+    (but not if it was renamed)
     """
 
     def __init__(self, filename):
@@ -761,28 +784,58 @@ class _FileChecksumInvariant(_InvariantJob):
                 )
             )
         self.input_file = self.job_id
+        self.filenames = [filename]
 
     def _get_invariant(self, old, all_invariant_stati):
+        if (
+            old
+        ):  # if we have something stored, this acts like a normal FileChecksumInvariant
+            return self._get_invariant_basic(old, all_invariant_stati)
+        else:
+            basename = os.path.basename(self.input_file)
+            st = util.stat(self.input_file)
+            filetime = st[stat.ST_MTIME]
+            filesize = st[stat.ST_SIZE]
+            checksum = self.checksum()
+            for job_id in all_invariant_stati:
+                if os.path.basename(job_id) == basename:  # could be a moved file...
+                    old = all_invariant_stati[job_id]
+                    if isinstance(old, tuple):
+                        if len(old) == 2:
+                            old_filesize, old_chksum = (
+                                old
+                            )  # pragma: no cover - upgrade from older pipegraph and move at the same time
+                        else:
+                            dummy_old_filetime, old_filesize, old_chksum = old
+                        if old_filesize == filesize:
+                            if (
+                                old_chksum == checksum
+                            ):  # don't check filetime, if the file has moved it will have changed
+                                # print("checksum hit %s" % self.input_file)
+                                raise util.NothingChanged(
+                                    (filetime, filesize, checksum)
+                                )
+            # no suitable old job found.
+            return (filetime, filesize, checksum)
+
+    def _get_invariant_basic(self, old, all_invariant_stati):
         st = util.stat(self.input_file)
         filetime = st[stat.ST_MTIME]
         filesize = st[stat.ST_SIZE]
         try:
             if not old or old == filetime or old[1] != filesize or old[0] != filetime:
-                # print 'triggered checksum', self.input_file
-                # print 'old', old
-                # print 'new', filetime, filesize
                 chksum = self.checksum()
                 if old == filetime:  # we converted from a filetimeinvariant
-                    # print ('nothingchanged', self.job_id)
-                    raise util.NothingChanged((filetime, filesize, chksum))
+                    raise util.NothingChanged(
+                        (filetime, filesize, chksum)
+                    )  # pragma: no cover
                 elif old and old[2] == chksum:
                     raise util.NothingChanged((filetime, filesize, chksum))
                 else:
-                    # print ('returning new', self.job_id)
                     return filetime, filesize, chksum
             else:
                 return old
-        except TypeError:  # could not parse old tuple... possibly was an FileTimeInvariant before...
+        except TypeError:  # pragma: no cover could not parse old tuple... possibly was an FileTimeInvariant before...
             chksum = self.checksum()
             # print ('type error', self.job_id)
             return filetime, filesize, chksum
@@ -808,46 +861,6 @@ class _FileChecksumInvariant(_InvariantJob):
         return checksum_file(self.job_id)
 
 
-class RobustFileChecksumInvariant(_FileChecksumInvariant):
-    """A file checksum invariant that is robust against file moves (but not against renames!"""
-
-    def _get_invariant(self, old, all_invariant_stati):
-        if (
-            old
-        ):  # if we have something stored, this acts like a normal FileChecksumInvariant
-            return _FileChecksumInvariant._get_invariant(self, old, all_invariant_stati)
-        else:
-            basename = os.path.basename(self.input_file)
-            st = util.stat(self.input_file)
-            filetime = st[stat.ST_MTIME]
-            filesize = st[stat.ST_SIZE]
-            checksum = self.checksum()
-            for job_id in all_invariant_stati:
-                if os.path.basename(job_id) == basename:  # could be a moved file...
-                    print("found potentially moved file!", basename)
-                    old = all_invariant_stati[job_id]
-                    print(old)
-                    if isinstance(old, tuple):
-                        if len(old) == 2:
-                            old_filesize, old_chksum = old
-                        else:
-                            dummy_old_filetime, old_filesize, old_chksum = old
-                        if old_filesize == filesize:
-                            print('had same size')
-                            if (
-                                old_chksum == checksum
-                            ):  # don't check filetime, if the file has moved it will have changed
-                                # print("checksum hit %s" % self.input_file)
-                                print('had same checksum')
-                                raise util.NothingChanged(
-                                    (filetime, filesize, checksum)
-                                )
-                        else:
-                            print('file size changed', old_filesize, filesize)
-            # no suitable old job found.
-            return (filetime, filesize, checksum)
-
-
 FileChecksumInvariant = RobustFileChecksumInvariant
 FileTimeInvariant = RobustFileChecksumInvariant
 
@@ -860,31 +873,29 @@ class MultiFileInvariant(Job):
     """
 
     def __new__(cls, filenames, *args, **kwargs):
-        if isinstance(filenames, str):
-            raise ValueError(
+        if isinstance(filenames, six.string_types):
+            raise TypeError(
                 "Filenames must be a list (or at least an iterable), not a single string"
             )
         if not hasattr(filenames, "__iter__"):
             raise TypeError("filenames was not iterable")
 
+        if len(set(filenames)) != len(filenames):
+            raise ValueError("Duplicated filenames")
+        if not filenames:
+            raise ValueError("filenames was empty")
         job_id = "_MFC_" + ":".join(sorted(str(x) for x in filenames))
         return Job.__new__(cls, job_id)
 
-    def __getnewargs__(self):  # so that unpickling works
-        return (self.filenames,)
+    # def __getnewargs__(self):  # so that unpickling works
+    # return (self.filenames,)
 
     def __init__(self, filenames):
         sorted_filenames = list(sorted(str(x) for x in filenames))
-        for x in sorted_filenames:
-            if not isinstance(x, six.string_types):
-                raise ValueError(
-                    "Not all filenames passed to MultiFileGeneratingJob were string objects"
-                )
         job_id = "_MFC_" + ":".join(sorted_filenames)
         Job.__init__(self, job_id)
         self.filenames = sorted_filenames
-        if not self.filenames:
-            raise ValueError("filenames was empty!")
+
         for fn in self.filenames:
             if not os.path.exists(fn):
                 raise ValueError("File did not exist: %s" % fn)
@@ -918,7 +929,7 @@ class MultiFileInvariant(Job):
         if len(my_basenames) != len(
             set(my_basenames)
         ):  # can't mach if the file names are not distinct.
-            return False
+            return None
         for job_id in all_invariant_stati:
             if job_id.startswith("_MFC_"):
                 their_basenames = to_basenames(job_id)
@@ -973,37 +984,38 @@ class MultiFileInvariant(Job):
 class FileGeneratingJob(Job):
     """Create a single output file of more than 0 bytes."""
 
-    def __init__(
-        self, output_filename, function, rename_broken=False, empty_file_allowed=False
-    ):
+    def __init__(self, output_filename, function, rename_broken=False, empty_ok=False):
         """If @rename_broken is set, any eventual outputfile that exists
         when the job crashes will be renamed to output_filename + '.broken'
         (overwriting whatever was there before)
         """
-        if isinstance(output_filename, pathlib.Path):
-            output_filename = str(output_filename)
+        output_filename = verify_job_id(output_filename)
         if not hasattr(function, "__call__"):
             raise ValueError("function was not a callable")
-        if (
-            output_filename in util.filename_collider_check
-            and util.filename_collider_check[output_filename] is not self
-        ):
-            raise ValueError(
-                "Two jobs generating the same file: %s %s%"
-                % (self, util.filename_collider_check[output_filename])
-            )
-        else:
-            util.filename_collider_check[output_filename] = self
-        self.empty_file_allowed = empty_file_allowed
+        self.empty_ok = empty_ok
         self.filenames = [
             self.job_id
         ]  # so the downstream can treat this one and MultiFileGeneratingJob identically
+        self._check_for_filename_collisions()
         Job.__init__(self, output_filename)
         self.callback = function
         self.rename_broken = rename_broken
         self.do_ignore_code_changes = False
         self._is_done_cache = None
         self._was_run = None
+
+    def _check_for_filename_collisions(self):
+        for x in self.filenames:
+            if (
+                x in util.filename_collider_check
+                and util.filename_collider_check[x] is not self
+            ):
+                raise ValueError(
+                    "Two jobs generating the same file: %s %s - %s"
+                    % (self, util.filename_collider_check[x], x)
+                )
+            else:
+                util.filename_collider_check[x] = self
 
     # the motivation for this chaching is that we do a lot of stat calls. Tens of thousands - and the answer can basically only change
     # when you either run or invalidate the job. This apperantly cuts down about 9/10 of all stat calls
@@ -1029,7 +1041,7 @@ class FileGeneratingJob(Job):
 
     def calc_is_done(self, depth=0):
         if self._is_done_cache is None:
-            if self.empty_file_allowed:
+            if self.empty_ok:
                 self._is_done_cache = util.file_exists(self.job_id)
             else:
                 self._is_done_cache = util.output_file_exists(self.job_id)
@@ -1070,7 +1082,7 @@ class FileGeneratingJob(Job):
             except (OSError, IOError):
                 pass
             util.reraise(exc_info[1], None, exc_info[2])
-        if self.empty_file_allowed:
+        if self.empty_ok:
             filecheck = util.file_exists
         else:
             filecheck = util.output_file_exists
@@ -1096,49 +1108,35 @@ class MultiFileGeneratingJob(FileGeneratingJob):
             )
         if not hasattr(filenames, "__iter__"):
             raise TypeError("filenames was not iterable")
-        for x in filenames:
-            if not (isinstance(x, six.string_types) or isinstance(x, pathlib.Path)):
-                raise TypeError("filenames must be a list of strings or pathlib.Path")
+        filenames = [verify_job_id(f) for f in filenames]
 
-        job_id = ":".join(sorted(str(x) for x in filenames))
+        job_id = ":".join(sorted(filenames))
         return Job.__new__(cls, job_id)
 
-    def __getnewargs__(self):  # so that unpickling works
-        return (self.filenames,)
+    # def __getnewargs__(self):  # so that unpickling works
+    # return (self.filenames,)
 
-    def __init__(self, filenames, function, rename_broken=False, empty_files_ok=False):
+    def __init__(self, filenames, function, rename_broken=False, empty_ok=False):
         """If @rename_broken is set, any eventual outputfile that exists
         when the job crashes will be renamed to output_filename + '.broken'
         (overwriting whatever was there before)
         """
         if not hasattr(function, "__call__"):
             raise ValueError("function was not a callable")
-        sorted_filenames = list(
-            sorted(str(x) for x in filenames)
-        )  # type checking in __new__
-        for x in sorted_filenames:
-            if (
-                x in util.filename_collider_check
-                and util.filename_collider_check[x] is not self
-            ):
-                raise ValueError(
-                    "Two jobs generating the same file: %s %s - %s"
-                    % (self, util.filename_collider_check[x], x)
-                )
-            else:
-                util.filename_collider_check[x] = self
-
-        job_id = ":".join(sorted_filenames)
-        Job.__init__(self, job_id)
+        filenames = sorted([verify_job_id(f) for f in filenames])
         self.filenames = filenames
+        self._check_for_filename_collisions()
+        job_id = ":".join(self.filenames)
+        Job.__init__(self, job_id)
+
         self.callback = function
         self.rename_broken = rename_broken
         self.do_ignore_code_changes = False
-        self.empty_files_ok = empty_files_ok
+        self.empty_ok = empty_ok
 
     def calc_is_done(self, depth=0):
         for fn in self.filenames:
-            if self.empty_files_ok:
+            if self.empty_ok:
                 if not util.file_exists(fn):
                     return False
             else:
@@ -1164,7 +1162,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
                 for fn in self.filenames:
                     try:
                         shutil.move(fn, str(fn) + ".broken")
-                    except IOError:
+                    except IOError:  # pragma: no cover
                         pass
             else:
                 for fn in self.filenames:
@@ -1176,7 +1174,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
             util.reraise(exc_info[1], None, exc_info[2])
         self._is_done = None
         missing_files = []
-        if self.empty_files_ok:
+        if self.empty_ok:
             filecheck = util.file_exists
         else:
             filecheck = util.output_file_exists
@@ -1210,7 +1208,7 @@ class TempFileGeneratingJob(FileGeneratingJob):
             # else:
             logger.info("unlinking %s" % self.job_id)
             os.unlink(self.job_id)
-        except (OSError, IOError):
+        except (OSError, IOError):  # pragma: no cover
             pass
 
     def runs_in_slave(self):
@@ -1230,55 +1228,16 @@ class TempFileGeneratingJob(FileGeneratingJob):
             return True
 
 
-class MultiTempFileGeneratingJob(FileGeneratingJob):
+class MultiTempFileGeneratingJob(MultiFileGeneratingJob):
     """Create a temporary file that is removed once all direct dependands have
     been executed sucessfully"""
 
-    def __new__(cls, filenames, *args, **kwargs):
-        if isinstance(filenames, str):
-            raise ValueError(
-                "Filenames must be a list (or at least an iterable), not a single string"
-            )
-        if not hasattr(filenames, "__iter__"):
-            raise TypeError("filenames was not iterable")
-        for x in filenames:
-            if not (isinstance(x, six.string_types) or isinstance(x, pathlib.Path)):
-                raise ValueError("filenames must be a list of strings or pathlib.Path")
-
-        job_id = ":".join(sorted(str(x) for x in filenames))
-        return Job.__new__(cls, job_id)
-
-    def __getnewargs__(self):  # so that unpickling works
-        return (self.filenames,)
-
-    def __init__(self, filenames, function, rename_broken=False):
-        """If @rename_broken is set, any eventual outputfile that exists
-        when the job crashes will be renamed to output_filename + '.broken'
-        (overwriting whatever was there before)
-        """
+    def __init__(self, filenames, function, rename_broken=False, empty_ok=False):
+        super().__init__(filenames, function, rename_broken, empty_ok)
         self.is_temp_job = True
-        if not hasattr(function, "__call__"):
-            raise ValueError("function was not a callable")
-        sorted_filenames = list(sorted(str(x) for x in filenames))
-        for x in sorted_filenames:
-            # type checking happens in __new__
-            if (
-                x in util.filename_collider_check
-                and util.filename_collider_check[x] is not self
-            ):
-                raise ValueError(
-                    "Two jobs generating the same file: %s %s - %s"
-                    % (self, util.filename_collider_check[x], x)
-                )
-            else:
-                util.filename_collider_check[x] = self
 
-        job_id = ":".join(sorted_filenames)
-        Job.__init__(self, job_id)
-        self.filenames = filenames
-        self.callback = function
-        self.rename_broken = rename_broken
-        self.do_ignore_code_changes = False
+    # def __getnewargs__(self):  # so that unpickling works
+    # return (self.filenames,)
 
     def cleanup(self):
         logger.info("%s cleanup" % self)
@@ -1290,50 +1249,8 @@ class MultiTempFileGeneratingJob(FileGeneratingJob):
             for fn in self.filenames:
                 logger.info("unlinking (cleanup) %s" % fn)
                 os.unlink(fn)
-        except (OSError, IOError):
+        except (OSError, IOError):  # pragma: no cover
             pass
-
-    def invalidated(self, reason=""):
-        for fn in self.filenames:
-            try:
-                logger.info("unlinking (invalidated) %s" % self.job_id)
-                os.unlink(fn)
-            except OSError:
-                pass
-        Job.invalidated(self, reason)
-
-    def run(self):
-        try:
-            self.callback()
-        except Exception:
-            exc_info = sys.exc_info()
-            if self.rename_broken:
-                for fn in self.filenames:
-                    try:
-                        shutil.move(fn, fn + ".broken")
-                    except IOError:
-                        pass
-            else:
-                for fn in self.filenames:
-                    try:
-                        logger.info("unlinking %s" % fn)
-                        os.unlink(fn)
-                    except OSError:
-                        pass
-            util.reraise(exc_info[1], None, exc_info[2])
-        self._is_done = None
-        missing_files = []
-        for f in self.filenames:
-            if not util.output_file_exists(f):
-                missing_files.append(f)
-        if missing_files:
-            raise ppg_exceptions.JobContractError(
-                "%s did not create all of its files.\nMissing were:\n %s"
-                % (self.job_id, "\n".join(missing_files))
-            )
-
-    def runs_in_slave(self):
-        return True
 
     def calc_is_done(self, depth=0):
         logger.info("calc is done %s" % self)
@@ -1352,7 +1269,7 @@ class MultiTempFileGeneratingJob(FileGeneratingJob):
             return True
 
 
-class TempFilePlusGeneratingJob(FileGeneratingJob):
+class TempFilePlusGeneratingJob(TempFileGeneratingJob):
     """Create a temporary file that is removed once all direct dependands have
     been executed sucessfully,
     but keep a log file (and rerun if the log file is not there)
@@ -1361,55 +1278,18 @@ class TempFilePlusGeneratingJob(FileGeneratingJob):
     def __init__(self, output_filename, log_filename, function, rename_broken=False):
         if output_filename == log_filename:
             raise ValueError("output_filename and log_filename must be different")
-        FileGeneratingJob.__init__(self, output_filename, function)
+        super().__init__(output_filename, function)
         self.output_filename = output_filename
         self.log_file = log_filename
         self.is_temp_job = True
 
-    def cleanup(self):
-        logger.info("%s cleanup" % self)
-        try:
-            # the renaming will already have been done when FileGeneratingJob.run(self) was called...
-            # if self.rename_broken:
-            # shutil.move(self.job_id, self.job_id + '.broken')
-            # else:
-            logger.info("unlinking %s" % self.job_id)
-            os.unlink(self.job_id)
-        except (OSError, IOError):
-            pass
-
-    def runs_in_slave(self):
-        return True
-
     def calc_is_done(self, depth=0):
         if not os.path.exists(self.log_file):
             return None
-        if os.path.exists(
-            self.job_id
-        ):  # explicitly not using util.output_file_exists, since there the stat has a race condition - reports 0 on recently closed files
-            return True
-        else:
-            for dep in self.dependants:
-                if (not dep.is_done()) and (not dep.is_loadable()):
-                    return False
-            return True
+        return super().calc_is_done()
 
     def run(self):
-        try:
-            self.callback()
-        except Exception:
-            exc_info = sys.exc_info()
-            try:
-                logger.info("unlinking %s" % self.output_filename)
-                os.unlink(self.output_filename)
-            except OSError:
-                pass
-            util.reraise(exc_info[1], None, exc_info[2])
-        self._is_done = None
-        if not os.path.exists(self.output_filename):
-            raise ppg_exceptions.JobContractError(
-                "%s did not create it's output file" % self.job_id
-            )
+        super().run()
         if not os.path.exists(self.log_file):
             raise ppg_exceptions.JobContractError(
                 "%s did not create it's log file" % self.job_id
@@ -1448,14 +1328,7 @@ class DataLoadingJob(Job):
                 preq.load()
 
         start = time.time()
-        if hasattr(self, "profile"):
-            import cProfile
-
-            cProfile.runctx(
-                "self.callback()", globals(), locals(), "%s.prof" % id(self)
-            )
-        else:
-            self.callback()
+        self.callback()
         end = time.time()
         logger.info("Loading time for %s - %.3f" % (self.job_id, end - start))
         self.was_loaded = True
@@ -1496,10 +1369,6 @@ class AttributeLoadingJob(DataLoadingJob):
                 raise ppg_exceptions.JobContractError(
                     "Creating AttributeLoadingJob twice with different target attributes"
                 )
-        if not hasattr(callback, "__call__"):
-            raise ValueError(
-                "Callback for %s was not callable (missed __call__ attribute)" % job_id
-            )
         DataLoadingJob.__init__(self, job_id, callback)
 
     def ignore_code_changes(self):
@@ -1510,14 +1379,11 @@ class AttributeLoadingJob(DataLoadingJob):
             self.depends_on(FunctionInvariant(self.job_id + "_func", self.callback))
 
     def load(self):
-        # logger.info("%s load" % self)
         if self.was_loaded:
-            #    logger.info('Was loaded')
             return
         for preq in self.prerequisites:  # load whatever is necessary...
             if preq.is_loadable():
                 preq.load()
-        # logger.info("setting %s on id %i in pid %i" % (self.attribute_name, id(self.object), os.getpid()))
         setattr(self.object, self.attribute_name, self.callback())
         self.was_loaded = True
 
@@ -1536,7 +1402,10 @@ class AttributeLoadingJob(DataLoadingJob):
         logger.info("Cleanup on %s" % self.attribute_name)
         try:
             delattr(self.object, self.attribute_name)
-        except AttributeError:  # this can happen if you have a messed up DependencyInjectionJob, but it would block the messed up reporting...
+        except AttributeError:  # pragma: no cover
+            # this can happen if you have a messed up DependencyInjectionJob,
+            # but it would block the messed up reporting...
+            # so we ignore it
             pass
 
     def __str__(self):
@@ -1581,14 +1450,6 @@ class DependencyInjectionJob(_GraphModifyingJob):
         self.do_ignore_code_changes = False
         self.always_runs = True
         self.check_for_dependency_injections = check_for_dependency_injections
-
-    def ignore_code_changes(self):
-        pass
-
-    def inject_auto_invariants(self):
-        # if not self.do_ignore_code_changes:
-        # self.depends_on(FunctionInvariant(self.job_id + '_func', self.callback))
-        pass
 
     def run(self):
         # this is different form JobGeneratingJob.run in it's checking of the contract
@@ -2030,8 +1891,8 @@ class _CacheFileGeneratingJob(FileGeneratingJob):
     """A job that takes the results from it's callback and pickles it.
     data_loading_job is dependend on somewhere"""
 
-    def __init__(self, job_id, calc_function, dl_job, emtpy_file_allowed=False):
-        self.empty_file_allowed = emtpy_file_allowed
+    def __init__(self, job_id, calc_function, dl_job, empty_ok=False):
+        self.empty_ok = empty_ok
         if not hasattr(calc_function, "__call__"):
             raise ValueError("calc_function was not a callable")
         Job.__init__(self, job_id)  # FileGeneratingJob has no benefits for us
@@ -2061,44 +1922,7 @@ class _CacheFileGeneratingJob(FileGeneratingJob):
         op.close()
 
 
-class CachedAttributeLoadingJob(AttributeLoadingJob):
-    """Like an AttributeLoadingJob, except that the callback value is pickled into
-    a file called job_id and reread on the next run"""
-
-    def __new__(cls, job_id, *args, **kwargs):
-        if isinstance(job_id, pathlib.Path):
-            job_id = str(job_id)
-        if not isinstance(job_id, six.string_types):
-            raise ValueError("cache_filename/job_id was not a string i jobect")
-
-        return Job.__new__(cls, job_id + "_load")
-
-    def __init__(
-        self, cache_filename, target_object, target_attribute, calculating_function
-    ):
-        if isinstance(cache_filename, pathlib.Path):
-            cache_filename = str(cache_filename)
-        if not isinstance(cache_filename, six.string_types):
-            raise ValueError("cache_filename/job_id was not a string jobect")
-        if not hasattr(calculating_function, "__call__"):
-            raise ValueError("calculating_function was not a callable")
-        if not isinstance(target_attribute, str):
-            raise ValueError("attribute_name was not a string")
-        abs_cache_filename = os.path.abspath(cache_filename)
-
-        def do_load(cache_filename=abs_cache_filename):
-            op = open(cache_filename, "rb")
-            data = pickle.load(op)
-            op.close()
-            return data
-
-        AttributeLoadingJob.__init__(
-            self, cache_filename + "_load", target_object, target_attribute, do_load
-        )
-        lfg = _CacheFileGeneratingJob(cache_filename, calculating_function, self)
-        self.lfg = lfg
-        Job.depends_on(self, lfg)
-
+class _CachingJobMixin:
     def depends_on(self, jobs):
         self.lfg.depends_on(jobs)
         return self
@@ -2123,24 +1947,50 @@ class CachedAttributeLoadingJob(AttributeLoadingJob):
         Job.invalidated(self, reason)
 
 
-class CachedDataLoadingJob(DataLoadingJob):
+class CachedAttributeLoadingJob(_CachingJobMixin, AttributeLoadingJob):
+    """Like an AttributeLoadingJob, except that the callback value is pickled into
+    a file called job_id and reread on the next run"""
+
+    def __new__(cls, job_id, *args, **kwargs):
+        job_id = verify_job_id(job_id)
+        return Job.__new__(cls, job_id + "_load")
+
+    def __init__(
+        self, cache_filename, target_object, target_attribute, calculating_function
+    ):
+        cache_filename = verify_job_id(cache_filename)
+        if not hasattr(calculating_function, "__call__"):
+            raise ValueError("calculating_function was not a callable")
+        if not isinstance(target_attribute, str):
+            raise ValueError("attribute_name was not a string")
+        abs_cache_filename = os.path.abspath(cache_filename)
+
+        def do_load(cache_filename=abs_cache_filename):
+            op = open(cache_filename, "rb")
+            data = pickle.load(op)
+            op.close()
+            return data
+
+        AttributeLoadingJob.__init__(
+            self, cache_filename + "_load", target_object, target_attribute, do_load
+        )
+        lfg = _CacheFileGeneratingJob(cache_filename, calculating_function, self)
+        self.lfg = lfg
+        Job.depends_on(self, lfg)
+
+
+class CachedDataLoadingJob(_CachingJobMixin, DataLoadingJob):
     """Like a DataLoadingJob, except that the callback value is pickled into
     a file called job_id and reread on the next run"""
 
     def __new__(cls, job_id, *args, **kwargs):
-        if isinstance(job_id, pathlib.Path):
-            job_id = str(job_id)
-        if not isinstance(job_id, six.string_types):
-            raise ValueError("cache_filename/job_id was not a string object")
         return Job.__new__(
-            cls, job_id + "_load"
+            cls, str(job_id) + "_load"
         )  # plus load, so that the cached data goes into the cache_filename passed to the constructor...
 
     def __init__(self, cache_filename, calculating_function, loading_function):
         if isinstance(cache_filename, pathlib.Path):
             cache_filename = str(cache_filename)
-        if not isinstance(cache_filename, six.string_types):
-            raise ValueError("cache_filename/job_id was not a string object")
         if not hasattr(calculating_function, "__call__"):
             raise ValueError("calculating_function was not a callable")
         if not hasattr(loading_function, "__call__"):
@@ -2189,52 +2039,27 @@ class CachedDataLoadingJob(DataLoadingJob):
                     self.loading_function.__code__.co_firstlineno,
                 )
             )
-        except AttributeError:
+        except AttributeError:  # pragma: no cover
             return "%s(job_id=%s, callbacks unset" % (
                 self.__class__.__name__,
                 self.job_id,
             )
 
-    def depends_on(self, jobs):
-        self.lfg.depends_on(jobs)
-        return self
-        # The loading job itself should not depend on the preqs
-        # because then the preqs would even have to be loaded if
-        # the lfg had run already in another job
-        # and dataloadingpreqs could not be unloaded right away
-        # Now, if you need to have a more complex loading function,
-        # that also requires further jobs being loaded (integrating, etc)
-        # either add in another DataLoadingJob dependand on this CachedDataLoadingJob
-        # or call Job.depends_on(this_job, jobs) yourself.
-        # return Job.depends_on(self, jobs)
 
-    def ignore_code_changes(self):
-        self.lfg.ignore_code_changes()
-        self.do_ignore_code_changes = True
-
-    def __del__(self):
-        self.lfg = None
-
-    def invalidated(self, reason=""):
-        if not self.lfg.was_invalidated:
-            self.lfg.invalidated(reason)
-        Job.invalidated(self, reason)
-
-
-class MemMappedDataLoadingJob(DataLoadingJob):
+class MemMappedDataLoadingJob(_CachingJobMixin, DataLoadingJob):
     """Like a DataLoadingJob that returns a numpy array. That array get's stored to a file, and memmapped back in later on.
     Note that it's your job to del your memmapped reference to get it garbage collectable...
     """
 
     def __new__(cls, job_id, *args, **kwargs):
-        if is_pypy:
+        if is_pypy:  # pragma: no cover
             raise NotImplementedError(
                 "Numpypy currently does not support memmap(), there is no support for MemMappedDataLoadingJob using pypy."
             )
         if isinstance(job_id, pathlib.Path):
             job_id = str(job_id)
-        if not isinstance(job_id, six.string_types):
-            raise ValueError("cache_filename/job_id was not a string object")
+        elif not isinstance(job_id, six.string_types):
+            raise TypeError("cache_filename/job_id was not a string object")
         return Job.__new__(
             cls, job_id + "_load"
         )  # plus load, so that the cached data goes into the cache_filename passed to the constructor...
@@ -2242,8 +2067,6 @@ class MemMappedDataLoadingJob(DataLoadingJob):
     def __init__(self, cache_filename, calculating_function, loading_function, dtype):
         if isinstance(cache_filename, pathlib.Path):
             cache_filename = str(cache_filename)
-        if not isinstance(cache_filename, six.string_types):
-            raise ValueError("cache_filename/job_id was not a string object")
         if not hasattr(calculating_function, "__call__"):
             raise ValueError("calculating_function was not a callable")
         if not hasattr(loading_function, "__call__"):
@@ -2302,39 +2125,25 @@ class MemMappedDataLoadingJob(DataLoadingJob):
             self.loading_function.__code__.co_firstlineno,
         )
 
-    def depends_on(self, jobs):
-        self.lfg.depends_on(jobs)
-        return self
-
-    def ignore_code_changes(self):
-        self.lfg.ignore_code_changes()
-        self.do_ignore_code_changes = True
-
-    def __del__(self):
-        self.lfg = None
-
-    def invalidated(self, reason=""):
-        if not self.lfg.was_invalidated:
-            self.lfg.invalidated(reason)
-        Job.invalidated(self, reason)
-
 
 def NotebookJob(notebook_filename, auto_detect_dependencies=True):
-    """Run an ipython notebook if it changed, or any of the jobs for filenames it references
-    changed"""
-    notebook_name = notebook_filename
-    if "/" in notebook_name:
-        notebook_name = notebook_name[notebook_name.rfind("/") + 1 :]
+    """Run a jupyter notebook.
+
+    Invalidates (if not ignore_code_changes()) if
+        - notebook_filename's contents change
+        - any file mentioned in the notebook for which we have
+            a Job (*FileGenerating or (Multi)RobustFileChecksumInvariant)
+            changes / needs to be build
+
+    """
+    notebook_name = os.path.basename(notebook_filename)
     if not os.path.exists("cache/notebooks"):
         os.mkdir("cache/notebooks")
+    nb_fn_hash = hashlib.md5(notebook_filename.encode("utf-8")).hexdigest()
     sentinel_file = os.path.join(
-        "cache",
-        "notebooks",
-        hashlib.md5(notebook_filename).hexdigest() + " " + notebook_name + ".html",
+        "cache", "notebooks", nb_fn_hash + " " + notebook_name + ".html"
     )
-    ipy_cache_file = os.path.join(
-        "cache", "notebooks", hashlib.md5(notebook_filename).hexdigest() + ".ipynb"
-    )
+    ipy_cache_file = os.path.join("cache", "notebooks", nb_fn_hash + ".ipynb")
     return _NotebookJob(
         [sentinel_file, ipy_cache_file], notebook_filename, auto_detect_dependencies
     )
@@ -2355,7 +2164,7 @@ class _NotebookJob(MultiFileGeneratingJob):
                 stderr=subprocess.PIPE,
             )
             stdout, stderr = p.communicate()
-            if p.returncode != 0:
+            if p.returncode != 0:  # pragma: no cover
                 raise ValueError(
                     "Ipython notebook %s error return.\nstdout:\n%s\n\nstderr:\n%s"
                     % (notebook_filename, stdout, stderr)
@@ -2374,7 +2183,7 @@ class _NotebookJob(MultiFileGeneratingJob):
                 stderr=subprocess.PIPE,
             )
             stdout, stderr = p.communicate()
-            if p.returncode != 0:
+            if p.returncode != 0:  # pragma: no cover
                 raise ValueError("Ipython nbconvert error. stderr: %s" % (stderr,))
             output_file.close()
 
@@ -2385,13 +2194,11 @@ class _NotebookJob(MultiFileGeneratingJob):
     def inject_auto_invariants(self):
         deps = [FileChecksumInvariant(self.notebook_filename)]
         if self.auto_detect_dependencies:
-            with open(self.notebook_filename, "rb") as op:
+            with open(self.notebook_filename, "r") as op:
                 raw_text = op.read()
-        for job_name, job in util.global_pipegraph.jobs.items():
-            if isinstance(job, MultiFileGeneratingJob):
-                for fn in job.filenames:
-                    if fn in raw_text:
-                        deps.append(job)
-            elif isinstance(job, FileGeneratingJob):
-                if job.job_id in raw_text:
-                    deps.append(job)
+            for job_name, job in util.global_pipegraph.jobs.items():
+                if hasattr(job, "filenames"):
+                    for fn in job.filenames:
+                        if fn in raw_text:
+                            deps.append(job)
+        self.depends_on(deps)
