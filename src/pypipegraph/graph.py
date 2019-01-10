@@ -38,16 +38,8 @@ import time
 import collections
 from . import resource_coordinators
 
-try:
-    import cPickle
-    import pickle
+from six.moves import cPickle as pickle
 
-    pickle_stop = pickle.STOP
-    pickle = cPickle
-except ImportError:
-    import pickle
-
-    pickle_stop = pickle.STOP
 from . import ppg_exceptions
 from . import util
 import sys
@@ -58,13 +50,14 @@ logger = util.start_logging("graph")
 # earlier on, we had a different pickling scheme,
 # and that's what the files were called.
 if os.path.exists(".pypipegraph_status_robust"):  # old projects keep their filename
-    invariant_status_filename_default = ".pypipegraph_status_robust"
+    invariant_status_filename_default = ".pypipegraph_status_robust"  # pragma: no cover
 elif "/" in sys.argv[0]:  # no script name but an executable?
     invariant_status_filename_default = ".pypipegraph_status_robust"
 else:
+    # script specific pipegraphs
     invariant_status_filename_default = (
         ".ppg_status_%s" % sys.argv[0]
-    )  # script specific pipegraphs
+    )  # pragma: no cover
 
 
 def run_pipegraph():
@@ -177,7 +170,7 @@ class Pipegraph(object):
             self.jobs[job.job_id] = job
         else:
             if self.new_jobs is False:
-                raise ValueError(
+                raise ppg_exceptions.JobContractError(
                     "Trying to add new jobs to running pipeline without having new_jobs set (ie. outside of a graph modifying job) - tried to add %s"
                     % job
                 )
@@ -250,10 +243,10 @@ class Pipegraph(object):
                     if os.path.exists("logs/ppg_errors.txt"):
                         os.rename("logs/ppg_errors.txt", "logs/ppg_errors.txt.1")
                     error_log = open("logs/ppg_errors.txt", "w")
-                except IOError:
-                    error_log = open("/dev/null", "w")
+                except IOError:  # pragma: no cover
+                    error_log = open("/dev/null", "w")  # pragma: no cover
                 for job in self.jobs.values():
-                    if job.failed or job in self.invariant_loading_issues:
+                    if job.failed or job.job_id in self.invariant_loading_issues:
                         if not any_failed and not self.quiet:
                             print("\n------Pipegraph error-----", file=sys.stderr)
                             print("\n------Pipegraph error-----", file=error_log)
@@ -262,15 +255,15 @@ class Pipegraph(object):
                             self.print_failed_job(job, sys.stderr)
                             self.print_failed_job(job, error_log)
                             self.print_failed_job(job, str_error_log)
-                        if job in self.invariant_loading_issues:
+                        if job.job_id in self.invariant_loading_issues:
                             print(
                                 "Could not unpickle invariant for %s - exception was %s"
-                                % (job, self.invariant_loading_issues[job]),
+                                % (job, self.invariant_loading_issues[job.job_id]),
                                 file=error_log,
                             )
                             print(
                                 "Could not unpickle invariant for %s - exception was %s"
-                                % (job, self.invariant_loading_issues[job]),
+                                % (job, self.invariant_loading_issues[job.job_id]),
                                 file=sys.stderr,
                             )
                 if any_failed:
@@ -298,7 +291,7 @@ class Pipegraph(object):
                 )
         self.running = False
         self.was_run = True
-        if self.restart_afterwards:
+        if self.restart_afterwards:  # pragma: no cover
             import subprocess
 
             subprocess.check_call([sys.executable] + sys.argv)
@@ -352,13 +345,7 @@ class Pipegraph(object):
             n = S.pop()
             L.append(n)
             for m in n.prerequisites:
-                try:
-                    m.dependants_copy.remove(n)
-                except AttributeError:
-                    raise ValueError(
-                        "Somehow a job that was created for an older pypipegraph is still around and gumming up the works. Job in question: %s"
-                        % m
-                    )
+                m.dependants_copy.remove(n)
                 if not m.dependants_copy:
                     S.append(m)
         return L
@@ -389,8 +376,9 @@ class Pipegraph(object):
                     jobs_in_circles.append(job)
 
             def find_circle_path(current_node, search_node, path, depth=0):
-                if depth > max_depth:
-                    return False
+                # if depth > max_depth: #never happens, max_depth cyclesl are
+                # not in jobs_in_circles
+                # return False
                 if current_node == search_node and path:
                     return True
                 for preq in current_node.prerequisites:
@@ -411,7 +399,7 @@ class Pipegraph(object):
                     "At least one cycle in the graph was detected\nJobs involved (up to a depth of %i) are\n %s "
                     % (max_depth, pprint.pformat(job_path_tuples[0]))
                 )
-            else:
+            else:  # ie all exceeded max_depth and were not added to the list
                 raise ppg_exceptions.CycleError(
                     "At least one cycle in the graph was detected\n Too many jobs involved for detailed output (more than %i)"
                     % (max_depth,)
@@ -428,14 +416,7 @@ class Pipegraph(object):
             # op.seek(0, os.SEEK_SET)
             self.invariant_status = collections.defaultdict(bool)
             leave = False
-            possible_pickle_exceptions = [TypeError]
-            try:
-                import _pickle
-
-                possible_pickle_exceptions.append(_pickle.UnpicklingError)
-            except ImportError:
-                pass
-            possible_pickle_exceptions = tuple(possible_pickle_exceptions)
+            possible_pickle_exceptions = (TypeError, pickle.UnpicklingError)
 
             while not leave:
                 try:
@@ -446,13 +427,16 @@ class Pipegraph(object):
                     self.invariant_status[key] = value
                 except possible_pickle_exceptions as e:
                     if key is None:
-                        raise e
-                        raise ValueError(
-                            "Could not depickle invariants - even in the robust implementation (key not found"
+                        raise ppg_exceptions.PyPipeGraphError(
+                            "Could not depickle invariants - "
+                            "Depickling key failed"
+                            " Exception was %s" % (str(e),)
                         )
                     logger.error(
-                        "Could not depickle invariant for %s - check code for depickling bugs. Job will rerun, probably until the (de)pickling bug is fixed.\n Exception: %s"
-                        % (key, e)
+                        "Could not depickle invariant for %s - "
+                        "check code for depickling bugs. "
+                        "Job will rerun, probably until the (de)pickling bug is fixed."
+                        "\n Exception: %s" % (key, e)
                     )
                     self.invariant_loading_issues[key] = e
                     op.seek(old_pos)
@@ -462,17 +446,26 @@ class Pipegraph(object):
                     # we're done for.
                     import pickletools
 
-                    list(pickletools.genops(op))
+                    try:
+                        list(pickletools.genops(op))
+                    except Exception as e:
+                        raise ppg_exceptions.PyPipeGraphError(
+                            "Could not depickle invariants - "
+                            "depickling of %s failed, could not skip to next pickled dataset"
+                            " Exception was %s" % (key, str(e))
+                        )
                 except EOFError:
                     leave = True
             op.close()
         else:
             self.invariant_status = collections.defaultdict(bool)
         logger.info("loaded %i invariant stati" % len(self.invariant_status))
+        print(self.invariant_status)
 
     def dump_invariant_status(self):
         """Store Job invariant status into a file named by self.invariant_status_filename"""
         finished = False
+        ki_raised = False
         while not finished:
             try:
                 op = open(
@@ -501,13 +494,17 @@ class Pipegraph(object):
                     self.invariant_status_filename,
                 )
                 finished = True
-            except KeyboardInterrupt:
+            except KeyboardInterrupt:  # pragma: no cover
+                # if the user interrupts here here risks blowing the whole
+                # history, so we ignore him...
+                ki_raised = True
                 pass
+        if ki_raised:  # pragma: no cover
+            raise KeyboardInterrupt()
 
     def distribute_invariant_changes(self):
         """Check each job for whether it's invariance has changed,
         and propagate the invalidation by calling job.invalidated()"""
-        self._distribute_invariant_changes_count += 1
         for job in self.jobs.values():
             if (
                 job.was_invalidated
@@ -520,16 +517,12 @@ class Pipegraph(object):
             old = self.invariant_status[job.job_id]
             try:
                 try:
-                    try:
-                        inv = job.get_invariant(old, self.invariant_status)
-                    except TypeError:
-                        print(job)
-                        raise
+                    inv = job.get_invariant(old, self.invariant_status)
                 except Exception as e:
                     if isinstance(e, util.NothingChanged):
                         pass
                     else:
-                        print("Offending job was %s" % job)
+                        print("Offending job was %s" % job)  # pragma: no cover
                     raise
                 # logger.info("%s invariant was %s, is now %s" % (job, old,inv))
             except util.NothingChanged as e:
@@ -557,6 +550,7 @@ class Pipegraph(object):
                 ] = (
                     inv
                 )  # for now, it is the dependant job's job to clean up so they get reinvalidated if the executing is terminated before they are reubild (ie. filegenjobs delete their outputfiles)
+        self._distribute_invariant_changes_count += 1
 
     def build_todo_list(self):
         """Go through each job. If it needs to be done, invalidate() all dependants.
@@ -580,7 +574,7 @@ class Pipegraph(object):
                             # logger.info(job.is_temp_job)
                             job.invalidated("not done")
                             if not job.was_invalidated:  # paranoia
-                                raise ppg_exceptions.RuntimeException(
+                                raise ppg_exceptions.JobContractError(
                                     "job.invalidated called, but was_invalidated was false"
                                 )
                 # for preq in job.prerequisites:
@@ -629,7 +623,7 @@ class Pipegraph(object):
             [x["physical_memory"] + x["swap_memory"] for x in resources.values()]
         )
         maximal_cores = max([x["cores"] for x in resources.values()])
-        if maximal_cores == 0:
+        if maximal_cores == 0:  # pragma: no cover
             raise ppg_exceptions.RuntimeException("No cores available?!")
 
         for job in self.possible_execution_order:
@@ -682,7 +676,7 @@ class Pipegraph(object):
         for job in self.running_jobs:
             slave = job.slave_name
             if (
-                job.cores_needed == -1 or job.modifies_jobgraph()
+                job.cores_needed < -1 or job.modifies_jobgraph()
             ):  # since that job blocks the slave..
                 resources[slave]["cores"] = 0
             else:
@@ -690,7 +684,9 @@ class Pipegraph(object):
             if job.memory_needed == -1:
                 resources[slave]["memory"] -= resources[slave]["memory/core"]
             else:
-                resources[slave]["memory"] -= job.memory_needed
+                resources[slave][
+                    "memory"
+                ] -= job.memory_needed  # pragma: no cover - we don't really use this
 
         logger.info(
             "Resources after substracting %i running jobs: %s"
@@ -835,7 +831,7 @@ class Pipegraph(object):
                                 job.slave_name = slave
                                 try:
                                     self.slaves[slave].spawn(job)
-                                except Exception:
+                                except Exception:  # pragma: no cover
                                     print("failed to start", job)
                                     raise
                                 logger.info("running_jobs added3 :%s" % job)
@@ -899,7 +895,7 @@ class Pipegraph(object):
             self.prune_job(job)
             if job.exception:
                 job.error_reason = "Exception"
-            else:
+            else:  # pragma: no cover - just paranoia
                 job.error_reason = "Unknown/died"
             if not self.quiet:
                 self.print_failed_job(job, sys.stderr)
@@ -935,13 +931,13 @@ class Pipegraph(object):
         def check_preqs(job):
             for preq_job_id in job.prerequisites:
                 if preq_job_id not in self.jobs and preq_job_id not in new_jobs:
-                    raise ppg_exceptions.JobContractError(
+                    raise ppg_exceptions.JobContractError(  # pragma: no cover - defensive
                         "New job depends on job that is not in the job list but also not in the new jobs: %s"
                         % preq_job_id
                     )
             for dep_job_id in job.dependants:
                 if dep_job_id not in self.jobs and dep_job_id not in new_jobs:
-                    raise ppg_exceptions.JobContractError(
+                    raise ppg_exceptions.JobContractError(  # pragma: no cover - defensive
                         "New job was dependency for is not in the job list but also not in the new jobs"
                     )
                     # the case that it is injected as a dependency for a job that might have already been done
@@ -981,7 +977,7 @@ class Pipegraph(object):
         # and now, let's see what new stuff needs to be done.
         for job in jobs_to_check:
             if job.was_run:
-                raise ValueError(
+                raise ppg_exceptions.RuntimeException(  # pragma: no cover
                     "A job that was already run was readded to the check-if-it-needs executing list. This should not happen"
                 )
             if job.is_loadable():
@@ -1025,14 +1021,14 @@ class Pipegraph(object):
         print("\t stderr was %s" % (job.stderr,), file=file_handle)
         print("", file=file_handle)
 
-    def print_running_jobs(self):
+    def print_running_jobs(self):  # pragma: no cover
         """When the user presses enter, print the jobs that are currently being executed"""
         print("Running jobs:")
         now = time.time()
         for job in self.running_jobs:
             print(job, "running for %i seconds" % (now - job.start_time))
 
-    def dump_graph(self):
+    def dump_graph(self):  # pragma: no cover
         """Dump the current graph in text format into logs/ppg_graph.txt if logs exists"""
 
         def do_dump():
@@ -1080,7 +1076,9 @@ class Pipegraph(object):
                 os._exit(0)  # Cleanup is for parent processes!
             self.dump_pid = pid
 
-    def _write_xgmml(self, output_filename, node_to_attribute_dict, edges):
+    def _write_xgmml(
+        self, output_filename, node_to_attribute_dict, edges
+    ):  # pragma: no cover
         from xml.sax.saxutils import escape
 
         op = open(output_filename, "wb")
@@ -1124,7 +1122,9 @@ class Pipegraph(object):
         )
         op.close()
 
-    def _write_gml(self, output_filename, node_to_attribute_dict, edges):
+    def _write_gml(
+        self, output_filename, node_to_attribute_dict, edges
+    ):  # pragma: no cover
         op = open(output_filename, "w")
         op.write(
             """graph
@@ -1188,7 +1188,7 @@ class Pipegraph(object):
     def install_signals(self):
         """make sure we don't crash just because the user logged of"""
 
-        def hup():
+        def hup():  # pragma: no cover
             logger.info("user logged off - continuing run")
 
         self._old_signal_up = signal.signal(signal.SIGHUP, hup)
@@ -1197,30 +1197,14 @@ class Pipegraph(object):
         if self._old_signal_up:
             signal.signal(signal.SIGHUP, self._old_signal_up)
 
-    def get_error_count(self):
+    def get_error_count(self):  # pragma: no cover
         count = 0
         for job in self.jobs.values():
             if job.failed or job in self.invariant_loading_issues:
                 count += 1
         return count
 
-    def prioritize(self, job):
-        p = self.possible_execution_order[:]
-        if job not in p:
-            raise ValueError("Job not in execution order")
-        for job in p:
-            job.prio = 0
-
-        def recurse(j):
-            j.prio = -1
-            for jp in j.prerequisites:
-                recurse(jp)
-
-        recurse(job)
-        self.possible_execution_order = self.apply_topological_order(p)[::-1]
-        return
-
-    def signal_finished(self):
+    def signal_finished(self):  # pragma: no cover
         """If there's a .pipegraph_finished.py in ~, call it"""
         fn = os.path.expanduser("~/.pipegraph_finished.py")
         if os.path.exists(fn) and not os.path.isdir(fn) and os.access(fn, os.X_OK):

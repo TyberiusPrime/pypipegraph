@@ -176,7 +176,8 @@ class TestingTheUnexpectedTests:
         job_B = ppg.FileGeneratingJob("out/B", do_b)
         job_parameter_unpickle_problem = ppg.ParameterInvariant("C", (cd,))
         job_B.depends_on(job_parameter_unpickle_problem)
-        ppg.run_pipegraph()
+        with pytest.raises(ppg.RuntimeError):
+            ppg.run_pipegraph()
         assert read("out/A") == "A"
         assert read("out/As") == "A"
         assert read("out/B") == "A"
@@ -196,6 +197,16 @@ class TestingTheUnexpectedTests:
         print(stdout, stderr)
         assert b"OK" in stdout
         os.chdir(old_dir)
+
+    def test_older_jobs_added_back_to_new_pipegraph(self, new_pipegraph):
+        a = ppg.FileGeneratingJob("out/A", lambda of: write(of, "a"))
+        ppg.util.global_pipegraph.run()
+        new_pipegraph.new_pipegraph()
+        b = ppg.FileGeneratingJob("out/B", lambda of: write(of, "b"))
+        with pytest.raises(ppg.PyPipeGraphError):
+            a.depends_on(b)
+        with pytest.raises(ppg.PyPipeGraphError):
+            b.depends_on(a)
 
 
 class TestsNotImplemented:
