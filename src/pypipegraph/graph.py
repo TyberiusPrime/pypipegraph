@@ -148,9 +148,9 @@ class Pipegraph(object):
         self.was_run = False
         self.new_jobs = False
         self.quiet = quiet
-        self.object_uniquifier = (
-            {}
-        )  # used by util.assert_uniqueness_of_object to enforce pseudo-singletons
+        # used by util.assert_uniqueness_of_object to enforce pseudo-singletons
+        self.object_uniquifier = {}
+        self.stat_cache = {}  # used by util.stat
         self.invariant_loading_issues = (
             {}
         )  # jobs whose invariant could not be unpickled for some reason - and the exception.
