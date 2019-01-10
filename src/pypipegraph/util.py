@@ -243,10 +243,8 @@ def file_exists(filename):
     return os.path.exists(filename)
 
 
-stat_cache = {}
-
-
 def stat(filename):
+    stat_cache = global_pipegraph.stat_cache
     if filename not in stat_cache:
         stat_cache[filename] = (os.stat(filename), time.time())
         return stat_cache[filename][0]
@@ -286,7 +284,7 @@ def checksum_file(filename):
             _hash.update(block)
             block = op.read(block_size)
         res = _hash.hexdigest()
-    print('checksuming', os.path.abspath(filename), file_size, res)
+    print("checksuming", os.path.abspath(filename), file_size, res)
     return res
 
 

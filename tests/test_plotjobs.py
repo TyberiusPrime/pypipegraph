@@ -1,5 +1,29 @@
+"""
+The MIT License (MIT)
+
+Copyright (c) 2012, Florian Finkernagel <finkernagel@imt.uni-marburg.de>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
+
 import pytest
-from .test_pypipegraph import rc_gen, append, write, read
+from .shared import append, write, read
 import unittest
 import os
 
@@ -10,6 +34,7 @@ try:
 except ImportError:
     has_pyggplot = False
     pass
+
 
 if has_pyggplot:  # noqa C901
     # import R
@@ -28,8 +53,6 @@ if has_pyggplot:  # noqa C901
     @pytest.mark.usefixtures("new_pipegraph")
     class TestPlotJob:
         def test_basic(self):
-            ppg.new_pipegraph(rc_gen(), quiet=False)
-
             def calc():
                 return pd.DataFrame(
                     {"X": list(range(0, 100)), "Y": list(range(50, 150))}
@@ -74,7 +97,7 @@ if has_pyggplot:  # noqa C901
             with pytest.raises(ValueError):
                 inner()
 
-        def test_reruns_just_plot_if_plot_changed(self):
+        def test_reruns_just_plot_if_plot_changed(self, new_pipegraph):
             def calc():
                 append("out/calc", "A")
                 return pd.DataFrame(
@@ -92,7 +115,7 @@ if has_pyggplot:  # noqa C901
             assert read("out/calc") == "A"
             assert read("out/plot") == "B"
 
-            ppg.new_pipegraph(rc_gen(), quiet=True)
+            new_pipegraph.new_pipegraph()
 
             def plot2(df):
                 append("out/plot", "B")
@@ -104,7 +127,7 @@ if has_pyggplot:  # noqa C901
             assert read("out/calc") == "A"
             assert read("out/plot") == "BB"
 
-        def test_no_rerun_if_ignore_code_changes_and_plot_changes(self):
+        def test_no_rerun_if_ignore_code_changes_and_plot_changes(self, new_pipegraph):
             def calc():
                 append("out/calc", "A")
                 return pd.DataFrame(
@@ -122,7 +145,7 @@ if has_pyggplot:  # noqa C901
             assert read("out/calc") == "A"
             assert read("out/plot") == "B"
 
-            ppg.new_pipegraph(rc_gen(), quiet=True)
+            new_pipegraph.new_pipegraph()
 
             def plot2(df):
                 append("out/plot", "B")
@@ -135,7 +158,7 @@ if has_pyggplot:  # noqa C901
             assert read("out/calc") == "A"
             assert read("out/plot") == "B"
 
-        def test_reruns_both_if_calc_changed(self):
+        def test_reruns_both_if_calc_changed(self, new_pipegraph):
             def calc():
                 append("out/calc", "A")
                 return pd.DataFrame(
@@ -153,7 +176,7 @@ if has_pyggplot:  # noqa C901
             assert read("out/calc") == "A"
             assert read("out/plot") == "B"
 
-            ppg.new_pipegraph(rc_gen(), quiet=True)
+            new_pipegraph.new_pipegraph()
 
             def calc2():
                 append("out/calc", "A")
@@ -168,7 +191,7 @@ if has_pyggplot:  # noqa C901
             assert read("out/calc") == "AA"
             assert read("out/plot") == "BB"
 
-        def test_no_rerun_if_calc_change_but_ignore_codechanges(self):
+        def test_no_rerun_if_calc_change_but_ignore_codechanges(self, new_pipegraph):
             def calc():
                 append("out/calc", "A")
                 return pd.DataFrame(
@@ -186,7 +209,7 @@ if has_pyggplot:  # noqa C901
             assert read("out/calc") == "A"
             assert read("out/plot") == "B"
 
-            ppg.new_pipegraph(rc_gen(), quiet=True)
+            new_pipegraph.new_pipegraph()
 
             def calc2():
                 append("out/calc", "A")

@@ -44,13 +44,11 @@ def new_pipegraph(request):
             Path("out").mkdir(parents=True, exist_ok=True)
         except OSError:
             pass
-        rc = ppg.resource_coordinators.LocalSystem(1)
 
         def np():
-            ppg.new_pipegraph(rc, quiet=True)
+            rc = ppg.resource_coordinators.LocalSystem(1)
+            ppg.new_pipegraph(rc, quiet=True, dump_graph=False)
             ppg.util.global_pipegraph.result_dir = Path("results")
-            ppg.util.stat_cache.clear()
-            print('new pipegraph', Path(ppg.util.global_pipegraph.invariant_status_filename).absolute())
             g = ppg.util.global_pipegraph
             g.new_pipegraph = np
             return g
