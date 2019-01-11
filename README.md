@@ -1,11 +1,10 @@
 
 # pypipegraph 
 
-|---------------|-----------------------------------------------------------------------------|
 | Build status: | [![Build Status](https://travis-ci.com/TyberiusPrime/pypipegraph.svg?branch=master)](https://travis-ci.com/TyberiusPrime/pypipegraph)|
+|---------------|-----------------------------------------------------------------------------|
 | Documentation | https://pypipegraph.readthedocs.io/en/latest/
 | Code style    | ![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
-|---------------|-----------------------------------------------------------------------------|
 
 ## Introduction
 
