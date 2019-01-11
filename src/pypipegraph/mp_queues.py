@@ -1,7 +1,8 @@
-"""Fix Queue for running a pypipegraph within an import 
+"""Fix Queue for running a pypipegraph within an import
 python <2.7 only - see https://bugs.python.org/issue22853"""
 import sys
-if sys.version_info[0] == 2 and sys.version_info[1] < 7: # pragma: no cover 
+
+if sys.version_info[0] == 2 and sys.version_info[1] < 7:  # noqa:C901 pragma: no cover
     import threading
     from multiprocessing.util import is_exiting, debug, Finalize
     import multiprocessing.queues
@@ -15,8 +16,7 @@ if sys.version_info[0] == 2 and sys.version_info[1] < 7: # pragma: no cover
     import os
     import pickle
 
-
-    class MPQueueFixed(multiprocessing.queues.Queue):  
+    class MPQueueFixed(multiprocessing.queues.Queue):
         def _start_thread(self):
             debug("Queue._start_thread()")
 
@@ -50,7 +50,10 @@ if sys.version_info[0] == 2 and sys.version_info[1] < 7: # pragma: no cover
 
             # Send sentinel to the thread queue object when garbage collected
             self._close = Finalize(
-                self, Queue._finalize_close, [self._buffer, self._notempty], exitpriority=10
+                self,
+                Queue._finalize_close,
+                [self._buffer, self._notempty],
+                exitpriority=10,
             )
 
         @staticmethod  # noqa:C901
@@ -102,7 +105,9 @@ if sys.version_info[0] == 2 and sys.version_info[1] < 7: # pragma: no cover
                                         print(
                                             "Likely source: stdout/stderr too large (gigabytes)"
                                         )
-                                        with open("%i.dump" % (os.getpid(),), "wb") as op:
+                                        with open(
+                                            "%i.dump" % (os.getpid(),), "wb"
+                                        ) as op:
                                             try:
                                                 pickle.dump(obj, op)
                                             except Exception:
