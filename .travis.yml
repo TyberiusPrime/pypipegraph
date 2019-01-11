@@ -46,6 +46,7 @@ install:
      echo "install"
   - |
     if [[ "$JOB" == "UNITTEST" ]]; then
+      pip install setuptools -U
       pip install .[testing]
     fi
   - pip list
