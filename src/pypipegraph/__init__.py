@@ -23,6 +23,7 @@ from .ppg_exceptions import (
     JobContractError,
     PyPipeGraphError,
     JobDiedException,
+    NothingChanged
 )
 from . import util
 
@@ -66,6 +67,7 @@ all = [
     JobContractError,
     PyPipeGraphError,
     JobDiedException,
+    NothingChanged,
     Job,
     JobList,
     FileGeneratingJob,

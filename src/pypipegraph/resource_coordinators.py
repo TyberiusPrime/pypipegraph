@@ -35,19 +35,9 @@ import threading
 import signal
 import sys
 
-try:
-    import Queue
+import queue
+import pickle
 
-    queue = Queue
-except ImportError:
-    import queue
-
-try:
-    import cPickle
-
-    pickle = cPickle
-except ImportError:
-    import pickle
 from . import ppg_exceptions
 import tempfile
 
@@ -69,19 +59,20 @@ def get_memory_available():
             physical_memory = int(mem_total) * 1024
             swap_memory = int(swap_total) * 1024
             return physical_memory, swap_memory
-        else:  # assume it's mac os x
+        else:  # pragma: no cover
+            # assume it's mac os x
             physical_memory = int(os.popen2("sysctl -n hw.memsize")[1].read())
             swap_memory = (
                 physical_memory * 10
             )  # mac os x virtual memory system uses *all* available boot device size, so a heuristic should work well enough
             return physical_memory, swap_memory
-    else:
+    else:  # pragma: no cover
         raise ValueError(
             "get_memory_available() does not know how to get available memory on your system."
         )
 
 
-def signal_handler(signal, frame):
+def signal_handler(signal, frame):  # pragma: no cover - interactive
     print('Ctrl-C has been disable. Please give command "abort"')
 
 
@@ -128,7 +119,7 @@ class LocalSystem:
 
         logger.info("Starting first batch of jobs")
         self.pipegraph.start_jobs()
-        if self.interactive:
+        if self.interactive:  # pragma: no cover
             from . import interactive
 
             interactive_thread = threading.Thread(target=interactive.thread_loop)
@@ -136,14 +127,13 @@ class LocalSystem:
             s = signal.signal(signal.SIGINT, signal_handler)  # ignore ctrl-c
         while True:
             self.slave.check_for_dead_jobs()  # whether time out or or job was done, let's check this...
-            if self.interactive:
+            if self.interactive:  # pragma: no cover
                 self.see_if_output_is_requested()
             try:
                 logger.info("Listening to que")
                 r = self.que.get(block=True, timeout=self.timeout)
-                if (
-                    r is None and interactive.interpreter.terminated
-                ):  # abort was requested
+                if r is None and interactive.interpreter.terminated:  # pragma: no cover
+                    # abort was requested
                     self.slave.kill_jobs()
                     break
                 slave_id, was_ok, job_id_done, stdout, stderr, exception, trace, new_jobs = (
@@ -188,11 +178,8 @@ class LocalSystem:
                     logger.info("stdout: %s" % stdout)
                     logger.info("stderr: %s" % stderr)
                 if new_jobs is not False:
-                    if not job.modifies_jobgraph():
-                        job.exception = ppg_exceptions.JobContractError(
-                            "%s created jobs, but was not a job with modifies_jobgraph() returning True"
-                            % job
-                        )
+                    if not job.modifies_jobgraph():  # pragma: no cover
+                        job.exception = ValueError("This branch should not be reached.")
                         job.failed = True
                     else:
                         new_jobs = pickle.loads(new_jobs)
@@ -202,10 +189,6 @@ class LocalSystem:
                         self.pipegraph.new_jobs_generated_during_runtime(new_jobs)
 
                 more_jobs = self.pipegraph.job_executed(job)
-                # if job.cores_needed == -1:
-                # self.cores_available = self.max_cores_to_use
-                # else:
-                # self.cores_available += job.cores_needed
                 if (
                     not more_jobs
                 ):  # this means that all jobs are done and there are no longer any more running...
@@ -216,14 +199,14 @@ class LocalSystem:
                 pass
         self.que.close()
         self.que.join_thread()  # wait for the que to close
-        if self.interactive:
+        if self.interactive:  # pragma: no cover - interactive
             if not interactive.interpreter.stay:
                 interactive.interpreter.terminated = True
             interactive_thread.join()
             signal.signal(signal.SIGINT, s)
         logger.info("Leaving loop")
 
-    def see_if_output_is_requested(self):
+    def see_if_output_is_requested(self):  # pragma: no cover - interactive
         import select
 
         try:
@@ -235,13 +218,13 @@ class LocalSystem:
             pass
             # termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
-    def abort(self):
+    def abort(self):  # pragma: no cover - interactive
         self.que.put(None)
 
-    def kill_job(self, job):
+    def kill_job(self, job):  # pragma: no cover - interactive
         self.slave.kill_job(job)
 
-    def get_job_pid(self, job):
+    def get_job_pid(self, job):  # pragma: no cover - interactive
         return self.slave.get_job_pid(job)
 
 
@@ -354,27 +337,11 @@ class LocalSlave:
             )
         return was_ok
 
-    def _profile_job(self, job):
-        self.temp = job.run()
-
     def wrap_run(self, job, stdout, stderr, is_local):
-        if self.rc.interactive:
+        if self.rc.interactive:  # pragma: no cover
             signal.signal(signal.SIGINT, signal.SIG_IGN)  # ignore ctrl-c
 
-        if "PYPIPEGRAPH_DO_COVERAGE" in os.environ:
-            import coverage
-
-            cov = coverage.coverage(
-                data_suffix=True, config_file=os.environ["PYPIPEGRAPH_DO_COVERAGE"]
-            )
-            cov.start()
-            try:
-                self.run_a_job(job, stdout, stderr, is_local)
-            finally:
-                cov.stop()
-                cov.save()
-        else:
-            self.run_a_job(job, stdout, stderr, is_local)
+        self.run_a_job(job, stdout, stderr, is_local)
 
     def run_a_job(
         self, job, stdout, stderr, is_local=True
@@ -388,19 +355,7 @@ class LocalSlave:
         new_jobs = False
         util.global_pipegraph.new_jobs = None  # ignore jobs created here.
         try:
-            if self.rc.profile:
-                import cProfile
-
-                cProfile.runctx(
-                    "self._profile_job(job)",
-                    globals(),
-                    locals(),
-                    filename="%s.prof" % (id(job),),
-                )
-                temp = self.temp
-                del self.temp
-            else:
-                temp = job.run()
+            temp = job.run()
             was_ok = True
             exception = None
             if job.modifies_jobgraph():
@@ -424,7 +379,7 @@ class LocalSlave:
             stdout.seek(0, os.SEEK_SET)
             stdout_text = stdout.read()
             stdout.close()
-        except ValueError as e:
+        except ValueError as e:  # pragma: no cover - defensive
             if "I/O operation on closed file" in str(e):
                 stdout_text = (
                     "Stdout could not be captured / io operation on closed file"
@@ -435,7 +390,7 @@ class LocalSlave:
             stderr.seek(0, os.SEEK_SET)
             stderr_text = stderr.read()
             stderr.close()
-        except ValueError as e:
+        except ValueError as e:  # pragma: no cover - defensive
             if "I/O operation on closed file" in str(e):
                 stderr_text = (
                     "stderr could not be captured / io operation on closed file"
@@ -511,19 +466,19 @@ class LocalSlave:
         for proc in remove:
             del self.process_to_job[proc]
 
-    def kill_job(self, target_job):
+    def kill_job(self, target_job):  # pragma: no cover (needed by interactive)
         for process, job in self.process_to_job.items():
             if job == target_job:
                 print("Found target job")
                 logger.info("Killing job on user request: %s" % job)
                 process.terminate()
 
-    def kill_jobs(self):
+    def kill_jobs(self):  # pragma: no cover (needed by interactive)
         print("Killing %i running children" % len(self.process_to_job))
         for proc in self.process_to_job:
             proc.terminate()
 
-    def get_job_pid(self, target_job):
+    def get_job_pid(self, target_job):  # pragma: no cover (needed by interactive)
         print(target_job)
         print(target_job.run_info)
         print(target_job.pid)

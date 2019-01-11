@@ -31,19 +31,16 @@ def new_pipegraph(request):
             / "run"
             / (request.cls.__name__ + "." + request.node.name)
         )
-    if target_path.exists():
+    if target_path.exists():  # pragma: no cover
         shutil.rmtree(target_path)
     Path(target_path).mkdir(parents=True, exist_ok=True)
     old_dir = Path(os.getcwd()).absolute()
     try:
         os.chdir(target_path)
-        try:
-            Path("logs").mkdir(parents=True, exist_ok=True)
-            Path("cache").mkdir(parents=True, exist_ok=True)
-            Path("results").mkdir(parents=True, exist_ok=True)
-            Path("out").mkdir(parents=True, exist_ok=True)
-        except OSError:
-            pass
+        Path("logs").mkdir()
+        Path("cache").mkdir()
+        Path("results").mkdir()
+        Path("out").mkdir()
 
         def np():
             rc = ppg.resource_coordinators.LocalSystem(1)
@@ -59,7 +56,7 @@ def new_pipegraph(request):
                     print("executing test succeeded", request.node.nodeid)
                     try:
                         shutil.rmtree(target_path)
-                    except OSError:
+                    except OSError:  # pragma: no cover
                         pass
 
         request.addfinalizer(finalize)

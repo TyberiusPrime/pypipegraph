@@ -39,8 +39,8 @@ import traceback
 import platform
 import time
 import six
-from six.moves import cPickle as pickle
-from six import StringIO
+import pickle
+from io import StringIO
 from . import ppg_exceptions
 from . import util
 
@@ -756,15 +756,28 @@ class ParameterInvariant(_InvariantJob):
 
     def __init__(self, job_id, parameters, accept_as_unchanged_func=None):
         job_id = "PI" + str(job_id)
-        self.parameters = parameters
-        self.accept_as_unchanged_func = accept_as_unchanged_func
+        if hasattr(self, "parameters") and self.parameters != parameters:
+            raise ValueError(
+                "ParameterInvariant %s defined twice with different parameters"
+            )
+        else:
+            self.parameters = parameters
+        if (
+            hasattr(self, "accept_as_unchanged_func")
+            and self.accept_as_unchanged_func != accept_as_unchanged_func
+        ):
+            raise ValueError(
+                "ParameterInvariant %s defined twice with different accept_as_unchanged_func"
+            )
+        else:
+            self.accept_as_unchanged_func = accept_as_unchanged_func
         Job.__init__(self, job_id)
 
     def _get_invariant(self, old, all_invariant_stati):
         if self.accept_as_unchanged_func is not None:
             if self.accept_as_unchanged_func(old):
                 logger.info("Nothing Changed for %s" % self)
-                raise util.NothingChanged(self.parameters)
+                raise ppg_exceptions.NothingChanged(self.parameters)
         return self.parameters
 
 
@@ -812,7 +825,7 @@ class RobustFileChecksumInvariant(_InvariantJob):
                                 old_chksum == checksum
                             ):  # don't check filetime, if the file has moved it will have changed
                                 # print("checksum hit %s" % self.input_file)
-                                raise util.NothingChanged(
+                                raise ppg_exceptions.NothingChanged(
                                     (filetime, filesize, checksum)
                                 )
             # no suitable old job found.
@@ -826,11 +839,11 @@ class RobustFileChecksumInvariant(_InvariantJob):
             if not old or old == filetime or old[1] != filesize or old[0] != filetime:
                 chksum = self.checksum()
                 if old == filetime:  # we converted from a filetimeinvariant
-                    raise util.NothingChanged(
+                    raise ppg_exceptions.NothingChanged(
                         (filetime, filesize, chksum)
                     )  # pragma: no cover
                 elif old and old[2] == chksum:
-                    raise util.NothingChanged((filetime, filesize, chksum))
+                    raise ppg_exceptions.NothingChanged((filetime, filesize, chksum))
                 else:
                     return filetime, filesize, chksum
             else:
@@ -905,7 +918,7 @@ class MultiFileInvariant(Job):
             old = self.find_matching_renamed(all_invariant_stati)
         checksums = self.calc_checksums(old)
         if old is False:
-            raise util.NothingChanged(checksums)
+            raise ppg_exceptions.NothingChanged(checksums)
         elif old is None:
             return checksums
         else:
@@ -914,7 +927,7 @@ class MultiFileInvariant(Job):
             for fn in self.filenames:
                 if old_d[fn][2] != checksums_d[fn][2]:  # checksum mismatch!
                     return checksums
-            raise util.NothingChanged(checksums)
+            raise ppg_exceptions.NothingChanged(checksums)
 
     def find_matching_renamed(self, all_invariant_stati):
         def to_basenames(job_id):
@@ -1081,7 +1094,7 @@ class FileGeneratingJob(Job):
                     os.unlink(self.job_id)
             except (OSError, IOError):
                 pass
-            util.reraise(exc_info[1], None, exc_info[2])
+            six.reraise(*exc_info)
         if self.empty_ok:
             filecheck = util.file_exists
         else:
@@ -1171,7 +1184,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
                         os.unlink(fn)
                     except OSError:
                         pass
-            util.reraise(exc_info[1], None, exc_info[2])
+            six.reraise(*exc_info)
         self._is_done = None
         missing_files = []
         if self.empty_ok:
@@ -1440,8 +1453,12 @@ class DependencyInjectionJob(_GraphModifyingJob):
     """
 
     def __init__(self, job_id, callback, check_for_dependency_injections=True):
-        """@check_for_dependency_injections - by default, we check whether you injected correctly,
-        but some of these checks are costly so you might wish to optimize by setting check_for_dependency_injections=False, but injecting into already run jobs and so on might create invisible (non exception raising) bugs.
+        """@check_for_dependency_injections -
+        by default, we check whether you injected correctly,
+        but some of these checks are costly so you might wish to optimize
+        by setting check_for_dependency_injections=False,
+        but injecting into already run jobs and so on might
+        create invisible (non exception raising) bugs.
         """
         if not hasattr(callback, "__call__"):
             raise ValueError("callback was not a callable")
@@ -1479,19 +1496,20 @@ class DependencyInjectionJob(_GraphModifyingJob):
         # but at least for the first one, I don't see how to remove the remaining loops.
         logger.info("Now checking first step for dependency injection violations")
         new_job_set = set(util.global_pipegraph.new_jobs.keys())
-        if True:
-            for job in util.global_pipegraph.jobs.values():
-                for nw_jobid in new_job_set.intersection(
-                    [x.job_id for x in job.prerequisites]
-                ):
-                    # logger.info("Checking %s against %s - %s" % (nw, job, job in self.dependants))
-                    nw = util.global_pipegraph.new_jobs[nw_jobid]
-                    if job not in self.dependants:
-                        raise ppg_exceptions.JobContractError(
-                            "DependencyInjectionJob %s tried to inject %s into %s, but %s was not dependand on the DependencyInjectionJob. It was dependand on %s though"
-                            % (self, nw, job, job, nw.prerequisites)
-                        )
-                    nw.dependants.add(job)
+        for job in util.global_pipegraph.jobs.values():
+            for nw_jobid in new_job_set.intersection(
+                [x.job_id for x in job.prerequisites]
+            ):
+                # logger.info("Checking %s against %s - %s" % (nw, job, job in self.dependants))
+                nw = util.global_pipegraph.new_jobs[nw_jobid]
+                if job not in self.dependants:
+                    raise ppg_exceptions.JobContractError(
+                        "DependencyInjectionJob %s tried to inject %s into %s, "
+                        "but %s was not dependand on the DependencyInjectionJob."
+                        " It was dependand on %s though (case 0)"
+                        % (self, nw, job, job, nw.prerequisites)
+                    )
+                nw.dependants.add(job)
         # I need to check: All new jobs are now prereqs of my dependands
 
         # I also need to check that none of the jobs that ain't dependand on me have been injected
@@ -1506,20 +1524,21 @@ class DependencyInjectionJob(_GraphModifyingJob):
                             new_job, 5
                         ):  # 1 for the job, 2 for auto dependencies, 3 for load jobs, 4 for the dependencies of load jobs... 5 seems to work in pratice.
                             raise ppg_exceptions.JobContractError(
-                                "DependencyInjectionJob %s created a job %s that was not added to the prerequisites of %s"
+                                "DependencyInjectionJob %s created a job %s that was not added to the prerequisites of %s (case 1)"
                                 % (self.job_id, new_job.job_id, job.job_id)
                             )
-                else:
+                else:  # pragma: no cover - I could not come up with a test case triggering this (2019-01-11)
                     preq_intersection = set(job.prerequisites).intersection(new_job_set)
                     if preq_intersection:
                         raise ppg_exceptions.JobContractError(
-                            "DependencyInjectionJob %s created a job %s that was added to the prerequisites of %s, but was not dependant on the DependencyInjectionJob"
+                            "DependencyInjectionJob %s created a job %s that was added to the prerequisites of %s, "
+                            "but was not dependant on the DependencyInjectionJob (case 2)"
                             % (self.job_id, preq_intersection, job.job_id)
                         )
                     dep_intersection = set(job.prerequisites).intersection(new_job_set)
                     if dep_intersection:
                         raise ppg_exceptions.JobContractError(
-                            "DependencyInjectionJob %s created a job %s that was added to the dependants of %s, but was not dependant on the DependencyInjectionJob"
+                            "DependencyInjectionJob %s created a job %s that was added to the dependants of %s, but was not dependant on the DependencyInjectionJob (case 3)"
                             % (self.job_id, dep_intersection, job.job_id)
                         )
 
@@ -1544,12 +1563,6 @@ class JobGeneratingJob(_GraphModifyingJob):
         self.do_ignore_code_changes = False
         self.always_runs = True
 
-    def ignore_code_changes(self):
-        pass
-
-    def inject_auto_invariants(self):
-        pass
-
     def run(self):
         logger.info("Storing new jobs in %s" % id(util.global_pipegraph))
         util.global_pipegraph.new_jobs = {}
@@ -1562,7 +1575,7 @@ class JobGeneratingJob(_GraphModifyingJob):
         for job in util.global_pipegraph.jobs.values():
             if new_job_set.intersection(job.prerequisites):
                 raise ppg_exceptions.JobContractError(
-                    "JobGeneratingJob %s created a job that was added to the prerequisites of %s, which is invalid. Use a DependencyInjectionJob instead, this one might only create 'leave' nodes"
+                    "JobGeneratingJob %s created a job that was added to the prerequisites of %s, which is invalid. Use a DependencyInjectionJob instead, this one might only create 'leaf' nodes"
                     % (self.job_id, job.job_id)
                 )
         res = util.global_pipegraph.new_jobs
@@ -1595,12 +1608,6 @@ class FinalJob(Job):
             "Final jobs can not have explicit dependencies - they run in random order after all other jobs"
         )
 
-    def ignore_code_changes(self):
-        pass
-
-    def inject_auto_invariants(self):
-        pass
-
     def run(self):
         self.callback()
 
@@ -1621,8 +1628,7 @@ class PlotJob(FileGeneratingJob):
         skip_table=False,
         skip_caching=False,
     ):
-        if not isinstance(output_filename, six.string_types):
-            raise ValueError("output_filename was not a string type")
+        output_filename = verify_job_id(output_filename)
         if not (
             output_filename.endswith(".png")
             or output_filename.endswith(".pdf")
@@ -1634,6 +1640,8 @@ class PlotJob(FileGeneratingJob):
             )
 
         self.output_filename = output_filename
+        self.filenames = [output_filename]
+        self._check_for_filename_collisions()
         self.table_filename = self.output_filename + ".tsv"
         self.calc_function = calc_function
         self.plot_function = plot_function
@@ -1707,13 +1715,10 @@ class PlotJob(FileGeneratingJob):
                 if isinstance(df, pd.DataFrame):
                     df.to_csv(self.table_filename, sep="\t")
                 else:
-                    writer = pd.ExcelWriter(self.table_filename)
-                    for key, dframe in df.items():
-                        dframe.to_excel(writer, key)
-                    writer = pd.ExcelWriter(self.table_filename)
-                    for key in df:
-                        df[key].to_excel(writer, key)
-                    writer.save()
+                    with open(self.table_filename, "w") as op:
+                        for key, dframe in df.items():
+                            op.write("#%s\n" % key)
+                            dframe.to_csv(op, sep="\t")
 
             table_gen_job = FileGeneratingJob(self.table_filename, dump_table)
             if not self.skip_caching:
@@ -1801,9 +1806,11 @@ class PlotJob(FileGeneratingJob):
                 of = open(self.cache_filename, "rb")
                 df = pickle.load(of)
                 of.close()
-            except Exception:
-                print("could not load", self.cache_filename)
-                raise
+            except Exception as e:
+                raise ValueError(
+                    "Unpickling error in file %s - original error was %s"
+                    % (self.cache_filename, str(e))
+                )
             return df
 
     def __str__(self):
@@ -1826,12 +1833,20 @@ def CombinedPlotJob(
 
     To use these jobs, you need to have pyggplot available.
     """
-    if not isinstance(output_filename, six.string_types):
-        raise ValueError("output_filename was not a string type")
+    output_filename = verify_job_id(output_filename)
     if not (output_filename.endswith(".png") or output_filename.endswith(".pdf")):
         raise ValueError(
             "Don't know how to create this file %s, must end on .png or .pdf"
             % output_filename
+        )
+    if not plot_jobs:
+        raise ValueError("plot_jobs must not be empty")
+    for x in plot_jobs:
+        if not isinstance(x, PlotJob):
+            raise ValueError("all plot_jobs must be PlotJob instances")
+    if not isinstance(facet_arguments, (list, dict)):
+        raise ValueError(
+            "Facet arguments must be a list or a dict to be passed to plot.facet"
         )
 
     if render_args is None:
@@ -1839,27 +1854,19 @@ def CombinedPlotJob(
 
     def plot():
         import pandas as pd
-        import pyggplot
 
         data = pd.concat([plot_job.get_data() for plot_job in plot_jobs], axis=0)
         plot = plot_jobs[0].plot_function(data)
         if isinstance(facet_arguments, list):
             if facet_arguments:  # empty lists mean no faceting
-                plot.facet(*facet_arguments)
+                plot.facet_wrap(*facet_arguments)
         elif isinstance(facet_arguments, dict):
-            plot.facet(**facet_arguments)
+            plot.facet_wrap(**facet_arguments)
         else:
-            raise ValueError(
-                "Don't know how to pass object of type %s to a function, needs to be a list or a dict. Was: %s"
-                % (type(facet_arguments), facet_arguments)
-            )
-        if not isinstance(plot, pyggplot.Plot):
-            raise ppg_exceptions.JobContractError(
-                "%s.plot_function did not return a pyggplot.Plot " % (output_filename)
-            )
-        path = os.path.dirname(output_filename)
-        if not os.path.exists(path):
-            os.makedirs(path)
+            raise ValueError("Should not be reached")  # pragma: no cover
+
+        # no need to check plot objects for being plot - the prerequisite
+        # PlotJobs would have failed already
         if fiddle:
             fiddle(plot)
         plot.render(output_filename, **render_args)
@@ -1959,8 +1966,6 @@ class CachedAttributeLoadingJob(_CachingJobMixin, AttributeLoadingJob):
         self, cache_filename, target_object, target_attribute, calculating_function
     ):
         cache_filename = verify_job_id(cache_filename)
-        if not hasattr(calculating_function, "__call__"):
-            raise ValueError("calculating_function was not a callable")
         if not isinstance(target_attribute, str):
             raise ValueError("attribute_name was not a string")
         abs_cache_filename = os.path.abspath(cache_filename)
@@ -1991,8 +1996,6 @@ class CachedDataLoadingJob(_CachingJobMixin, DataLoadingJob):
     def __init__(self, cache_filename, calculating_function, loading_function):
         if isinstance(cache_filename, pathlib.Path):
             cache_filename = str(cache_filename)
-        if not hasattr(calculating_function, "__call__"):
-            raise ValueError("calculating_function was not a callable")
         if not hasattr(loading_function, "__call__"):
             raise ValueError("loading_function was not a callable")
         abs_cache_filename = os.path.abspath(cache_filename)

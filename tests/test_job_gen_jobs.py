@@ -294,6 +294,22 @@ class TestJobGeneratingJob:
         ppg.run_pipegraph()
         assert read("out/C") == "c"
 
+    def test_jobgenerating_is_not_dependency_injection(self):
+        old = ppg.FileGeneratingJob("out/D", lambda: write("out/D", "D"))
+
+        def gen():
+            write("out/E", "E")
+            p = ppg.FileGeneratingJob("out/C", lambda: write("out/C", "C"))
+            old.depends_on(p)
+
+        j = ppg.JobGeneratingJob("genjob", gen)
+        with pytest.raises(ppg.RuntimeError):
+            ppg.run_pipegraph()
+        assert isinstance(j.exception, ppg.JobContractError)
+        assert read("out/E") == "E"
+        assert not os.path.exists("out/C")  # that job never makes it to the pipeline
+        assert read("out/D") == "D"
+
 
 @pytest.mark.usefixtures("new_pipegraph")
 class TestDependencyInjectionJob:
@@ -335,6 +351,7 @@ class TestDependencyInjectionJob:
             dlB = ppg.AttributeLoadingJob("dlB", o, "B", load_b)
             job.depends_on(dlA)
             job.depends_on(dlB)
+            return [dlA, dlB]
 
         gen_job = ppg.DependencyInjectionJob("C", generate_deps)
         job.depends_on(gen_job)
@@ -365,16 +382,79 @@ class TestDependencyInjectionJob:
 
         gen_job = ppg.DependencyInjectionJob("C", generate_deps)
         job.depends_on(gen_job)
-        try:
+        with pytest.raises(ppg.RuntimeError):
             ppg.run_pipegraph()
-            raise ValueError("should not be reached")
-        except ppg.RuntimeError:
-            pass
+
         assert not (os.path.exists(of))  # since the gen job crashed
         assert os.path.exists(
             "out/D"
         )  # since it has no relation to the gen job actually...
         assert isinstance(gen_job.exception, ppg.JobContractError)
+        assert "was not dependand on the " in str(gen_job.exception)
+
+    def test_raises_on_non_dependend_job_injection2(self):
+        o = Dummy()
+        of = "out/A"
+
+        def do_write():
+            write(of, o.A + o.B)
+
+        job = ppg.FileGeneratingJob(of, do_write)
+        ppg.FileGeneratingJob("out/D", lambda: write("out/D", "D"))
+
+        def generate_deps():
+            def load_a():
+                return "A"
+
+            def load_b():
+                return "B"
+
+            dlA = ppg.AttributeLoadingJob("dlA", o, "A", load_a)
+            ppg.AttributeLoadingJob("dlB", o, "B", load_b)
+            job.depends_on(dlA)
+            # let's not do anything with dlA
+
+        gen_job = ppg.DependencyInjectionJob("C", generate_deps)
+        job.depends_on(gen_job)
+        with pytest.raises(ppg.RuntimeError):
+            ppg.run_pipegraph()
+
+        assert not (os.path.exists(of))  # since the gen job crashed
+        assert os.path.exists(
+            "out/D"
+        )  # since it has no relation to the gen job actually...
+        assert isinstance(gen_job.exception, ppg.JobContractError)
+        assert "case 1" in str(gen_job.exception)
+
+    def test_raises_on_non_dependend_job_injection2_can_be_ignored(self):
+        o = Dummy()
+        of = "out/A"
+
+        def do_write():
+            write(of, o.A)  # + o.B - but B is not in the dependency chain!
+
+        job = ppg.FileGeneratingJob(of, do_write)
+        ppg.FileGeneratingJob("out/D", lambda: write("out/D", "D"))
+
+        def generate_deps():
+            def load_a():
+                return "A"
+
+            def load_b():
+                return "B"
+
+            dlA = ppg.AttributeLoadingJob("dlA", o, "A", load_a)
+            ppg.AttributeLoadingJob("dlB", o, "B", load_b)
+            job.depends_on(dlA)
+            # let's not do anything with dlA
+
+        gen_job = ppg.DependencyInjectionJob(
+            "C", generate_deps, check_for_dependency_injections=False
+        )
+        job.depends_on(gen_job)
+        ppg.run_pipegraph()
+
+        assert os.path.exists(of)  # since the gen job crashed
 
     def test_injecting_filegenerating_job(self):
         of = "out/A"
