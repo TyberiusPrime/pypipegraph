@@ -2132,8 +2132,7 @@ def NotebookJob(notebook_filename, auto_detect_dependencies=True):
     Invalidates (if not ignore_code_changes()) if
         - notebook_filename's contents change
         - any file mentioned in the notebook for which we have
-            a Job (*FileGenerating or (Multi)RobustFileChecksumInvariant)
-            changes / needs to be build
+            a Job changes / needs to be build
 
     """
     notebook_name = os.path.basename(notebook_filename)

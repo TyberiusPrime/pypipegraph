@@ -13,19 +13,12 @@ Please see http://github.com/TyberiusPrime/pypipegraph for the project's homepag
    :maxdepth: 2
 
    tutorial
+   jobs
    api
 
 
-Readme
-======================================
-.. include:: ../README.md
+Development notes
+-------------------
 
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+ *  We use pytest for testing.
 
