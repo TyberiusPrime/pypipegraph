@@ -18,10 +18,14 @@ matrix:
           #apt:
           #packages:
           #- pandoc
-    - python: 3.6
+      #- python: 3.6
+          #env:
+          #- JOB: 'LINT'
+          #- FULL_DEPS: false
+    - python: 2.6
       env:
-        - JOB: 'LINT'
-        - FULL_DEPS: false
+        - JOB: 'UNITTEST'
+        - FULL_DEPS: true
 
 cache: pip
 
@@ -42,9 +46,7 @@ install:
      echo "install"
   - |
     if [[ "$JOB" == "UNITTEST" ]]; then
-      pip install pytest-cov
-    elif [[ "$JOB" == "LINT" ]]; then
-      pip install flake8
+      pip install .[testing]
     fi
   - pip list
 
@@ -58,9 +60,9 @@ script:
       # low pandoc version leads to a warning so
       # SPHINXOPTS=-W fails
       #make html && popd
-    elif [[ "$JOB" == "LINT" ]]; then
+      #elif [[ "$JOB" == "LINT" ]]; then
     #make lint
-    flake8 
+    #flake8 
     fi
 
 
