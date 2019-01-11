@@ -22,7 +22,7 @@ matrix:
           #env:
           #- JOB: 'LINT'
           #- FULL_DEPS: false
-    - python: 2.6
+    - python: 2.7
       env:
         - JOB: 'UNITTEST'
         - FULL_DEPS: true

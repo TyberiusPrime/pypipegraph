@@ -122,9 +122,7 @@ class LocalSystem:
     def enter_loop(self):
         self.spawn_slaves()
         if sys.version_info[0] == 2 and sys.version_info[1] < 7:  # pragma: no cover
-            from .mp_queues import MPQueueFixed
-
-            self.que = MPQueueFixed()
+            raise ValueError("pypipegraph needs python >=2.7")
         else:
             self.que = multiprocessing.Queue()
 
