@@ -18,7 +18,7 @@ Please see http://github.com/TyberiusPrime/pypipegraph for the project's homepag
 
 Readme
 ======================================
-.. include:: ../README
+.. include:: ../README.md
 
 
 

@@ -1,12 +1,6 @@
-
-# pypipegraph 
-
-| Build status: | [![Build Status](https://travis-ci.com/TyberiusPrime/pypipegraph.svg?branch=master)](https://travis-ci.com/TyberiusPrime/pypipegraph)|
-|---------------|-----------------------------------------------------------------------------|
-| Documentation | https://pypipegraph.readthedocs.io/en/latest/
-| Code style    | ![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
-
-## Introduction
+Introduction
+============
+[![Build Status](https://travis-ci.com/TyberiusPrime/pypipegraph.svg?branch=master)](https://travis-ci.com/TyberiusPrime/pypipegraph)<Paste>
 
 [pypipegraph](https://github.com/IMTMarburg/pypipegraph): is an
 MIT-licensed library for constructing a workflow piece by piece and
@@ -33,7 +27,8 @@ and isolates jobs against each other.
 
 pypipegraph supports Python 3.
 
-## 30 second summary
+30 second summary
+=================
 
 ```python
     pypipegraph.new_pipeline()
@@ -52,7 +47,8 @@ pypipegraph supports Python 3.
     print 'sampleB.txt contains "hello world, once again"
 ```
 
-# Jobs
+Jobs
+====
 
 All jobs have a unique name (job\_id), and all but invariant preserving
 jobs encapsulate python callbacks to do their work.
@@ -100,7 +96,8 @@ There are four basic kinds of jobs:
 In addition, there are [compound jobs]() that combine jobs for
 convienance.
 
-## Invariant preserving jobs
+Invariant preserving jobs
+-------------------------
 
 ### ParameterInvariant
 
@@ -123,7 +120,8 @@ file modification time.
 Compare (slightly sanitized) byte code of arbitrary python functions to
 its last definition. If it changed: invalidate dependands.
 
-## Output generating jobs
+Output generating jobs
+----------------------
 
 ### FileGeneratingJob
 
@@ -140,7 +138,7 @@ the output filename get's renamed into outputfilename + '.broken')
 The job receives an implicit FunctionInvariant on its callback. This can
 be supressed by calling myjob.ignore\_code\_changes()
 
-The job\_id doubles up as the output filename.
+The jobid doubles up as the output filename.
 
 ### MultiFileGeneratingJob
 
@@ -156,7 +154,8 @@ that it does not need to be redone later. It does get removed if the
 TempFileGeneratingJob breaks (except if you pass rename\_broken = True
 when construcing it).
 
-## Compute slave modifying jobs
+Compute slave modifying jobs
+----------------------------
 
 ### AttributeLoadingJob
 
@@ -182,7 +181,8 @@ not done) or none of them.
 On the plus side, the data loaded via this job does not get
 automatically eaten once all dependend jobs have been done. (Todo)
 
-## Job generating jobs
+Job generating jobs
+-------------------
 
 ### DependencyInjectionJob
 
@@ -220,19 +220,20 @@ parallel even on different machines...
 
 A JobGeneratingJob has an implicit [FunctionInvariant]().
 
-## Compound jobs
+Compound jobs
+-------------
 
 ### PlotJob
 
-This job wraps plotting with plotnine or pyggplot. It takes two functions: one
+This job wraps plotting with pyggplot. It takes two functions: one
 calculates the dataframe for the plot, and that result is cached. The
 other one loads that dataframe and returns a pyggplot.Plot.
 
 Both have their own [FunctionInvariant](), so you can fiddle with the
 plot function without having the calculation part rerun.
 
-The calc function must return a pandas.DataFrame, the plot function
-a plotnine.ggplot or pyggplot.Plot 
+The calc function must return a pydataframe.DataFrame, the plot function
+a pyggplot.Plot
 
 ### CachedJob
 
@@ -247,7 +248,8 @@ The calc function does not get run if there are no dependencies.
 It also has an implicit [FunctionInvariant]() on it's calc function
 (supress just like a [FileGeneratingJob]() with ignore\_code\_changes())
 
-## Exceptions
+Exceptions
+==========
 
 pypipegraph has a small set of exceptions (all descending from
 PyPipelineGraphError). \* RuntimeError get's thrown by pypipegraph.run
@@ -258,13 +260,16 @@ actually create the file) \* CycleError: you have fabricated a cycle in
 your dependencies. Unfortunatly it's currently not reported where the
 cycle is (though some simple circles are reported early on)
 
-## Runtime
+Runtime
+=======
 
-While the pypipegraph is running, you can terminate it by typing 'abort' and pressing
-enter. 'help<enter>' will present a you a list of commands you can issue. 
+While the pypipegraph is running, you can terminate it with CTRL-C, and
+query it about which jobs are running by pressing Enter (that might take
+up to 5 seconds though, which incidentially is the 'check on slaves'
+timeout)
 
-
-## Executing structure
+Executing structure
+===================
 
 You write a 'master control program' (mcp) that creates Jobs and at one
 point, you hand over control to the pypipegraph. The mcp then talks to a
@@ -284,19 +289,21 @@ available (number of cpu cores, memory) and doesn't overload the nodes
 (by spawning more processes than there are cores or by spawning too many
 memory hungry jobs at once).
 
-## Generated Files
+Generated Files
+===============
 
-Besides your output files, a pipegraph creates some auxillary files: 
-  * ./.pypipegraph\_status\_robust - stores the invariant data of all jobs
-  * ./logs/ppg\_run.txt - the chattery debug output of every decision the
-    pipegraph makes (only if logs exists). All logging is also send to
-    localhost 5005, and you can listen with util/log\_listener.py 
-  * ./logs/ppg\_errors.txt - a log of all failed jobs and their
-    exception/stdout/stderr (only if logs exists and the file is writable)
-  * ./logs/ppg\_graph.txt - a dump of the connected graph structure
-    (which job depends on which) (only if logs exists)
+Besides your output files, a pipegraph creates some auxillary files: \*
+./.pypipegraph\_status\_robust - stores the invariant data of all jobs
+\* ./logs/ppg\_run.txt - the chattery debug output of every decision the
+pipegraph makes (only if logs exists). All logging is also send to
+localhost 5005, and you can listen with util/log\_listener.py \*
+./logs/ppg\_errors.txt - a log of all failed jobs and their
+exception/stdout/stderr (only if logs exists and the file is writable)
+\* ./logs/ppg\_graph.txt - a dump of the connected graph structure
+(which job depends on which) (only if logs exists)
 
-## Notes
+Notes
+=====
 
  *  A pipegraph and it's jobs can only be run once (but you can create
     multiple pipegraphs serially).
@@ -325,7 +332,8 @@ Besides your output files, a pipegraph creates some auxillary files:
     windows process creating does not implicitly copy-on-write the
     current process' memory contents.
 
-## Python function gotchas
+Python function gotchas
+=======================
 
 Please keep in mind that in python functions by default bind to the name
 of variables in their scope, no to their values. This means that :
@@ -345,7 +353,11 @@ rebind the variable:
            write_to_file(filename=filename, text='hello world')
        job = pypipegraph.FileGeneratingJob(i, shu)
 
-## Development notes
+Development notes
+=================
 
- *  We use pytest for testing.
+ *  We use nosetest for testing (nosetests test\_pypipegraph.py), and
+    create a subdirectory for each test to isolate test cases.
+ *  There usually are some test cases not yet implemented. These are
+    expected to raise NotImplementedError()s.
 
