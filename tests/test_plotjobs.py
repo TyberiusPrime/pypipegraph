@@ -61,10 +61,102 @@ if has_pyggplot:  # noqa C901
             def plot(df):
                 return pyggplot.Plot(df).add_scatter("X", "Y")
 
+            def plot2(df):
+                p = pyggplot.Plot(df).add_scatter("Y", "X")
+                p.width = 5
+                p.height = 2
+                return p
+
+            of = "out/test.png"
+            p = ppg.PlotJob(of, calc, plot)
+            p.add_fiddle(lambda p: p.scale_x_log10())
+            p.add_another_plot("out/test2.png", plot2)
+            ppg.run_pipegraph()
+            assert magic(of).find(b"PNG image") != -1
+            assert os.path.exists(of + ".tsv")
+            assert os.path.exists("cache/out/test.png")
+            assert os.path.exists("out/test2.png")
+            assert not os.path.exists("cache/out/test2.png")
+            assert not os.path.exists("cache/out/test2.png.tsv")
+
+        def test_basic_skip_table(self):
+            def calc():
+                return pd.DataFrame(
+                    {"X": list(range(0, 100)), "Y": list(range(50, 150))}
+                )
+
+            def plot(df):
+                return pyggplot.Plot(df).add_scatter("X", "Y")
+
+            of = "out/test.png"
+            ppg.PlotJob(of, calc, plot, skip_table=True)
+            ppg.run_pipegraph()
+            assert magic(of).find(b"PNG image") != -1
+            assert not os.path.exists(of + ".tsv")
+            assert os.path.exists("cache/out/test.png")
+
+        def test_basic_return_dict(self):
+            def calc():
+                return {
+                    "A": pd.DataFrame(
+                        {"X": list(range(0, 100)), "Y": list(range(50, 150))}
+                    )
+                }
+
+            def plot(df):
+                p = pyggplot.Plot(df["A"]).add_scatter("X", "Y")
+                p.width = 5
+                p.height = 1
+                return p
+
             of = "out/test.png"
             ppg.PlotJob(of, calc, plot)
             ppg.run_pipegraph()
             assert magic(of).find(b"PNG image") != -1
+            assert read(of + ".tsv").find("#A\n") != -1
+
+        def test_basic_return_dict_non_df_raises(self):
+            def calc():
+                return {
+                    "A": pd.DataFrame(
+                        {"X": list(range(0, 100)), "Y": list(range(50, 150))}
+                    ),
+                    "B": "not_a_df",
+                }
+
+            def plot(df):
+                return pyggplot.Plot(df["A"]).add_scatter("X", "Y")
+
+            of = "out/test.png"
+            p = ppg.PlotJob(of, calc, plot)
+            p.height = 1200
+            p.width = 800
+            with pytest.raises(ppg.RuntimeError):
+                ppg.run_pipegraph()
+            assert "did not return a DataFrame" in str(p.cache_job.exception)
+
+        def test_skip_caching(self):
+            def calc():
+                if not os.path.exists("A"):
+                    raise ValueError()
+                return pd.DataFrame(
+                    {"X": list(range(0, 100)), "Y": list(range(50, 150))}
+                )
+
+            def plot(df):
+                return pyggplot.Plot(df).add_scatter("X", "Y")
+
+            def prep_job():
+                write("A", "A")
+
+            p = ppg.FileGeneratingJob("A", prep_job)
+            # this tests the correct dependency setting on skip_caching
+            of = "out/test.png"
+            p2 = ppg.PlotJob(of, calc, plot, skip_caching=True)
+            p2.depends_on(p)
+            ppg.run_pipegraph()
+            assert magic(of).find(b"PNG image") != -1
+            assert not os.path.exists("cache/out/test.png")
 
         def test_pdf(self):
             def calc():
@@ -296,6 +388,125 @@ if has_pyggplot:  # noqa C901
 
             with pytest.raises(TypeError):
                 inner()
+
+        def test_unpickling_error(self, new_pipegraph):
+            def calc():
+                return pd.DataFrame(
+                    {"X": list(range(0, 100)), "Y": list(range(50, 150))}
+                )
+
+            def plot(df):
+                return pyggplot.Plot(df).add_scatter("X", "Y")
+
+            of = "out/test.png"
+            p = ppg.PlotJob(of, calc, plot)
+            ppg.run_pipegraph()
+            new_pipegraph.new_pipegraph()
+            p = ppg.PlotJob(of, calc, plot)
+            with open("cache/out/test.png", "w") as op:
+                op.write("no unpickling")
+            os.unlink("out/test.png")  # so it reruns
+            with pytest.raises(ppg.RuntimeError):
+                ppg.run_pipegraph()
+            assert not os.path.exists("out/test.png")
+            assert isinstance(p.exception, ValueError)
+            assert "Unpickling error in file" in str(p.exception)
+
+        def test_add_another_not_returning_plot(self):
+            def calc():
+                return pd.DataFrame(
+                    {"X": list(range(0, 100)), "Y": list(range(50, 150))}
+                )
+
+            def plot(df):
+                return pyggplot.Plot(df).add_scatter("X", "Y")
+
+            def plot2(df):
+                return
+
+            of = "out/test.png"
+            p = ppg.PlotJob(of, calc, plot)
+            p.add_fiddle(lambda p: p.scale_x_log10())
+            p2 = p.add_another_plot("out/test2.png", plot2)
+            with pytest.raises(ppg.RuntimeError):
+                ppg.run_pipegraph()
+            assert isinstance(p2.exception, ppg.JobContractError)
+
+    @pytest.mark.usefixtures("new_pipegraph")
+    class TestCombinedPlotJobs:
+        def test_complete(self):
+            def calc():
+                return pd.DataFrame(
+                    {"X": list(range(0, 100)), "Y": list(range(50, 150)), "w": "A"}
+                )
+
+            def calc2():
+                return pd.DataFrame(
+                    {"X": list(range(0, 100)), "Y": list(range(50, 150)), "w": "B"}
+                )
+
+            def plot(df):
+                return pyggplot.Plot(df).add_scatter("X", "Y")
+
+            p1 = ppg.PlotJob("out/A.png", calc, plot)
+            p2 = ppg.PlotJob("out/B.png", calc2, plot)
+            import pathlib
+
+            ppg.CombinedPlotJob(pathlib.Path("out/C.png"), [p1, p2], ["w"])
+            ppg.CombinedPlotJob(pathlib.Path("out/D.png"), [p1, p2], [])
+            ppg.CombinedPlotJob(
+                pathlib.Path("out/E.png"),
+                [p1, p2],
+                {"facets": "w"},
+                fiddle=lambda p: p.scale_x_log10(),
+            )
+            with pytest.raises(ValueError):
+                ppg.CombinedPlotJob(pathlib.Path("out/C.png"), [p1, p2], "w")
+            with pytest.raises(TypeError):
+                ppg.CombinedPlotJob(5, [p1, p2], "w")
+            with pytest.raises(ValueError):
+                ppg.CombinedPlotJob("out/D.something", [p1, p2], "w")
+            with pytest.raises(ValueError):
+                ppg.CombinedPlotJob("out/D.png", [], "w")
+            with pytest.raises(ValueError):
+                ppg.CombinedPlotJob("out/D.png", [p1, p2.job_id], "w")
+
+            ppg.run_pipegraph()
+            assert magic("out/C.png").find(b"PNG image") != -1
+            assert magic("out/D.png").find(b"PNG image") != -1
+            assert magic("out/E.png").find(b"PNG image") != -1
+
+        def test_plotjob_fails(self):
+            def calc():
+                return None
+
+            def calc2():
+                return pd.DataFrame(
+                    {"X": list(range(0, 100)), "Y": list(range(50, 150)), "w": "B"}
+                )
+
+            def plot(df):
+                return pyggplot.Plot(df).add_scatter("X", "Y")
+
+            p1 = ppg.PlotJob("out/A.png", calc, plot)
+            p2 = ppg.PlotJob("out/B.png", calc2, plot)
+            import pathlib
+
+            pc = ppg.CombinedPlotJob(
+                pathlib.Path("out/C.png"), [p1, p2], {"facet": "w"}
+            )
+            with pytest.raises(ValueError):
+                ppg.CombinedPlotJob(pathlib.Path("out/C.png"), [p1, p2], [])
+            with pytest.raises(ValueError):
+                ppg.CombinedPlotJob(pathlib.Path("out/C.png"), [p1], {"facet": "w"})
+
+            ppg.CombinedPlotJob(pathlib.Path("out/D.png"), [p1, p2], [])
+            ppg.CombinedPlotJob(pathlib.Path("out/E.png"), [p1, p2], {"facet": "w"})
+
+            with pytest.raises(ppg.RuntimeError):
+                ppg.run_pipegraph()
+            assert "did not return a" in str(p1.cache_job.exception)
+            assert pc.error_reason == "Indirect"
 
 
 if __name__ == "__main__":

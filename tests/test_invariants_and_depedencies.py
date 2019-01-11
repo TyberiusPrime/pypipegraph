@@ -152,6 +152,19 @@ class TestInvariant:
         assert b.parameters == 23
         assert b in a.prerequisites
 
+    def test_parameter_invariant_twice_different_values(self):
+        ppg.ParameterInvariant("a", (1, 2, 3))
+        with pytest.raises(ValueError):
+            ppg.ParameterInvariant("a", (1, 2, 4))
+
+    def test_parameter_invariant_twice_different_accepts_func(self):
+        def accept_as_unchanged(old):
+            return True
+
+        ppg.ParameterInvariant("a", (1, 2, 3))
+        with pytest.raises(ValueError):
+            ppg.ParameterInvariant("a", (1, 2, 3), accept_as_unchanged)
+
     def test_parameter_dependency_accepts_as_unchanged(self, new_pipegraph):
         write("out/A", "x")
         job = ppg.FileGeneratingJob("out/A", lambda: append("out/A", "A"))
@@ -1095,7 +1108,7 @@ class TestMultiFileInvariant:
         def inner():
             jobA.get_invariant(False, {})
 
-        assertRaises(ppg.job.util.NothingChanged, inner)
+        assertRaises(ppg.NothingChanged, inner)
 
     def test_no_raise_on_no_change(self):
         write("out/a", "hello")
@@ -1104,12 +1117,12 @@ class TestMultiFileInvariant:
         try:
             jobA.get_invariant(False, {})
             self.fail("should not be reached")
-        except ppg.job.util.NothingChanged as e:
+        except ppg.NothingChanged as e:
             cs = e.new_value
         try:
             jobA.get_invariant(cs, {jobA.job_id: cs})
             self.fail("should not be reached")
-        except ppg.job.util.NothingChanged as e:
+        except ppg.NothingChanged as e:
             cs2 = e.new_value
         assert cs2 == cs
 
@@ -1120,13 +1133,13 @@ class TestMultiFileInvariant:
         try:
             jobA.get_invariant(False, {})
             self.fail("should not be reached")
-        except ppg.job.util.NothingChanged as e:
+        except ppg.NothingChanged as e:
             cs = e.new_value
         subprocess.check_call(["touch", "--date=2004-02-29", "out/b"])
         try:
             jobA.get_invariant(cs, {jobA.job_id: cs})
             self.fail("should not be reached")
-        except ppg.job.util.NothingChanged as e:
+        except ppg.NothingChanged as e:
             cs2 = e.new_value
         assert not (cs2 == cs)
         assert not ([x[1] for x in cs2] == [x[1] for x in cs])  # times changed
@@ -1140,7 +1153,7 @@ class TestMultiFileInvariant:
         try:
             jobA.get_invariant(False, {})
             self.fail("should not be reached")
-        except ppg.job.util.NothingChanged as e:
+        except ppg.NothingChanged as e:
             cs = e.new_value
         write("out/b", "world!")
         cs2 = jobA.get_invariant(cs, {jobA.job_id: cs})
@@ -1157,7 +1170,7 @@ class TestMultiFileInvariant:
         try:
             jobA.get_invariant(False, {})
             self.fail("should not be reached")
-        except ppg.job.util.NothingChanged as e:
+        except ppg.NothingChanged as e:
             cs = e.new_value
         time.sleep(2)  # must be certain we have a changed filetime!
         write("out/b", "worlt")
@@ -1174,12 +1187,12 @@ class TestMultiFileInvariant:
         try:
             jobA.get_invariant(False, {})
             self.fail("should not be reached")
-        except ppg.job.util.NothingChanged as e:
+        except ppg.NothingChanged as e:
             cs = e.new_value
         try:
             jobA.get_invariant(cs, {jobA.job_id: cs})
             self.fail("should not be reached")
-        except ppg.job.util.NothingChanged as e:
+        except ppg.NothingChanged as e:
             cs2 = e.new_value
         assert cs2 == cs
         os.makedirs("out2")
@@ -1190,7 +1203,7 @@ class TestMultiFileInvariant:
         def inner():
             jobB.get_invariant(False, {jobA.job_id: cs})
 
-        assertRaises(ppg.job.util.NothingChanged, inner)
+        assertRaises(ppg.NothingChanged, inner)
 
     def test_rehome_and_change(self):
         write("out/a", "hello")
@@ -1199,12 +1212,12 @@ class TestMultiFileInvariant:
         try:
             jobA.get_invariant(False, {})
             self.fail("should not be reached")
-        except ppg.job.util.NothingChanged as e:
+        except ppg.NothingChanged as e:
             cs = e.new_value
         try:
             jobA.get_invariant(cs, {jobA.job_id: cs})
             self.fail("should not be reached")
-        except ppg.job.util.NothingChanged as e:
+        except ppg.NothingChanged as e:
             cs2 = e.new_value
         assert cs2 == cs
         os.makedirs("out2")
@@ -1227,12 +1240,12 @@ class TestMultiFileInvariant:
         try:
             jobA.get_invariant(False, {})
             self.fail("should not be reached")
-        except ppg.job.util.NothingChanged as e:
+        except ppg.NothingChanged as e:
             cs = e.new_value
         try:
             jobA.get_invariant(cs, {jobA.job_id: cs})
             self.fail("should not be reached")
-        except ppg.job.util.NothingChanged as e:
+        except ppg.NothingChanged as e:
             cs2 = e.new_value
         assert cs2 == cs
         os.makedirs("out2")
@@ -1250,12 +1263,12 @@ class TestMultiFileInvariant:
         try:
             jobA.get_invariant(False, {})
             self.fail("should not be reached")
-        except ppg.job.util.NothingChanged as e:
+        except ppg.NothingChanged as e:
             cs = e.new_value
         try:
             jobA.get_invariant(cs, {jobA.job_id: cs})
             self.fail("should not be reached")
-        except ppg.job.util.NothingChanged as e:
+        except ppg.NothingChanged as e:
             cs2 = e.new_value
         assert cs2 == cs
         os.makedirs("out2")

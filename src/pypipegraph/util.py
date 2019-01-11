@@ -25,7 +25,6 @@ import os
 import stat as stat_module
 import logging
 import logging.handlers
-import sys
 import hashlib
 import time
 
@@ -44,22 +43,22 @@ reactor_was_started = False
 # gc.set_debug(gc.DEBUG_UNCOLLECTABLE)
 
 
-if os.environ.get("PYPIPEGRAPH_NO_LOGGING", False):
+if os.environ.get("PYPIPEGRAPH_NO_LOGGING", False):  # pragma: no cover
     default_logging_handler = logging.NullHandler()
     file_logging_handler = None
 else:
     default_logging_handler = logging.handlers.SocketHandler("localhost", 5005)
     if os.path.exists("logs"):
         file_logging_handler = logging.FileHandler("logs/ppg_run.txt", mode="w")
-    else:
+    else:  # pragma: no cover
         file_logging_handler = None
 loggers = {}
 file_logging_handlers = {}
 
 
-class DummyLogger(object):
+class DummyLogger(object):  # pragma: no cover
     def __init__(self):
-        raise ValueError("dummy logging!")
+        pass
 
     def warn(self, *args):
         pass
@@ -77,7 +76,7 @@ class DummyLogger(object):
         pass
 
 
-def start_logging(module, other_file=None):
+def start_logging(module, other_file=None):  # pragma: no cover
     if os.environ.get("PYPIPEGRAPH_NO_LOGGING", False):
         return DummyLogger()
     key = "rem" if is_remote else "ppg"
@@ -95,7 +94,7 @@ def start_logging(module, other_file=None):
             file_logging_handler.setFormatter(formatter)
             logger.addHandler(file_logging_handler)
         if other_file:
-            if other_file not in file_logging_handlers:
+            if other_file not in file_logging_handlers:  # pragma: no cover
                 file_logging_handlers[other_file] = logging.FileHandler(
                     os.path.join("logs", other_file), mode="w"
                 )
@@ -109,7 +108,7 @@ def start_logging(module, other_file=None):
 util_logger = start_logging("util")
 
 
-def change_logging_port(port):
+def change_logging_port(port):  # pragma: no cover
     """By default, a running Pipegraph chatters to localhost:5005 via tcp
     (use utils/log_listener.py to listen).
     If you want it to log to another port, use this function before createing the graph.
@@ -138,40 +137,6 @@ def output_file_exists(filename):
         util_logger.info("stat size 0 %s - %s" % (os.path.abspath(filename), st))
         return False
     return True
-
-
-def ensure_path(path):
-    """Makes sure a given path exists.
-    """
-    result = True
-    try:
-        if not os.path.exists(path):
-            os.makedirs(path)
-            result = False
-    except OSError as e:
-        print(e)
-        if str(e).find("File exists") != -1:
-            result = False
-        else:
-            raise e
-    if not os.path.exists(path) and os.path.isdir(path):
-        raise ValueError("Failed to create %s" % path)
-    return result
-
-
-class NothingChanged(Exception):
-    """For Invariant communication where
-    the invariant value changed, but we don't need to invalidate
-    the jobs because of it (and we also want the stored value to be updated).
-
-    This is necessary for the FileChecksumInvariant, the filetime might change,
-    then we need to check the checksum. If the checksum matches, we need
-    a way to tell the Pipegraph to store the new (filetime, filesize, checksum)
-    tuple, without invalidating the jobs.
-    """
-
-    def __init__(self, new_value):
-        self.new_value = new_value
 
 
 def assert_uniqueness_of_object(
@@ -229,10 +194,10 @@ def CPUs():
                 ncpus = os.sysconf("SC_NPROCESSORS_ONLN")
                 if isinstance(ncpus, int) and ncpus > 0:
                     cpu_count = ncpus
-            else:  # OSX:
-                cpu_count = int(os.popen2("sysctl -n hw.ncpu")[1].read())
+            else:  # OSX: pragma: no cover
+                cpu_count = int(os.popen2("sysctl -n hw.ncpu")[1].read())  # pragma: no cover
         # Windows:
-        if "NUMBER_OF_PROCESSORS" in os.environ:
+        if "NUMBER_OF_PROCESSORS" in os.environ:  # pragma: no cover
             ncpus = int(os.environ["NUMBER_OF_PROCESSORS"])
             if ncpus > 0:
                 cpu_count = ncpus
@@ -274,7 +239,7 @@ def job_or_filename(job_or_filename):
 
 def checksum_file(filename):
     file_size = os.stat(filename)[stat_module.ST_SIZE]
-    if file_size > 200 * 1024 * 1024:
+    if file_size > 200 * 1024 * 1024:  # pragma: no cover
         print("Taking md5 of large file", filename)
     with open(filename, "rb") as op:
         block_size = 1024 ** 2 * 10
@@ -286,53 +251,3 @@ def checksum_file(filename):
         res = _hash.hexdigest()
     print("checksuming", os.path.abspath(filename), file_size, res)
     return res
-
-
-# Compatibility shims from six
-"""Copyright (c) 2010-2011 Benjamin Peterson
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the "Software"), to deal in
-the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software is furnished to do so,
-subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."""
-PY3 = sys.version_info[0] == 3
-if PY3:
-
-    def reraise(tp, value, tb=None):
-        if tb:
-            raise tp.with_traceback(tb)
-        raise tp
-
-
-else:
-
-    def exec_(code, globs=None, locs=None):
-        """Execute code in a namespace."""
-        if globs is None:
-            frame = sys._getframe(1)
-            globs = frame.f_globals
-            if locs is None:
-                locs = frame.f_locals
-            del frame
-        elif locs is None:
-            locs = globs
-        exec("""exec code in globs, locs""")
-
-    exec_(
-        """def reraise(tp, value, tb=None):
-    raise tp, value, tb
-"""
-    )
-# end shims from six

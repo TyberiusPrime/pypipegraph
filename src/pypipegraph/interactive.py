@@ -6,7 +6,7 @@ from . import util
 import time
 
 
-class SmartCMD(cmd.Cmd):
+class SmartCMD(cmd.Cmd):  # pragma: no cover
     def __init__(self):
         self.terminated = False
         self.stay = False
@@ -73,7 +73,7 @@ class SmartCMD(cmd.Cmd):
                     pass
 
 
-class GraphCmd(SmartCMD):
+class GraphCmd(SmartCMD):  # pragma: no cover
     """Simple command processor example."""
 
     prompt = ">"
@@ -280,7 +280,7 @@ class GraphCmd(SmartCMD):
 interpreter = GraphCmd()
 
 
-def thread_loop():
+def thread_loop():  # pragma: no cover
     try:
         interpreter.cmdloop(
             "\nPipeline now running\nType help<enter> for a list of commands"

@@ -232,6 +232,29 @@ class TestFileGeneratingJob:
         assert data == data_to_write
         assert job.was_run
 
+    def test_cores_needed2(self):
+        # this is meant to trigger the
+        # "this job needed to much resources, or was not runnable"
+        # case of graph.start_jobs
+
+        for i in range(20):
+            j = ppg.FileGeneratingJob(
+                "out/%i" % i, lambda i=i: write("out/%i" % i, "b")
+            )
+            if i % 2 == 0:
+                j.cores_needed = 2
+
+        ppg.util.global_pipegraph.rc.cores_available = 3
+        ppg.run_pipegraph()
+
+    def test_needing_more_cores_then_available_raises(self):
+        j = ppg.FileGeneratingJob("out/A", lambda: write("out/A", "A"))
+        j.cores_needed = 50
+        with pytest.raises(ppg.RuntimeError):
+            ppg.run_pipegraph()
+        assert j.exception is None
+        assert j.error_reason == "Needed to much memory/cores"
+
     def test_basic_with_parameter(self):
         data_to_write = "hello"
 
@@ -1017,7 +1040,7 @@ class TestDataLoadingJob:
         )  # so B was not executed (we removed the function invariants for this test)
         assert read("out/C") == "C"
 
-    def test_sending_a_non_pickable_exception(self):
+    def test_sending_a_non_pickable_exception_data_loading(self):
         class UnpickableException(Exception):
             def __getstate__(self):
                 raise ValueError("Can't pickle me")
@@ -1033,8 +1056,61 @@ class TestDataLoadingJob:
             ppg.run_pipegraph()
 
         assertRaises(ppg.RuntimeError, inner)
-        print(jobA.exception)
         assert isinstance(jobA.exception, str)
+
+    def test_sending_a_non_pickable_exception_file_generating(self):
+        class UnpickableException(Exception):
+            def __getstate__(self):
+                raise ValueError("Can't pickle me")
+
+        def load():
+            raise UnpickableException()
+
+        jobB = ppg.FileGeneratingJob("out/B", load)
+
+        with pytest.raises(ppg.RuntimeError):
+            ppg.run_pipegraph()
+        assert isinstance(jobB.exception, str)
+
+    def test_creating_jobs_in_file_generating_are_ignored(self):
+        def load():
+            ppg.util.global_pipegraph.new_jobs = (
+                {}
+            )  # just to see if we can reach the check in the resource coordinator!
+            c = ppg.FileGeneratingJob("out/C", lambda: write("out/C", "C"))
+            write("out/A", "A")
+            return [c]
+
+        ppg.FileGeneratingJob("out/A", load)
+        ppg.run_pipegraph()
+        assert read("out/A") == "A"
+        assert not os.path.exists("out/C")
+
+    def test_creating_jobs_in_data_loading(self):
+        def load():
+            ppg.FileGeneratingJob("out/C", lambda: write("out/C", "C"))
+
+        a = ppg.FileGeneratingJob("out/A", lambda: write("out/A", "A"))
+        b = ppg.DataLoadingJob("out/B", load)
+        a.depends_on(b)
+        with pytest.raises(ppg.RuntimeError):
+            ppg.run_pipegraph()
+        assert isinstance(b.exception, ppg.JobContractError)
+        assert (
+            "Trying to add new jobs to running pipeline without having new_jobs "
+            in str(b.exception)
+        )
+
+    def test_job_returning_value_without_modifying_jobgraph(self):
+        class BrokenJob(ppg.FileGeneratingJob):
+            def run(self):
+                return 55
+
+        a = BrokenJob("out/A", lambda: None)
+        with pytest.raises(ppg.RuntimeError):
+            ppg.run_pipegraph()
+        assert isinstance(a.exception, ppg.JobContractError)
+        assert "Job returned a value " in str(a.exception)
 
 
 @pytest.mark.usefixtures("new_pipegraph")
@@ -1918,13 +1994,23 @@ class TestFinalJobs:
         # jobD.depends_on(jobC)
         # jobC.depends_on(jobB)
         jobB.depends_on(jobA)
-        final_job = ppg.FinalJob("da_final", lambda: None)
+        final_job = ppg.FinalJob(
+            "da_final",
+            lambda: write(
+                "out/final", "done" + read("out/A") + read("out/B") + read("out/D")
+            ),
+        )
         ppg.util.global_pipegraph.connect_graph()
         print(final_job.prerequisites)
         for x in jobB, jobC, jobD:
             assert x in final_job.prerequisites
             assert final_job in x.dependants
         assert not (jobA in final_job.prerequisites)
+        ppg.run_pipegraph()
+        assert read("out/final") == "doneABD"
+        assert not os.path.exists(
+            "out/C"
+        )  # dataloading job does not get run just because of FinalJob
 
     def test_cannot_depend_on_final_job(self):
         jobA = ppg.FileGeneratingJob("A", lambda: write("A", "A"))
@@ -1935,6 +2021,16 @@ class TestFinalJobs:
         except ppg.JobContractError as e:
             print(e)
             assert "No jobs can depend on FinalJobs" in str(e)
+
+    def test_final_job_depends_on_raises(self):
+        jobA = ppg.FileGeneratingJob("A", lambda: write("A", "A"))
+        final_job = ppg.FinalJob("da_final", lambda: None)
+        try:
+            final_job.depends_on(jobA)
+            assert not ("Exception not raised")
+        except ppg.JobContractError as e:
+            print(e)
+            assert "Final jobs can not have explicit dependencies " in str(e)
 
 
 @pytest.mark.usefixtures("new_pipegraph")

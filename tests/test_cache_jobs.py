@@ -300,7 +300,7 @@ class TestCachedAttributeJob:
 
 
 @pytest.mark.usefixtures("new_pipegraph")
-class CachedDataLoadingJobTests:
+class TestCachedDataLoadingJob:
     def test_simple(self):
         o = Dummy()
 
@@ -372,7 +372,7 @@ class CachedDataLoadingJobTests:
         def inner():
             ppg.CachedDataLoadingJob(5, lambda: 1, lambda value: 55)
 
-        assertRaises(ValueError, inner)
+        assertRaises(TypeError, inner)
 
     def test_being_generated(self):
         o = Dummy()
@@ -680,8 +680,8 @@ else:
             of = "out/B"
             ppg.FileGeneratingJob(of, do_write).depends_on(dl)
             dl.depends_on_params(123)
-            ppg.Job.depends_on_params(
-                dl, 456
+            dl.lfg.depends_on_params(
+                456
             )  # this should trigger just the load invalidation
             write("out/B", "replace me")
             ppg.run_pipegraph()

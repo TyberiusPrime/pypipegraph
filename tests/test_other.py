@@ -320,3 +320,42 @@ class TestPathLib:
         assert not (os.path.exists("i"))
         assert not (os.path.exists("j"))
         assert read("k") == "kkkk"
+
+
+def test_fixture_without_class(new_pipegraph):
+    import pathlib
+
+    assert "run/.test_fixture_without_class" in str(pathlib.Path(".").absolute())
+
+
+def test_job_or_filename(new_pipegraph):
+    a, dep_a = ppg.util.job_or_filename("out/A")
+    assert a == "out/A"
+    assert len(dep_a) == 1
+    assert isinstance(dep_a[0], ppg.RobustFileChecksumInvariant)
+    j = ppg.FileGeneratingJob("out/B", lambda: None)
+    b, dep_b = ppg.util.job_or_filename(j)
+    assert b == "out/B"
+    assert dep_b[0] is j
+    assert len(dep_b) == 1
+
+    c, dep_c = ppg.util.job_or_filename(None)
+    assert c is None
+    assert not dep_c
+
+
+def test_stat_cache(new_pipegraph):
+    import time
+
+    write("out/A", "A")
+    assert ppg.util.stat("out/A")
+    os.unlink("out/A")
+    assert ppg.util.stat("out/A")  # cached...
+    time.sleep(1)
+    with pytest.raises(FileNotFoundError):
+        ppg.util.stat("out/A")  # cache invalidated
+
+
+def test_interactive_import(new_pipegraph):
+    # just so at least the import part of interactive is under coverage
+    import pypipegraph.interactive  # noqa:F401

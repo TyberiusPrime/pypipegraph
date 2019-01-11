@@ -67,3 +67,18 @@ class CommunicationFailure(PyPipeGraphError):
     """something went wrong talking to a slave"""
 
     pass
+
+
+class NothingChanged(Exception):
+    """For Invariant communication where
+    the invariant value changed, but we don't need to invalidate
+    the jobs because of it (and we also want the stored value to be updated).
+
+    This is necessary for the FileChecksumInvariant, the filetime might change,
+    then we need to check the checksum. If the checksum matches, we need
+    a way to tell the Pipegraph to store the new (filetime, filesize, checksum)
+    tuple, without invalidating the jobs.
+    """
+
+    def __init__(self, new_value):
+        self.new_value = new_value

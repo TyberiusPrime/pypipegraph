@@ -33,17 +33,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import os
+import sys
 import signal
 import time
 import collections
+import pickle
+from io import StringIO
 from . import resource_coordinators
-
-from six.moves import cPickle as pickle
-
 from . import ppg_exceptions
 from . import util
-import sys
-from io import StringIO
 
 logger = util.start_logging("graph")
 
@@ -519,13 +517,13 @@ class Pipegraph(object):
                 try:
                     inv = job.get_invariant(old, self.invariant_status)
                 except Exception as e:
-                    if isinstance(e, util.NothingChanged):
+                    if isinstance(e, ppg_exceptions.NothingChanged):
                         pass
                     else:
                         print("Offending job was %s" % job)  # pragma: no cover
                     raise
                 # logger.info("%s invariant was %s, is now %s" % (job, old,inv))
-            except util.NothingChanged as e:
+            except ppg_exceptions.NothingChanged as e:
                 # logger.info("Invariant difference, but NothingChanged")
                 inv = e.new_value
                 old = inv  # so no change...
@@ -829,11 +827,7 @@ class Pipegraph(object):
                                 )
                             ):
                                 job.slave_name = slave
-                                try:
-                                    self.slaves[slave].spawn(job)
-                                except Exception:  # pragma: no cover
-                                    print("failed to start", job)
-                                    raise
+                                self.slaves[slave].spawn(job)
                                 logger.info("running_jobs added3 :%s" % job)
                                 self.running_jobs.add(job)
                                 to_remove.append(job)
@@ -851,6 +845,9 @@ class Pipegraph(object):
                                 runnable_jobs.remove(
                                     job
                                 )  # can't run right now on this slave..., maybe later...
+                                # can't exceed number of cores, that is tested
+                                # before hand
+
                         next_job += 1
                     logger.info("Resources after spawning %s" % resources)
                     # we do this for every slave...
