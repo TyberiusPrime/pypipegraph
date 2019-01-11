@@ -46,9 +46,11 @@ change the output filename though - they're identified by it).
 
 This is easily fixed, we'll introduce a ParameterInvariant.
 Just add 
-::
+python::
+
     job_download.depends_on(
         pypipegraph.ParameterInvariant('url', url))
+
 Which creates an invariant Job named 'url' (all jobs have a distinct name, a job_id so to speak),
 which will force job_download (and thereby job_count) to be rerun if the url changes 
 (It will also rerun next time, since the Invariant wasn't there on the last run).
