@@ -27,7 +27,6 @@ SOFTWARE.
 import time
 from . import util
 
-logger = util.start_logging("RC")
 import os
 import traceback
 import multiprocessing
@@ -107,7 +106,6 @@ class LocalSystem:
                 "swap_memory": self.swap_memory,
             }
         }
-        logger.info("get_resources, result %s - %s" % (id(res), res))
         return res
 
     def enter_loop(self):
@@ -117,7 +115,7 @@ class LocalSystem:
         else:
             self.que = multiprocessing.Queue()
 
-        logger.info("Starting first batch of jobs")
+        self.pipegraph.logger.debug("Entering execution loop")
         self.pipegraph.start_jobs()
         if self.interactive:  # pragma: no cover
             from . import interactive
@@ -130,7 +128,7 @@ class LocalSystem:
             if self.interactive:  # pragma: no cover
                 self.see_if_output_is_requested()
             try:
-                logger.info("Listening to que")
+                self.pipegraph.logger.debug("Listening to que")
                 r = self.que.get(block=True, timeout=self.timeout)
                 if r is None and interactive.interpreter.terminated:  # pragma: no cover
                     # abort was requested
@@ -139,8 +137,7 @@ class LocalSystem:
                 slave_id, was_ok, job_id_done, stdout, stderr, exception, trace, new_jobs = (
                     r
                 )  # was there a job done?t
-                logger.info("Job returned: %s, was_ok: %s" % (job_id_done, was_ok))
-                logger.info("Remaining in que (approx): %i" % self.que.qsize())
+                self.pipegraph.logger.debug("Job returned: %s, was_ok: %s" % (job_id_done, was_ok))
                 job = self.pipegraph.jobs[job_id_done]
                 job.was_done_on.add(slave_id)
                 job.stdout = stdout
@@ -150,7 +147,7 @@ class LocalSystem:
                 job.failed = not was_ok
                 job.stop_time = time.time()
                 if job.start_time:
-                    logger.info(
+                    self.pipegraph.logger.debug(
                         "%s runtime: %is"
                         % (job_id_done, job.stop_time - job.start_time)
                     )
@@ -161,10 +158,7 @@ class LocalSystem:
                             raise pickle.UnpicklingError(
                                 "String Transmission"
                             )  # what an ugly control flow...
-                        logger.info("Before depickle %s" % type(exception))
                         job.exception = pickle.loads(exception)
-                        logger.info("After depickle %s" % type(job.exception))
-                        logger.info("exception stored at %s" % (job))
                     except (
                         pickle.UnpicklingError,
                         EOFError,
@@ -173,17 +167,16 @@ class LocalSystem:
                     ):  # some exceptions can't be pickled, so we send a string instead
                         pass
                     if job.exception:
-                        logger.info("Exception: %s" % repr(exception))
-                        logger.info("Trace: %s" % trace)
-                    logger.info("stdout: %s" % stdout)
-                    logger.info("stderr: %s" % stderr)
+                        self.pipegraph.logger.warning("Job returned with exception: %s" % job)
+                        self.pipegraph.logger.warning("Exception: %s" % repr(exception))
+                        self.pipegraph.logger.warning("Trace: %s" % trace)
                 if new_jobs is not False:
                     if not job.modifies_jobgraph():  # pragma: no cover
                         job.exception = ValueError("This branch should not be reached.")
                         job.failed = True
                     else:
                         new_jobs = pickle.loads(new_jobs)
-                        logger.info(
+                        self.pipegraph.logger.debug(
                             "We retrieved %i new jobs from %s" % (len(new_jobs), job)
                         )
                         self.pipegraph.new_jobs_generated_during_runtime(new_jobs)
@@ -204,7 +197,7 @@ class LocalSystem:
                 interactive.interpreter.terminated = True
             interactive_thread.join()
             signal.signal(signal.SIGINT, s)
-        logger.info("Leaving loop")
+        self.pipegraph.logger.debug("Leaving loop")
 
     def see_if_output_is_requested(self):  # pragma: no cover - interactive
         import select
@@ -232,20 +225,15 @@ class LocalSlave:
     def __init__(self, rc):
         self.rc = rc
         self.slave_id = "LocalSlave"
-        logger.info("LocalSlave pid: %i (runs in MCP!)" % os.getpid())
         self.process_to_job = {}
 
     def spawn(self, job):
-        logger.info("Slave: Spawning %s" % job.job_id)
         job.start_time = time.time()
-        # logger.info("Slave: preqs are %s" % [preq.job_id for preq in job.prerequisites])
         preq_failed = False
         if not job.is_final_job:  # final jobs don't load their (fake) prereqs.
             for preq in job.prerequisites:
                 if preq.is_loadable():
-                    logger.info("Slave: Loading %s" % preq)
                     if not self.load_job(preq):
-                        logger.info("Slave: Preq failed %s" % preq)
                         preq_failed = True
                         break
         if preq_failed:
@@ -264,13 +252,10 @@ class LocalSlave:
             time.sleep(0)
         else:
             if job.modifies_jobgraph():
-                logger.info("Slave: Running %s in slave" % job)
                 stdout = tempfile.SpooledTemporaryFile(mode="w+")
                 stderr = tempfile.SpooledTemporaryFile(mode="w+")
                 self.run_a_job(job, stdout, stderr)
-                logger.info("Slave: returned from %s in slave, data was put" % job)
             else:
-                logger.info("Slave: Forking for %s" % job.job_id)
                 stdout = tempfile.TemporaryFile(
                     mode="w+"
                 )  # no more spooling - it doesn't get passed back
@@ -286,9 +271,7 @@ class LocalSlave:
                 job.run_info = "pid = %s" % (p.pid,)
                 job.pid = p.pid
 
-                logger.info("Slave pid: %s" % (p.pid,))
                 self.process_to_job[p] = job
-                logger.info("Slave, returning to start_jobs")
 
     def load_job(
         self, job
@@ -399,7 +382,6 @@ class LocalSlave:
                 raise
         sys.stdout = old_stdout
         sys.stderr = old_stderr
-        # logger.info("Now putting job data into que: %s - %s" % (job, os.getpid()))
         self.rc.que.put(
             (
                 self.slave_id,
@@ -433,7 +415,6 @@ class LocalSlave:
         remove = []
         for proc in self.process_to_job:
             if not proc.is_alive():
-                logger.info("Process ended %s" % proc)
                 remove.append(proc)
                 if (
                     proc.exitcode != 0
@@ -470,7 +451,7 @@ class LocalSlave:
         for process, job in self.process_to_job.items():
             if job == target_job:
                 print("Found target job")
-                logger.info("Killing job on user request: %s" % job)
+                self.rc.pypipegraph.logger.info("Killing job on user request: %s", job)
                 process.terminate()
 
     def kill_jobs(self):  # pragma: no cover (needed by interactive)
