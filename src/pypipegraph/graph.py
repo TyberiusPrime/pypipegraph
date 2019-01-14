@@ -117,7 +117,7 @@ class Pipegraph(object):
         dump_graph=True,
         cache_folder="cache",
     ):
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger('pypipegraph')
         self.logger.debug("New Pipegraph")
         self.rc = resource_coordinator
         self.rc.pipegraph = self
