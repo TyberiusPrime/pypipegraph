@@ -359,3 +359,24 @@ def test_stat_cache(new_pipegraph):
 def test_interactive_import(new_pipegraph):
     # just so at least the import part of interactive is under coverage
     import pypipegraph.interactive  # noqa:F401
+
+
+def test_logging(new_pipegraph):
+    import logging
+    my_logger = logging.getLogger('pypipegraph')
+    h = logging.FileHandler(filename='ppg.log', mode='w')
+    my_logger.addHandler(h)
+    logging.getLogger().warning("Should not be in the log.")
+    try:
+        my_logger.setLevel(logging.DEBUG)
+        f = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        h.setFormatter(f)
+        ppg.FileGeneratingJob('out/A', lambda: write('out/A', 'A'))
+        ppg.run_pipegraph()
+    finally:
+        my_logger.removeHandler(h)
+    assert os.path.exists('ppg.log')
+    d = read('ppg.log')
+    assert not ('Should not be in the log.\n' in d)
+    assert 'pypipegraph - INFO' in d
+    assert 'pypipegraph - DEBUG' in d
