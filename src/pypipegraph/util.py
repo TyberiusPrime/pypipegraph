@@ -23,8 +23,6 @@ SOFTWARE.
 """
 import os
 import stat as stat_module
-import logging
-import logging.handlers
 import hashlib
 import time
 
@@ -37,104 +35,17 @@ filename_collider_check = (
 func_hashes = (
     {}
 )  # to calculate invarionts on functions in a slightly more efficent manner
-reactor_was_started = False
 
 # import gc
 # gc.set_debug(gc.DEBUG_UNCOLLECTABLE)
 
 
-if os.environ.get("PYPIPEGRAPH_NO_LOGGING", False):  # pragma: no cover
-    default_logging_handler = logging.NullHandler()
-    file_logging_handler = None
-else:
-    default_logging_handler = logging.handlers.SocketHandler("localhost", 5005)
-    if os.path.exists("logs"):
-        file_logging_handler = logging.FileHandler("logs/ppg_run.txt", mode="w")
-    else:  # pragma: no cover
-        file_logging_handler = None
-loggers = {}
-file_logging_handlers = {}
-
-
-class DummyLogger(object):  # pragma: no cover
-    def __init__(self):
-        pass
-
-    def warn(self, *args):
-        pass
-
-    def info(self, *args):
-        pass
-
-    def debug(self, *args):
-        pass
-
-    def error(self, *args):
-        pass
-
-    def exception(self, *args):
-        pass
-
-
-def start_logging(module, other_file=None):  # pragma: no cover
-    if os.environ.get("PYPIPEGRAPH_NO_LOGGING", False):
-        return DummyLogger()
-    key = "rem" if is_remote else "ppg"
-    name = "%s.%s" % (key, module)
-    if name not in loggers:
-        logger = logging.getLogger(name)
-        logger.setLevel(logging.INFO)
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
-        if default_logging_handler:
-            default_logging_handler.setFormatter(formatter)
-            logger.addHandler(default_logging_handler)
-        if file_logging_handler is not None:
-            file_logging_handler.setFormatter(formatter)
-            logger.addHandler(file_logging_handler)
-        if other_file:
-            if other_file not in file_logging_handlers:  # pragma: no cover
-                file_logging_handlers[other_file] = logging.FileHandler(
-                    os.path.join("logs", other_file), mode="w"
-                )
-                file_logging_handlers[other_file].setFormatter(formatter)
-            logger.addHandler(file_logging_handlers[other_file])
-
-        loggers[name] = logger
-    return loggers[name]
-
-
-util_logger = start_logging("util")
-
-
-def change_logging_port(port):  # pragma: no cover
-    """By default, a running Pipegraph chatters to localhost:5005 via tcp
-    (use utils/log_listener.py to listen).
-    If you want it to log to another port, use this function before createing the graph.
-    """
-    global default_logging_handler
-    new_handler = logging.handlers.SocketHandler("127.0.0.1", port)
-    for logger in list(loggers.values()):
-        logger.removeHandler(default_logging_handler)
-        logger.addHandler(new_handler)
-    default_logging_handler = new_handler
-
-
-def flush_logging():
-    default_logging_handler.flush()
-    if file_logging_handler:
-        file_logging_handler.flush()
-
-
 def output_file_exists(filename):
     """Check if a file exists and its size is > 0"""
     if not file_exists(filename):
-        util_logger.info("did not exist %s" % filename)
         return False
     st = stat(filename)
     if st[stat_module.ST_SIZE] == 0:
-        util_logger.info("stat size 0 %s - %s" % (os.path.abspath(filename), st))
         return False
     return True
 
@@ -195,7 +106,9 @@ def CPUs():
                 if isinstance(ncpus, int) and ncpus > 0:
                     cpu_count = ncpus
             else:  # OSX: pragma: no cover
-                cpu_count = int(os.popen2("sysctl -n hw.ncpu")[1].read())  # pragma: no cover
+                cpu_count = int(
+                    os.popen2("sysctl -n hw.ncpu")[1].read()
+                )  # pragma: no cover
         # Windows:
         if "NUMBER_OF_PROCESSORS" in os.environ:  # pragma: no cover
             ncpus = int(os.environ["NUMBER_OF_PROCESSORS"])

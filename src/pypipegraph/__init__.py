@@ -13,8 +13,6 @@ finally:
 from .graph import (
     run_pipegraph,
     new_pipegraph,
-    forget_job_status,
-    destroy_global_pipegraph,
 )
 from .ppg_exceptions import (
     RuntimeError,
@@ -59,8 +57,6 @@ assert_uniqueness_of_object = util.assert_uniqueness_of_object
 all = [
     run_pipegraph,
     new_pipegraph,
-    forget_job_status,
-    destroy_global_pipegraph,
     RuntimeError,
     RuntimeException,
     CycleError,

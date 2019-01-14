@@ -34,7 +34,6 @@ global_test = 0
 @pytest.mark.usefixtures("new_pipegraph")
 class TestJobs:
     def test_assert_singletonicity_of_jobs(self, new_pipegraph):
-        ppg.forget_job_status()
         new_pipegraph.new_pipegraph()
         of = "out/a"
         data_to_write = "hello"
@@ -47,7 +46,6 @@ class TestJobs:
         assert job is job2
 
     def test_redifining_a_jobid_with_different_class_raises(self, new_pipegraph):
-        ppg.forget_job_status()
         new_pipegraph.new_pipegraph()
         of = "out/a"
         data_to_write = "hello"

@@ -4,26 +4,35 @@ import pypipegraph as ppg
 from .shared import assertRaises, write
 
 
+def forget_job_status(invariant_status_filename=None):
+    """Delete the job status file - usually only useful for testing"""
+    if invariant_status_filename is None:
+        invariant_status_filename = ppg.graph.invariant_status_filename_default
+    try:
+        os.unlink(invariant_status_filename)
+    except OSError:
+        pass
+
+
+def destroy_global_pipegraph():
+    """Free the current global pipegraph - usually only useful for testing"""
+    ppg.util.global_pipegraph = None
+
+
 @pytest.mark.usefixtures("new_pipegraph")
 class TestSimple:
     def test_job_creation_before_pipegraph_creation_raises(self):
-        ppg.destroy_global_pipegraph()
-
-        def inner():
+        destroy_global_pipegraph()
+        with pytest.raises(ValueError):
             ppg.FileGeneratingJob("A", lambda: None)
 
-        assertRaises(ValueError, inner)
-
     def test_run_pipegraph_without_pipegraph_raises(self):
-        ppg.destroy_global_pipegraph()
-
-        def inner():
+        destroy_global_pipegraph()
+        with pytest.raises(ValueError):
             ppg.run_pipegraph()
 
-        assertRaises(ValueError, inner)
-
     def test_can_not_run_twice(self):
-        ppg.destroy_global_pipegraph()
+
         ppg.new_pipegraph(dump_graph=False)
         ppg.run_pipegraph()
         try:
@@ -34,7 +43,7 @@ class TestSimple:
             assert "Each pipegraph may be run only once." in str(e)
 
     def test_can_not_add_jobs_after_run(self):
-        ppg.destroy_global_pipegraph()
+
         ppg.new_pipegraph(dump_graph=False)
         ppg.run_pipegraph()
         try:
@@ -66,8 +75,8 @@ class TestSimple:
 
     def test_non_default_status_filename(self):
         try:
-            ppg.forget_job_status("shu.dat")
-            ppg.forget_job_status()
+            forget_job_status("shu.dat")
+            forget_job_status()
             ppg.new_pipegraph(
                 quiet=True, invariant_status_filename="shu.dat", dump_graph=False
             )
@@ -76,4 +85,4 @@ class TestSimple:
             assert os.path.exists("shu.dat")
             assert not (os.path.exists(ppg.graph.invariant_status_filename_default))
         finally:
-            ppg.forget_job_status("shu.dat")
+            forget_job_status("shu.dat")

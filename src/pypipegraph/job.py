@@ -44,7 +44,6 @@ from io import StringIO
 from . import ppg_exceptions
 from . import util
 
-logger = util.start_logging("job")
 
 is_pypy = platform.python_implementation() == "PyPy"
 module_type = type(sys)
@@ -119,7 +118,6 @@ class Job(object):
 
     def __new__(cls, job_id, *args, **kwargs):
         """Handles the singletonization on the job_id"""
-        # logger.info("New for %s %s" % (cls, job_id))
         job_id = verify_job_id(job_id)
         if job_id not in util.job_uniquifier:
             util.job_uniquifier[job_id] = object.__new__(cls)
@@ -157,7 +155,6 @@ class Job(object):
     # return (self.job_id, )
 
     def __init__(self, job_id):
-        # logger.info("init for %s" % job_id)
         job_id = verify_job_id(job_id)
         if not hasattr(self, "dependants"):  # test any of the following
             # else: this job was inited before, and __new__ returned an existing instance
@@ -189,7 +186,6 @@ class Job(object):
             self.is_temp_job = False
             self._is_done = None
             self.do_cache = False
-        # logger.info("adding self %s to %s" % (job_id, id(util.global_pipegraph)))
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
 
     @property
@@ -315,9 +311,7 @@ class Job(object):
 
     def is_done(self, depth=0):
         if not self.do_cache or self._is_done is None:
-            # logger.info("recalc is_done %s" % self)
             self._is_done = self.calc_is_done(depth)
-        # logger.info("called %s.is_done - result %s" % (self, self._is_done))
         return self._is_done
 
     def calc_is_done(self, depth=0):
@@ -352,7 +346,7 @@ class Job(object):
 
     def invalidated(self, reason=""):
         """This job was invalidated - throw away any existing output for recalculation"""
-        logger.info("%s invalidated called, reason: %s" % (self, reason))
+        util.global_pipegraph.logger.info("%s invalidated called, reason: %s" % (self, reason))
         self.was_invalidated = True
         self.distribute_invalidation()
 
@@ -365,26 +359,20 @@ class Job(object):
     def can_run_now(self):
         """Can this job run right now?
         """
-        # logger.info("can_run_now %s" % self)
         for preq in self.prerequisites:
-            # logger.info("checking preq %s" % preq)
             if preq.is_done():
                 if preq.was_invalidated and not preq.was_run and not preq.is_loadable():
                     # was_run is necessary, a filegen job might have already created the file (and written a bit to it),
                     # but that does not mean that it's done enough to start the next one. Was_run means it has returned.
                     # On the other hand, it might have been a job that didn't need to run, then was_invalidated should be false.
                     # or it was a loadable job anyhow, then it doesn't matter.
-                    # logger.info("case 1 - false %s" % preq)
                     return (
                         False
                     )  # pragma: no cover - there is a test case, it triggers, but coverage misses it apperantly
                 # else:
-                # logger.info("case 2 - delay") #but we still need to try the other preqs if it was ok
                 # continue  # go and check the next one
             else:
-                # logger.info("case 3 - not done")
                 return False
-        # logger.info("case 4 - true")
         return True
 
     def list_blocks(self):  # pragma: no cover
@@ -397,10 +385,8 @@ class Job(object):
                 ):  # see can_run_now for why
                     res.append((str(preq), "not run"))
                 else:
-                    # logger.info("case 2 - delay") #but we still need to try the other preqs if it was ok
                     pass
             else:
-                # logger.info("case 3 - not done")
                 if preq.was_run:
                     if preq.was_cleaned_up:
                         res.append(
@@ -423,18 +409,12 @@ class Job(object):
         call it's cleanup function (unload data, remove tempfile...)
         """
         for preq in self.prerequisites:
-            logger.info("check_prerequisites_for_cleanup %s" % preq)
             all_done = True
             for dep in preq.dependants:
-                logger.info(
-                    "checking %s, failed %s, was_run: %s"
-                    % (dep, dep.failed, dep.was_run)
-                )
                 if dep.failed or (not dep.was_run) or not preq.is_done():
                     all_done = False
                     break
             if all_done:
-                logger.info("Calling %s cleanup" % preq)
                 preq.cleanup()
                 preq.was_cleaned_up = True
 
@@ -776,7 +756,6 @@ class ParameterInvariant(_InvariantJob):
     def _get_invariant(self, old, all_invariant_stati):
         if self.accept_as_unchanged_func is not None:
             if self.accept_as_unchanged_func(old):
-                logger.info("Nothing Changed for %s" % self)
                 raise ppg_exceptions.NothingChanged(self.parameters)
         return self.parameters
 
@@ -1046,11 +1025,9 @@ class FileGeneratingJob(Job):
 
     def inject_auto_invariants(self):
         if not self.do_ignore_code_changes:
-            # logger.info("Injecting outa invariants %s" % self)
             self.depends_on(FunctionInvariant(self.job_id + "_func", self.callback))
         else:
             pass
-            # logger.info("not Injecting outa invariants %s" % self)
 
     def calc_is_done(self, depth=0):
         if self._is_done_cache is None:
@@ -1061,8 +1038,9 @@ class FileGeneratingJob(Job):
         return self._is_done_cache
 
     def invalidated(self, reason=""):
+        util.global_pipegraph.logger.info("%s invalidated called, reason: %s" % (self, reason))
         try:
-            logger.info("unlinking %s" % self.job_id)
+            util.global_pipegraph.logger.debug("unlinking %s" % self.job_id)
             os.unlink(self.job_id)
             self._is_done_cache = False
         except OSError:
@@ -1090,7 +1068,7 @@ class FileGeneratingJob(Job):
                 if self.rename_broken:
                     shutil.move(self.job_id, self.job_id + ".broken")
                 else:
-                    logger.info("unlinking %s" % self.job_id)
+                    util.global_pipegraph.logger.debug("unlinking %s" % self.job_id)
                     os.unlink(self.job_id)
             except (OSError, IOError):
                 pass
@@ -1158,9 +1136,10 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         return True
 
     def invalidated(self, reason=""):
+        util.global_pipegraph.logger.info("%s invalidated called, reason: %s" % (self, reason))
         for fn in self.filenames:
             try:
-                logger.info("unlinking %s" % self.job_id)
+                util.global_pipegraph.logger.debug("unlinking %s" % self.job_id)
                 os.unlink(fn)
             except OSError:
                 pass
@@ -1180,7 +1159,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
             else:
                 for fn in self.filenames:
                     try:
-                        logger.info("unlinking %s" % fn)
+                        util.global_pipegraph.logger.debug("unlinking %s" % fn)
                         os.unlink(fn)
                     except OSError:
                         pass
@@ -1213,13 +1192,12 @@ class TempFileGeneratingJob(FileGeneratingJob):
         self.is_temp_job = True
 
     def cleanup(self):
-        logger.info("%s cleanup" % self)
         try:
             # the renaming will already have been done when FileGeneratingJob.run(self) was called...
             # if self.rename_broken:
             # shutil.move(self.job_id, self.job_id + '.broken')
             # else:
-            logger.info("unlinking %s" % self.job_id)
+            util.global_pipegraph.logger.debug("unlinking %s" % self.job_id)
             os.unlink(self.job_id)
         except (OSError, IOError):  # pragma: no cover
             pass
@@ -1228,11 +1206,9 @@ class TempFileGeneratingJob(FileGeneratingJob):
         return True
 
     def calc_is_done(self, depth=0):
-        logger.info("calc is done %s" % self)
         if os.path.exists(
             self.job_id
         ):  # explicitly not using util.output_file_exists, since there the stat has a race condition - reports 0 on recently closed files
-            logger.info("calc is done %s - file existed" % self)
             return True
         else:
             for dep in self.dependants:
@@ -1253,27 +1229,24 @@ class MultiTempFileGeneratingJob(MultiFileGeneratingJob):
     # return (self.filenames,)
 
     def cleanup(self):
-        logger.info("%s cleanup" % self)
         try:
             # the renaming will already have been done when FileGeneratingJob.run(self) was called...
             # if self.rename_broken:
             # shutil.move(self.job_id, self.job_id + '.broken')
             # else:
             for fn in self.filenames:
-                logger.info("unlinking (cleanup) %s" % fn)
+                util.global_pipegraph.logger.debug("unlinking (cleanup) %s" % fn)
                 os.unlink(fn)
         except (OSError, IOError):  # pragma: no cover
             pass
 
     def calc_is_done(self, depth=0):
-        logger.info("calc is done %s" % self)
         all_files_exist = True
         for fn in self.filenames:
             all_files_exist = all_files_exist and os.path.exists(fn)
         if (
             all_files_exist
         ):  # explicitly not using util.output_file_exists, since there the stat has a race condition - reports 0 on recently closed files
-            logger.info("calc is done %s - file existed" % self)
             return True
         else:
             for dep in self.dependants:
@@ -1333,9 +1306,7 @@ class DataLoadingJob(Job):
 
     def load(self):
         if self.was_loaded:
-            logger.info("%s.load (repeat)" % self)
             return
-        logger.info("%s.load" % self)
         for preq in self.prerequisites:  # load whatever is necessary...
             if preq.is_loadable():
                 preq.load()
@@ -1343,18 +1314,15 @@ class DataLoadingJob(Job):
         start = time.time()
         self.callback()
         end = time.time()
-        logger.info("Loading time for %s - %.3f" % (self.job_id, end - start))
+        util.global_pipegraph.logger.debug("Loading time for %s - %.3f" % (self.job_id, end - start))
         self.was_loaded = True
 
     def calc_is_done(
         self, depth=0
     ):  # delegate to preqs... passthrough of 'not yet done'
-        # logger.info("\t" * depth + "Checking is done on %s" % self)
         for preq in self.prerequisites:
             if not preq.is_done(depth=depth + 1):
-                # logger.info("\t" * depth + "failed on %s" % preq)
                 return False
-        # logger.info("\t" * depth + "Passed")
         return True
 
 
@@ -1412,7 +1380,6 @@ class AttributeLoadingJob(DataLoadingJob):
         return True
 
     def cleanup(self):
-        logger.info("Cleanup on %s" % self.attribute_name)
         try:
             delattr(self.object, self.attribute_name)
         except AttributeError:  # pragma: no cover
@@ -1471,19 +1438,7 @@ class DependencyInjectionJob(_GraphModifyingJob):
     def run(self):
         # this is different form JobGeneratingJob.run in it's checking of the contract
         util.global_pipegraph.new_jobs = {}
-        logger.info(
-            "DependencyInjectionJob.dependants = %s %s"
-            % (", ".join(str(x) for x in self.dependants), id(self.dependants))
-        )
         reported_jobs = self.callback()
-        logger.info(
-            "DependencyInjectionJob.dependants after callback = %s %s"
-            % (", ".join(str(x) for x in self.dependants), id(self.dependants))
-        )
-        logger.info(
-            "new_jobs count: %i, id %s"
-            % (len(util.global_pipegraph.new_jobs), id(util.global_pipegraph.new_jobs))
-        )
         for new_job in list(util.global_pipegraph.new_jobs.values()):
             new_job.inject_auto_invariants()
         if reported_jobs:
@@ -1494,13 +1449,11 @@ class DependencyInjectionJob(_GraphModifyingJob):
         # these implementations are much better than the old for loop based ones
         # but still could use some improvements
         # but at least for the first one, I don't see how to remove the remaining loops.
-        logger.info("Now checking first step for dependency injection violations")
         new_job_set = set(util.global_pipegraph.new_jobs.keys())
         for job in util.global_pipegraph.jobs.values():
             for nw_jobid in new_job_set.intersection(
                 [x.job_id for x in job.prerequisites]
             ):
-                # logger.info("Checking %s against %s - %s" % (nw, job, job in self.dependants))
                 nw = util.global_pipegraph.new_jobs[nw_jobid]
                 if job not in self.dependants:
                     raise ppg_exceptions.JobContractError(
@@ -1513,10 +1466,7 @@ class DependencyInjectionJob(_GraphModifyingJob):
         # I need to check: All new jobs are now prereqs of my dependands
 
         # I also need to check that none of the jobs that ain't dependand on me have been injected
-        if not self.check_for_dependency_injections:
-            logger.info("Skipping check for dependency injection violations")
-        else:
-            logger.info("Checking for dependency injection violations")
+        if self.check_for_dependency_injections:
             for job in util.global_pipegraph.jobs.values():
                 if job in self.dependants:
                     for new_job in util.global_pipegraph.new_jobs.values():
@@ -1543,8 +1493,6 @@ class DependencyInjectionJob(_GraphModifyingJob):
                         )
 
         res = util.global_pipegraph.new_jobs
-        logger.info("returning %i new jobs" % len(res))
-        logger.info("%s" % ",".join(res.keys()))
         util.global_pipegraph.tranfer_new_jobs()
         util.global_pipegraph.new_jobs = False
         return res
@@ -1564,7 +1512,6 @@ class JobGeneratingJob(_GraphModifyingJob):
         self.always_runs = True
 
     def run(self):
-        logger.info("Storing new jobs in %s" % id(util.global_pipegraph))
         util.global_pipegraph.new_jobs = {}
         self.callback()
         for new_job in list(util.global_pipegraph.new_jobs.values()):
@@ -1581,7 +1528,6 @@ class JobGeneratingJob(_GraphModifyingJob):
         res = util.global_pipegraph.new_jobs
         util.global_pipegraph.tranfer_new_jobs()
         util.global_pipegraph.new_jobs = False
-        logger.info("Returning from %s" % self)
         return res
 
 
@@ -1910,9 +1856,9 @@ class _CacheFileGeneratingJob(FileGeneratingJob):
             self.do_ignore_code_changes = False
 
     def invalidated(self, reason=""):
-        logger.info("%s invalidated called, reason: %s" % (self, reason))
+        util.global_pipegraph.logger.info("%s invalidated called, reason: %s" % (self, reason))
         try:
-            logger.info("unlinking %s" % self.job_id)
+            util.global_pipegraph.logger.debug("unlinking %s" % self.job_id)
             os.unlink(self.job_id)
         except OSError:
             pass
@@ -1949,6 +1895,7 @@ class _CachingJobMixin:
         self.lfg = None
 
     def invalidated(self, reason=""):
+        util.global_pipegraph.logger.info("%s invalidated called, reason: %s" % (self, reason))
         if not self.lfg.was_invalidated:
             self.lfg.invalidated(reason)
         Job.invalidated(self, reason)
