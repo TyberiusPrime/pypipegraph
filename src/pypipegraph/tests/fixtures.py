@@ -33,6 +33,7 @@ def new_pipegraph(request):
         )
     if target_path.exists():  # pragma: no cover
         shutil.rmtree(target_path)
+    target_path = target_path.absolute()
     Path(target_path).mkdir(parents=True, exist_ok=True)
     old_dir = Path(os.getcwd()).absolute()
     try:
@@ -41,6 +42,9 @@ def new_pipegraph(request):
         Path("cache").mkdir()
         Path("results").mkdir()
         Path("out").mkdir()
+        import logging
+        h = logging.getLogger('pypipegraph')
+        h.setLevel(logging.WARNING)
 
         def np():
             rc = ppg.resource_coordinators.LocalSystem(1)
