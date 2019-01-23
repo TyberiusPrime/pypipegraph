@@ -133,17 +133,19 @@ def stat(filename):
     return s
 
 
-def job_or_filename(job_or_filename):
+def job_or_filename(job_or_filename, invariant_class=None):
     """Take a filename, or a job. Return filename, dependency-for-that-file
-    ie. either the job, or a FileChecksumInvariant"""
+    ie. either the job, or a invariant_class (default: FileChecksumInvariant)"""
     from .job import FileGeneratingJob, FileChecksumInvariant
+    if invariant_class is None:
+        invariant_class = FileChecksumInvariant
 
     if isinstance(job_or_filename, FileGeneratingJob):
         filename = job_or_filename.job_id
         deps = [job_or_filename]
     elif job_or_filename is not None:
         filename = job_or_filename
-        deps = [FileChecksumInvariant(filename)]
+        deps = [invariant_class(filename)]
     else:
         filename = None
         deps = []
