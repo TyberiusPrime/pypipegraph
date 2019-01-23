@@ -441,7 +441,6 @@ class Pipegraph(object):
         else:
             self.invariant_status = collections.defaultdict(bool)
         self.logger.debug("loaded %i invariant stati" % len(self.invariant_status))
-        print(self.invariant_status)
 
     def dump_invariant_status(self):
         """Store Job invariant status into a file named by self.invariant_status_filename"""
@@ -818,7 +817,10 @@ class Pipegraph(object):
     def job_executed(self, job):
         """A job was done. Returns whether there are more jobs read run"""
         job._reset_is_done_cache()
-        self.logger.warning("job_executed %s failed: %s" % (job, job.failed))
+        if job.failed:
+            self.logger.warning("job_executed %s failed: %s" % (job, job.failed))
+        else:
+            self.logger.info("job_executed %s failed: %s" % (job, job.failed))
         if job.failed:
             self.prune_job(job)
             if job.exception:
