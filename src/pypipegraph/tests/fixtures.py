@@ -34,19 +34,23 @@ def new_pipegraph(request):
     if target_path.exists():  # pragma: no cover
         shutil.rmtree(target_path)
     target_path = target_path.absolute()
-    Path(target_path).mkdir(parents=True, exist_ok=True)
     old_dir = Path(os.getcwd()).absolute()
     try:
-        os.chdir(target_path)
-        Path("logs").mkdir()
-        Path("cache").mkdir()
-        Path("results").mkdir()
-        Path("out").mkdir()
-        import logging
-        h = logging.getLogger('pypipegraph')
-        h.setLevel(logging.WARNING)
-
+        first = [False]
+        
         def np():
+            if not first[0]:
+                Path(target_path).mkdir(parents=True, exist_ok=True)
+                os.chdir(target_path)
+                Path("logs").mkdir()
+                Path("cache").mkdir()
+                Path("results").mkdir()
+                Path("out").mkdir()
+                import logging
+                h = logging.getLogger('pypipegraph')
+                h.setLevel(logging.WARNING)
+                first[0] = True
+
             rc = ppg.resource_coordinators.LocalSystem(1)
             ppg.new_pipegraph(rc, quiet=True, dump_graph=False)
             ppg.util.global_pipegraph.result_dir = Path("results")
@@ -56,8 +60,10 @@ def new_pipegraph(request):
 
         def finalize():
             if hasattr(request.node, "rep_setup"):
-                if request.node.rep_setup.passed and request.node.rep_call.passed:
-                    print("executing test succeeded", request.node.nodeid)
+
+                if request.node.rep_setup.passed and (
+                        request.node.rep_call.passed or
+                        request.node.rep_call.outcome == 'skipped'):
                     try:
                         shutil.rmtree(target_path)
                     except OSError:  # pragma: no cover
