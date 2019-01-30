@@ -1539,6 +1539,31 @@ class TestDependency:
         assert read("out/C") == "ABD"
         assert read("out/D") == "D"
 
+    def test_invariant_job_depends_on_raises(self):
+        from pypipegraph.job import _InvariantJob
+
+        with pytest.raises(ppg.JobContractError):
+            _InvariantJob("A").depends_on(ppg.Job("B"))
+        with pytest.raises(ppg.JobContractError):
+            ppg.FinalJob("A").depends_on(ppg.Job("B"))
+
+    def test_cached_job_depends_on(self):
+        class Dummy:
+            pass
+
+        o = Dummy()
+        jobA = ppg.CachedAttributeLoadingJob("cache/A", o, "a", lambda: 23)
+        jobB = ppg.Job("B")
+        jobC = ppg.Job("C")
+        jobD = ppg.Job("D")
+        jobA.depends_on([jobB], jobC, jobD)
+        assert jobB not in jobA.prerequisites
+        assert jobC not in jobA.prerequisites
+        assert jobD not in jobA.prerequisites
+        assert jobB in jobA.lfg.prerequisites
+        assert jobC in jobA.lfg.prerequisites
+        assert jobD in jobA.lfg.prerequisites
+
 
 @pytest.mark.usefixtures("new_pipegraph")
 class TestDefinitionErrors:

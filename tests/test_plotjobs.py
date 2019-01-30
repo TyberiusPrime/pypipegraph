@@ -172,6 +172,22 @@ if has_pyggplot:  # noqa C901
             ppg.run_pipegraph()
             assert magic(of).find(b"PDF document") != -1
 
+        def test_depends_on_with_caching(self):
+            of = "out/test.pdf"
+            jobA = ppg.PlotJob(of, lambda: 5, lambda: 5)
+            jobB = ppg.Job("B")
+            jobA.depends_on(jobB)
+            assert jobB not in jobA.prerequisites
+            assert jobB in jobA.cache_job.prerequisites
+            assert jobA.cache_job in jobA.table_job.prerequisites
+
+        def test_depends_on_without_caching(self):
+            of = "out/test.pdf"
+            jobA = ppg.PlotJob(of, lambda: 5, lambda: 5, skip_caching=True)
+            jobB = ppg.Job("B")
+            jobA.depends_on(jobB)
+            assert jobB in jobA.prerequisites
+
         def test_raises_on_invalid_filename(self):
             def calc():
                 return pd.DataFrame(

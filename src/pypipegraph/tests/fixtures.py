@@ -37,7 +37,7 @@ def new_pipegraph(request):
     old_dir = Path(os.getcwd()).absolute()
     try:
         first = [False]
-        
+
         def np():
             if not first[0]:
                 Path(target_path).mkdir(parents=True, exist_ok=True)
@@ -47,7 +47,8 @@ def new_pipegraph(request):
                 Path("results").mkdir()
                 Path("out").mkdir()
                 import logging
-                h = logging.getLogger('pypipegraph')
+
+                h = logging.getLogger("pypipegraph")
                 h.setLevel(logging.WARNING)
                 first[0] = True
 
@@ -62,8 +63,9 @@ def new_pipegraph(request):
             if hasattr(request.node, "rep_setup"):
 
                 if request.node.rep_setup.passed and (
-                        request.node.rep_call.passed or
-                        request.node.rep_call.outcome == 'skipped'):
+                    request.node.rep_call.passed
+                    or request.node.rep_call.outcome == "skipped"
+                ):
                     try:
                         shutil.rmtree(target_path)
                     except OSError:  # pragma: no cover

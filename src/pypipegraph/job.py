@@ -86,9 +86,9 @@ class JobList(object):
     def __len__(self):
         return len(self.jobs)
 
-    def depends_on(self, other_job):
+    def depends_on(self, *other_job):
         for job in self.jobs:
-            job.depends_on(other_job)
+            job.depends_on(*other_job)
 
     def __str__(self):
         return "JobList of %i jobs: %s" % (
@@ -460,11 +460,14 @@ class Job(object):
                 id(self),
             )
 
+    def __repr__(self):
+        return "%s(%s)" % (self.__class__.__name__, self.job_id)
+
 
 class _InvariantJob(Job):
     """common code for all invariant jobs"""
 
-    def depends_on(self, job_joblist_or_list_of_jobs):
+    def depends_on(self, *job_joblist_or_list_of_jobs):
         raise ppg_exceptions.JobContractError("Invariants can't have dependencies")
 
     def runs_in_slave(self):
@@ -628,7 +631,7 @@ class FunctionInvariant(_InvariantJob):
                                 x = x[: x.find("at 0x")]
                             if "id=" in x:  # pragma: no cover - defensive
                                 print(x)
-                                raise ValueError("Still an issue")
+                                raise ValueError("Still an issue, %s", repr(x))
                             invariant += "\n" + x
                     except ValueError as e:  # pragma: no cover - defensive
                         if str(e) == "Cell is empty":
@@ -1714,16 +1717,16 @@ class PlotJob(FileGeneratingJob):
             self, FunctionInvariant(self.output_filename + "_fiddle", fiddle_function)
         )
 
-    def depends_on(self, other_job):
+    def depends_on(self, *other_jobs):
         # FileGeneratingJob.depends_on(self, other_job)  # just like the cached jobs, the plotting does not depend on the loading of prerequisites
         if self.skip_caching:
-            Job.depends_on(self, other_job)
+            Job.depends_on(self, *other_jobs)
             if self.table_job:
-                self.table_job.depends_on(other_job)
+                self.table_job.depends_on(*other_jobs)
         elif (
-            hasattr(self, "cache_job") and other_job is not self.cache_job
+            hasattr(self, "cache_job") and other_jobs[0] is not self.cache_job
         ):  # activate this after we have added the invariants...
-            self.cache_job.depends_on(other_job)
+            self.cache_job.depends_on(*other_jobs)
         return self
 
     def inject_auto_invariants(self):
@@ -1876,8 +1879,8 @@ class _CacheFileGeneratingJob(FileGeneratingJob):
 
 
 class _CachingJobMixin:
-    def depends_on(self, jobs):
-        self.lfg.depends_on(jobs)
+    def depends_on(self, *other_jobs):
+        self.lfg.depends_on(*other_jobs)
         return self
         # The loading job itself should not depend on the preqs
         # because then the preqs would even have to be loaded if
