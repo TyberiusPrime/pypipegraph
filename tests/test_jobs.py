@@ -2070,6 +2070,30 @@ class TestJobList:
         assert jobA in jobC.dependants
         assert jobB in jobC.dependants
 
+    def test_depends_on_list(self):
+        jobA = ppg.FileGeneratingJob("A", lambda: write("A", "A"))
+        jobB = ppg.FileGeneratingJob("B", lambda: write("A", "A"))
+        jobC = ppg.FileGeneratingJob("C", lambda: write("C", "A"))
+        l1 = ppg.JobList([jobC])
+        l1.depends_on([jobA, jobB])
+        assert jobA in jobC.prerequisites
+        assert jobB in jobC.prerequisites
+        ppg.util.global_pipegraph.connect_graph()
+        assert jobC in jobA.dependants
+        assert jobC in jobB.dependants
+
+    def test_depends_on_args(self):
+        jobA = ppg.FileGeneratingJob("A", lambda: write("A", "A"))
+        jobB = ppg.FileGeneratingJob("B", lambda: write("A", "A"))
+        jobC = ppg.FileGeneratingJob("C", lambda: write("C", "A"))
+        l1 = ppg.JobList([jobC])
+        l1.depends_on(jobA, jobB)
+        assert jobA in jobC.prerequisites
+        assert jobB in jobC.prerequisites
+        ppg.util.global_pipegraph.connect_graph()
+        assert jobC in jobA.dependants
+        assert jobC in jobB.dependants
+
     def test_str(self):
         jobA = ppg.FileGeneratingJob("A", lambda: write("A", "A"))
         l1 = ppg.JobList([jobA])

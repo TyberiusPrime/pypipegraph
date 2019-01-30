@@ -681,7 +681,6 @@ class Pipegraph(object):
                     "Job: %s\tCan run now: %s\nBlocks: %s\n\n"
                     % (job, job.can_run_now(), job.list_blocks())
                 )
-            util.flush_logging()
             self.logger.exception("Job excution order error")
             raise ppg_exceptions.RuntimeException(
                 """We had more jobs that needed to be done, none of them could be run right now and none were running. Sounds like a dependency graph bug to me.
