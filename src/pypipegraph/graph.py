@@ -117,7 +117,7 @@ class Pipegraph(object):
         dump_graph=True,
         cache_folder="cache",
     ):
-        self.logger = logging.getLogger('pypipegraph')
+        self.logger = logging.getLogger("pypipegraph")
         self.logger.debug("New Pipegraph")
         self.rc = resource_coordinator
         self.rc.pipegraph = self
@@ -184,6 +184,8 @@ class Pipegraph(object):
         self.logger.debug("Preparing pypipegraph")
         # internal to the mcp
         self.inject_auto_invariants()
+
+        self.fill_dependency_callbacks()
         self.was_run = True  # since build_
 
         self.running = True
@@ -284,6 +286,16 @@ class Pipegraph(object):
         Why is this not done by the jobs on init? So the user can prevent them from doing it (job.do_ignore_code_changes()...)"""
         for job in list(self.jobs.values()):
             job.inject_auto_invariants()
+
+    def fill_dependency_callbacks(self):
+        with_callback = [j for j in self.jobs.values() if j.dependency_callbacks]
+        if not with_callback:
+            return
+        for j in with_callback:
+            for c in j.dependency_callbacks:
+                j.depends_on(c())
+            j.dependency_callbacks = []
+        self.fill_dependency_callbacks()  # nested?
 
     def connect_graph(self):
         """Convert the dependency graph in jobs into a bidirectional graph"""
@@ -880,6 +892,7 @@ class Pipegraph(object):
             if not job.is_done():
                 if not job.always_runs:
                     job.invalidated(reason="not done")
+        # self.fill_dependency_callbacks()
         self.connect_graph()
         self.distribute_invariant_changes()
         if not self.do_dump_graph:

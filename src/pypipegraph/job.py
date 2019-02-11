@@ -164,6 +164,7 @@ class Job(object):
             self.memory_needed = -1
             self.dependants = set()
             self.prerequisites = set()
+            self.dependency_callbacks = []  # called by graph.fill_dependency_callbacks
             self.failed = None
             self.error_reason = "no error"
             self.stdout = None
@@ -187,6 +188,9 @@ class Job(object):
             self._is_done = None
             self.do_cache = False
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
+
+    def __call__(self):
+        return self.dependants
 
     @property
     def cores_needed(self):
@@ -228,6 +232,8 @@ class Job(object):
                     pass
                 elif job is None:
                     continue
+                elif hasattr(job, "__call__"):
+                    self.dependency_callbacks.append(job)
                 else:
                     raise ValueError(
                         "Can only depend on Job objects, was: %s" % type(job)
@@ -346,7 +352,9 @@ class Job(object):
 
     def invalidated(self, reason=""):
         """This job was invalidated - throw away any existing output for recalculation"""
-        util.global_pipegraph.logger.info("%s invalidated called, reason: %s" % (self, reason))
+        util.global_pipegraph.logger.info(
+            "%s invalidated called, reason: %s" % (self, reason)
+        )
         self.was_invalidated = True
         self.distribute_invalidation()
 
@@ -741,7 +749,7 @@ class ParameterInvariant(_InvariantJob):
         job_id = "PI" + str(job_id)
         if hasattr(self, "parameters") and self.parameters != parameters:
             raise ValueError(
-                "ParameterInvariant %s defined twice with different parameters"
+                "ParameterInvariant %s defined twice with different parameters" % job_id
             )
         else:
             self.parameters = parameters
@@ -858,6 +866,7 @@ class RobustFileChecksumInvariant(_InvariantJob):
 
 FileChecksumInvariant = RobustFileChecksumInvariant
 FileTimeInvariant = RobustFileChecksumInvariant
+FileInvariant = RobustFileChecksumInvariant
 
 
 class MultiFileInvariant(Job):
@@ -1041,7 +1050,9 @@ class FileGeneratingJob(Job):
         return self._is_done_cache
 
     def invalidated(self, reason=""):
-        util.global_pipegraph.logger.info("%s invalidated called, reason: %s" % (self, reason))
+        util.global_pipegraph.logger.info(
+            "%s invalidated called, reason: %s" % (self, reason)
+        )
         try:
             util.global_pipegraph.logger.debug("unlinking %s" % self.job_id)
             os.unlink(self.job_id)
@@ -1139,7 +1150,9 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         return True
 
     def invalidated(self, reason=""):
-        util.global_pipegraph.logger.info("%s invalidated called, reason: %s" % (self, reason))
+        util.global_pipegraph.logger.info(
+            "%s invalidated called, reason: %s" % (self, reason)
+        )
         for fn in self.filenames:
             try:
                 util.global_pipegraph.logger.debug("unlinking %s" % self.job_id)
@@ -1317,7 +1330,9 @@ class DataLoadingJob(Job):
         start = time.time()
         self.callback()
         end = time.time()
-        util.global_pipegraph.logger.debug("Loading time for %s - %.3f" % (self.job_id, end - start))
+        util.global_pipegraph.logger.debug(
+            "Loading time for %s - %.3f" % (self.job_id, end - start)
+        )
         self.was_loaded = True
 
     def calc_is_done(
@@ -1859,7 +1874,9 @@ class _CacheFileGeneratingJob(FileGeneratingJob):
             self.do_ignore_code_changes = False
 
     def invalidated(self, reason=""):
-        util.global_pipegraph.logger.info("%s invalidated called, reason: %s" % (self, reason))
+        util.global_pipegraph.logger.info(
+            "%s invalidated called, reason: %s" % (self, reason)
+        )
         try:
             util.global_pipegraph.logger.debug("unlinking %s" % self.job_id)
             os.unlink(self.job_id)
@@ -1898,7 +1915,9 @@ class _CachingJobMixin:
         self.lfg = None
 
     def invalidated(self, reason=""):
-        util.global_pipegraph.logger.info("%s invalidated called, reason: %s" % (self, reason))
+        util.global_pipegraph.logger.info(
+            "%s invalidated called, reason: %s" % (self, reason)
+        )
         if not self.lfg.was_invalidated:
             self.lfg.invalidated(reason)
         Job.invalidated(self, reason)

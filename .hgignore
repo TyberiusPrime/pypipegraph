@@ -11,3 +11,8 @@ pypipegraph/tests/.*
 docs/_build/*
 build/*
 pypipegraph/tests/covhtml/*
+.eggs*
+.coverage
+tests/run/*
+*.egg-info
+.pytest_cache/

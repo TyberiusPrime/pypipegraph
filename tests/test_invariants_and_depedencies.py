@@ -1564,6 +1564,49 @@ class TestDependency:
         assert jobC in jobA.lfg.prerequisites
         assert jobD in jobA.lfg.prerequisites
 
+    def test_dependency_placeholder(self):
+        jobA = ppg.FileGeneratingJob(
+            "out/A", lambda: write("out/A", "A" + read("out/B"))
+        )
+        jobB = ppg.FileGeneratingJob("out/B", lambda: write("out/B", "B"))
+
+        def gen_deps():
+            print("gen deps called")
+            return [jobB]
+
+        jobA.depends_on(gen_deps)
+        ppg.run_pipegraph()
+        assert read("out/A") == "AB"
+
+    def test_dependency_placeholder2(self):
+        jobA = ppg.FileGeneratingJob(
+            "out/A", lambda: write("out/A", "A" + read("out/B"))
+        )
+
+        def gen_deps():
+            return ppg.FileGeneratingJob("out/B", lambda: write("out/B", "B"))
+
+        jobA.depends_on(gen_deps)
+        ppg.run_pipegraph()
+        assert read("out/A") == "AB"
+
+    def test_dependency_placeholder_nested(self):
+        jobA = ppg.FileGeneratingJob(
+            "out/A", lambda: write("out/A", "A" + read("out/B") + read("out/C"))
+        )
+
+        def gen_deps2():
+            return ppg.FileGeneratingJob("out/C", lambda: write("out/C", "C"))
+
+        def gen_deps():
+            return ppg.FileGeneratingJob(
+                "out/B", lambda: write("out/B", "B")
+            ).depends_on(gen_deps2)
+
+        jobA.depends_on(gen_deps)
+        ppg.run_pipegraph()
+        assert read("out/A") == "ABC"
+
 
 @pytest.mark.usefixtures("new_pipegraph")
 class TestDefinitionErrors:
