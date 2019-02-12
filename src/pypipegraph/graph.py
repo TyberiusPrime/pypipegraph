@@ -146,6 +146,8 @@ class Pipegraph(object):
         """Add a job to a Pipegraph.
         Usually automagically called when instanciating one of the Job classes
         """
+        if job.job_id in self.jobs and self.jobs[job.job_id] is job:
+            return
         if not self.running:
             if self.was_run:
                 raise ValueError(
@@ -273,13 +275,13 @@ class Pipegraph(object):
                         len([x for x in list(self.jobs.values()) if x.failed]),
                     )
                 )
-        self.running = False
-        self.was_run = True
-        if self.restart_afterwards:  # pragma: no cover
-            import subprocess
+            self.running = False
+            self.was_run = True
+            if self.restart_afterwards:  # pragma: no cover
+                import subprocess
 
-            subprocess.check_call([sys.executable] + sys.argv)
-        self.signal_finished()
+                subprocess.check_call([sys.executable] + sys.argv)
+            self.signal_finished()
 
     def inject_auto_invariants(self):
         """Go through each job and ask it to create the invariants it might need.
