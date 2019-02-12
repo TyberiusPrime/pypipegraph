@@ -107,6 +107,15 @@ def verify_job_id(job_id):
             )
     return job_id
 
+def was_inited_before(obj, cls):
+    if type(obj) is cls:
+        res = hasattr(obj, '_init_done')
+        obj._init_done = True
+        return res
+    else:
+        return False
+
+
 
 class Job(object):
     """Base class for all Jobs - never instanciated itself.
@@ -156,6 +165,7 @@ class Job(object):
 
     def __init__(self, job_id):
         job_id = verify_job_id(job_id)
+        if was_inited_before(self, Job): return
         if not hasattr(self, "dependants"):  # test any of the following
             # else: this job was inited before, and __new__ returned an existing instance
             self.job_id = job_id
@@ -474,6 +484,9 @@ class Job(object):
 
 class _InvariantJob(Job):
     """common code for all invariant jobs"""
+    def __init__(self, *args, **kwargs):
+        if was_inited_before(self, _InvariantJob): return
+        super().__init__(*args, **kwargs)
 
     def depends_on(self, *job_joblist_or_list_of_jobs):
         raise ppg_exceptions.JobContractError("Invariants can't have dependencies")
@@ -548,15 +561,20 @@ class FunctionInvariant(_InvariantJob):
     currently via disassembly"""
 
     def __init__(self, job_id, function):
+        job_id = verify_job_id(job_id)
+        self.verify_arguments(job_id, function)
+        if was_inited_before(self, FunctionInvariant): return
+        super().__init__(job_id)
+        self.function = function
+
+    def verify_arguments(self, job_id, function):
         if not hasattr(function, "__call__") and function is not None:
             raise ValueError("%s function was not a callable (or None)" % job_id)
-        Job.__init__(self, job_id)
         if hasattr(self, "function") and function != self.function:
             raise ppg_exceptions.JobContractError(
                 "FunctionInvariant %s created twice with different functions: \n%s\n%s"
                 % (job_id, function_to_str(function), function_to_str(self.function))
             )
-        self.function = function
 
     def __str__(self):
         if (
@@ -742,27 +760,30 @@ class ParameterInvariant(_InvariantJob):
     """
 
     def __new__(cls, job_id, *parameters, **kwargs):
-        job_id = "PI" + str(job_id)
+        job_id = "PI" + verify_job_id(job_id)
         return Job.__new__(cls, job_id)
 
     def __init__(self, job_id, parameters, accept_as_unchanged_func=None):
-        job_id = "PI" + str(job_id)
-        if hasattr(self, "parameters") and self.parameters != parameters:
-            raise ValueError(
+        job_id = "PI" + verify_job_id(job_id)
+        self.verify_arguments(job_id, parameters, accept_as_unchanged_func)
+        if was_inited_before(self, ParameterInvariant): return
+        super().__init__(job_id)
+        self.parameters = parameters
+        self.accept_as_unchanged_func = accept_as_unchanged_func
+
+    def verify_arguments(self, job_id, parameters, accept_as_unchanged_func=None):
+        if hasattr(self, "parameters"):
+            if self.parameters != parameters:
+                raise ValueError(
                 "ParameterInvariant %s defined twice with different parameters" % job_id
             )
-        else:
-            self.parameters = parameters
-        if (
-            hasattr(self, "accept_as_unchanged_func")
-            and self.accept_as_unchanged_func != accept_as_unchanged_func
-        ):
-            raise ValueError(
+            if (
+                self.accept_as_unchanged_func != accept_as_unchanged_func
+            ):
+                raise ValueError(
                 "ParameterInvariant %s defined twice with different accept_as_unchanged_func"
             )
-        else:
-            self.accept_as_unchanged_func = accept_as_unchanged_func
-        Job.__init__(self, job_id)
+
 
     def _get_invariant(self, old, all_invariant_stati):
         if self.accept_as_unchanged_func is not None:
@@ -779,7 +800,8 @@ class RobustFileChecksumInvariant(_InvariantJob):
     """
 
     def __init__(self, filename):
-        Job.__init__(self, filename)
+        if was_inited_before(self, RobustFileChecksumInvariant): return
+        super().__init__(filename)
         if len(self.job_id) < 3:
             raise ValueError(
                 "This is probably not the filename you intend to use: {}".format(
@@ -897,12 +919,17 @@ class MultiFileInvariant(Job):
     def __init__(self, filenames):
         sorted_filenames = list(sorted(str(x) for x in filenames))
         job_id = "_MFC_" + ":".join(sorted_filenames)
+        self.verify_arguments(sorted_filenames)
+        if was_inited_before(self, MultiFileInvariant): return 
         Job.__init__(self, job_id)
         self.filenames = sorted_filenames
 
-        for fn in self.filenames:
-            if not os.path.exists(fn):
-                raise ValueError("File did not exist: %s" % fn)
+    def verify_arguments(self, filenames):
+        # no need to check for filenames changing - it's a new job at that point
+        if not hasattr(self, 'filenames'):
+            for fn in filenames:
+                if not os.path.exists(fn):
+                    raise ValueError("File did not exist: %s" % fn)
 
     def _get_invariant(self, old, all_invariant_stati):
         if not old:
@@ -993,6 +1020,8 @@ class FileGeneratingJob(Job):
         when the job crashes will be renamed to output_filename + '.broken'
         (overwriting whatever was there before)
         """
+        if was_inited_before(self, FileGeneratingJob): return 
+        super().__init__(output_filename)
         output_filename = verify_job_id(output_filename)
         if not hasattr(function, "__call__"):
             raise ValueError("function was not a callable")
@@ -1001,7 +1030,6 @@ class FileGeneratingJob(Job):
             self.job_id
         ]  # so the downstream can treat this one and MultiFileGeneratingJob identically
         self._check_for_filename_collisions()
-        Job.__init__(self, output_filename)
         self.callback = function
         self.rename_broken = rename_broken
         self.do_ignore_code_changes = False
@@ -1126,18 +1154,32 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         when the job crashes will be renamed to output_filename + '.broken'
         (overwriting whatever was there before)
         """
-        if not hasattr(function, "__call__"):
-            raise ValueError("function was not a callable")
         filenames = sorted([verify_job_id(f) for f in filenames])
+        self.verify_arguments(filenames, function, rename_broken, empty_ok)
+        if was_inited_before(self, MultiFileGeneratingJob): return 
         self.filenames = filenames
-        self._check_for_filename_collisions()
         job_id = ":".join(self.filenames)
         Job.__init__(self, job_id)
+
+        self._check_for_filename_collisions()
 
         self.callback = function
         self.rename_broken = rename_broken
         self.do_ignore_code_changes = False
         self.empty_ok = empty_ok
+
+    def verify_arguments(self, filenames, function, rename_broken, empty_ok):
+        if not hasattr(function, "__call__"):
+            raise ValueError("function was not a callable")
+        if hasattr(self, 'callback'):
+            if self.callback  != function:
+                raise ValueError("MultiFileGeneratingJob with two different functions") # todo: test
+            if self.rename_broken != rename_broken:
+                raise ValueError("MultiFileGeneratingJob with two different rename_brokens") # todo: test
+            if self.empty_ok != empty_ok:
+                raise ValueError("MultiFileGeneratingJob with two different rename_brokens") # todo: test
+
+
 
     def calc_is_done(self, depth=0):
         for fn in self.filenames:
@@ -1204,6 +1246,8 @@ class TempFileGeneratingJob(FileGeneratingJob):
     been executed sucessfully"""
 
     def __init__(self, output_filename, function, rename_broken=False):
+        if was_inited_before(self, TempFileGeneratingJob): return 
+
         FileGeneratingJob.__init__(self, output_filename, function, rename_broken)
         self.is_temp_job = True
 
@@ -1238,6 +1282,7 @@ class MultiTempFileGeneratingJob(MultiFileGeneratingJob):
     been executed sucessfully"""
 
     def __init__(self, filenames, function, rename_broken=False, empty_ok=False):
+        if was_inited_before(self, MultiTempFileGeneratingJob): return 
         super().__init__(filenames, function, rename_broken, empty_ok)
         self.is_temp_job = True
 
@@ -1278,6 +1323,7 @@ class TempFilePlusGeneratingJob(TempFileGeneratingJob):
     """
 
     def __init__(self, output_filename, log_filename, function, rename_broken=False):
+        if was_inited_before(self, TempFilePlusGeneratingJob): return 
         if output_filename == log_filename:
             raise ValueError("output_filename and log_filename must be different")
         super().__init__(output_filename, function)
@@ -1303,12 +1349,19 @@ class DataLoadingJob(Job):
     No cleanup is performed - use AttributeLoadingJob if you want your data to be unloaded"""
 
     def __init__(self, job_id, callback):
-        if not hasattr(callback, "__call__"):
-            raise ValueError("callback was not a callable")
+        DataLoadingJob.verify_arguments(self, job_id, callback)
+        if was_inited_before(self, DataLoadingJob): return 
 
         Job.__init__(self, job_id)
         self.callback = callback
         self.do_ignore_code_changes = False
+
+    def verify_arguments(self, job_id, callback):
+        if not hasattr(callback, "__call__"):
+            raise ValueError("callback was not a callable")
+        if hasattr(self, 'callback') and self.callback != callback:
+            raise ValueError("Same DataLoadingJob d,ifferent callbacks?") # todo: test this
+
 
     def ignore_code_changes(self):
         self.do_ignore_code_changes = True
@@ -1352,23 +1405,27 @@ class AttributeLoadingJob(DataLoadingJob):
     """
 
     def __init__(self, job_id, object, attribute_name, callback):
+        self.verify_arguments(job_id, object, attribute_name, callback)
+        if was_inited_before(self, AttributeLoadingJob): return 
+        self.object = object
+        self.attribute_name = attribute_name
+        DataLoadingJob.__init__(self, job_id, callback)
+
+    def verify_arguments(self, job_id, object, attribute_name, callback):
         if not hasattr(callback, "__call__"):
             raise ValueError("callback was not a callable")
         if not isinstance(attribute_name, str):
             raise ValueError("attribute_name was not a string")
-        if not hasattr(self, "object"):
-            self.object = object
-            self.attribute_name = attribute_name
-        else:
-            if self.object is not object:
+        if hasattr(self, "object"):
+             if self.object is not object:
                 raise ppg_exceptions.JobContractError(
                     "Creating AttributeLoadingJob twice with different target objects"
                 )
-            if not self.attribute_name == attribute_name:
+             if not self.attribute_name == attribute_name:
                 raise ppg_exceptions.JobContractError(
                     "Creating AttributeLoadingJob twice with different target attributes"
                 )
-        DataLoadingJob.__init__(self, job_id, callback)
+
 
     def ignore_code_changes(self):
         self.do_ignore_code_changes = True
@@ -1522,6 +1579,7 @@ class JobGeneratingJob(_GraphModifyingJob):
     """
 
     def __init__(self, job_id, callback):
+        if was_inited_before(self, JobGeneratingJob): return
         if not hasattr(callback, "__call__"):
             raise ValueError("callback was not a callable")
         Job.__init__(self, job_id)
@@ -1558,6 +1616,8 @@ class FinalJob(Job):
     """
 
     def __init__(self, jobid, callback):
+        if was_inited_before(self, FinalJob): return 
+
         Job.__init__(self, jobid)
         self.callback = callback
         self.is_final_job = True
@@ -1592,6 +1652,7 @@ class PlotJob(FileGeneratingJob):
         skip_table=False,
         skip_caching=False,
     ):
+        if was_inited_before(self, PlotJob): return 
         output_filename = verify_job_id(output_filename)
         if not (
             output_filename.endswith(".png")
@@ -1863,6 +1924,8 @@ class _CacheFileGeneratingJob(FileGeneratingJob):
     data_loading_job is dependend on somewhere"""
 
     def __init__(self, job_id, calc_function, dl_job, empty_ok=False):
+        if was_inited_before(self, _CacheFileGeneratingJob): return 
+
         self.empty_ok = empty_ok
         if not hasattr(calc_function, "__call__"):
             raise ValueError("calc_function was not a callable")
@@ -1928,6 +1991,7 @@ class CachedAttributeLoadingJob(_CachingJobMixin, AttributeLoadingJob):
     a file called job_id and reread on the next run"""
 
     def __new__(cls, job_id, *args, **kwargs):
+
         job_id = verify_job_id(job_id)
         return Job.__new__(cls, job_id + "_load")
 
@@ -1935,8 +1999,9 @@ class CachedAttributeLoadingJob(_CachingJobMixin, AttributeLoadingJob):
         self, cache_filename, target_object, target_attribute, calculating_function
     ):
         cache_filename = verify_job_id(cache_filename)
-        if not isinstance(target_attribute, str):
-            raise ValueError("attribute_name was not a string")
+        self.verify_arguments(cache_filename, target_object, target_attribute, calculating_function)
+        if was_inited_before(self, CachedAttributeLoadingJob): return 
+
         abs_cache_filename = os.path.abspath(cache_filename)
 
         def do_load(cache_filename=abs_cache_filename):
@@ -1952,6 +2017,12 @@ class CachedAttributeLoadingJob(_CachingJobMixin, AttributeLoadingJob):
         self.lfg = lfg
         Job.depends_on(self, lfg)
 
+    def verify_arguments(self, cache_filename, target_object, target_attribute, calculating_function):
+        if not isinstance(target_attribute, str):
+            raise ValueError("attribute_name was not a string")
+        super().verify_arguments(cache_filename ,target_object, target_attribute, calculating_function)
+
+
 
 class CachedDataLoadingJob(_CachingJobMixin, DataLoadingJob):
     """Like a DataLoadingJob, except that the callback value is pickled into
@@ -1963,10 +2034,10 @@ class CachedDataLoadingJob(_CachingJobMixin, DataLoadingJob):
         )  # plus load, so that the cached data goes into the cache_filename passed to the constructor...
 
     def __init__(self, cache_filename, calculating_function, loading_function):
-        if isinstance(cache_filename, pathlib.Path):
-            cache_filename = str(cache_filename)
-        if not hasattr(loading_function, "__call__"):
-            raise ValueError("loading_function was not a callable")
+        cache_filename = verify_job_id(cache_filename)
+        self.verify_arguments(cache_filename, calculating_function, loading_function)
+        if was_inited_before(self, CachedDataLoadingJob): return 
+
         abs_cache_filename = os.path.abspath(cache_filename)
 
         def do_load(cache_filename=abs_cache_filename):
@@ -1989,6 +2060,12 @@ class CachedDataLoadingJob(_CachingJobMixin, DataLoadingJob):
         Job.depends_on(self, lfg)
         self.calculating_function = calculating_function
         self.loading_function = loading_function
+
+    def verify_arguments(self, cache_filename, calculating_function, loading_function):
+        # super().verify_arguments(self, cache_filename, calculating_function, loading_function)
+        if not hasattr(loading_function, "__call__"):
+            raise ValueError("loading_function was not a callable")
+
 
     def inject_auto_invariants(self):
         if not self.do_ignore_code_changes:
@@ -2037,12 +2114,9 @@ class MemMappedDataLoadingJob(_CachingJobMixin, DataLoadingJob):
         )  # plus load, so that the cached data goes into the cache_filename passed to the constructor...
 
     def __init__(self, cache_filename, calculating_function, loading_function, dtype):
-        if isinstance(cache_filename, pathlib.Path):
-            cache_filename = str(cache_filename)
-        if not hasattr(calculating_function, "__call__"):
-            raise ValueError("calculating_function was not a callable")
-        if not hasattr(loading_function, "__call__"):
-            raise ValueError("loading_function was not a callable")
+        cache_filename = verify_job_id(cache_filename)
+        self.verify_arguments(cache_filename, calculating_function, loading_function, dtype)
+        if was_inited_before(self, MemMappedDataLoadingJob): return 
         abs_cache_filename = os.path.abspath(cache_filename)
         self.dtype = dtype
 
@@ -2076,6 +2150,14 @@ class MemMappedDataLoadingJob(_CachingJobMixin, DataLoadingJob):
         Job.depends_on(self, lfg)
         self.calculating_function = calculating_function
         self.loading_function = loading_function
+
+    def verify_arguments(self,cache_filename, calculating_function, loading_function, dtype):
+        if not hasattr(calculating_function, "__call__"):
+            raise ValueError("calculating_function was not a callable")
+        if not hasattr(loading_function, "__call__"):
+            raise ValueError("loading_function was not a callable")
+        #todo: check input against last init
+
 
     def inject_auto_invariants(self):
         if not self.do_ignore_code_changes:
@@ -2122,6 +2204,7 @@ def NotebookJob(notebook_filename, auto_detect_dependencies=True):
 
 class _NotebookJob(MultiFileGeneratingJob):
     def __init__(self, files, notebook_filename, auto_detect_dependencies):
+        if was_inited_before(self, _NotebookJob): return 
         sentinel_file, ipy_cache_file = files
 
         def run_notebook():
