@@ -25,7 +25,6 @@ SOFTWARE.
 """
 
 import time
-from . import util
 
 import os
 import traceback
@@ -33,12 +32,13 @@ import multiprocessing
 import threading
 import signal
 import sys
-
+import collections
+import tempfile
 import queue
 import pickle
 
 from . import ppg_exceptions
-import tempfile
+from . import util
 
 
 class DummyResourceCoordinator:
@@ -73,6 +73,22 @@ def get_memory_available():
 
 def signal_handler(signal, frame):  # pragma: no cover - interactive
     print('Ctrl-C has been disable. Please give command "abort"')
+
+
+JobReturnValue = collections.namedtuple(
+    "JobReturnValue",
+    (
+        "slave_id",
+        "was_ok",
+        "job_id",
+        "stdout",
+        "stderr",
+        "exception",
+        "trace",
+        "new_jobs",
+        "runtime",
+    ),
+)
 
 
 class LocalSystem:
@@ -128,28 +144,33 @@ class LocalSystem:
             if self.interactive:  # pragma: no cover
                 self.see_if_output_is_requested()
             try:
-                self.pipegraph.logger.debug("Listening to que")
+                start = time.time()
                 r = self.que.get(block=True, timeout=self.timeout)
+                stop = time.time()
+                self.pipegraph.logger.warning("Till que.got: %.2f" % (stop - start))
+
                 if r is None and interactive.interpreter.terminated:  # pragma: no cover
                     # abort was requested
                     self.slave.kill_jobs()
                     break
-                slave_id, was_ok, job_id_done, stdout, stderr, exception, trace, new_jobs = (
-                    r
-                )  # was there a job done?t
-                self.pipegraph.logger.debug("Job returned: %s, was_ok: %s" % (job_id_done, was_ok))
-                job = self.pipegraph.jobs[job_id_done]
-                job.was_done_on.add(slave_id)
-                job.stdout = stdout
-                job.stderr = stderr
-                job.exception = exception
-                job.trace = trace
-                job.failed = not was_ok
+                # slave_id, was_ok, job_id_done, stdout, stderr, exception, trace, new_jobs, runtime = (
+                # r
+                # )  # was there a job done?t
+                self.pipegraph.logger.debug(
+                    "Job returned: %s, was_ok: %s" % (r.job_id, r.was_ok)
+                )
+                job = self.pipegraph.jobs[r.job_id]
                 job.stop_time = time.time()
+                job.was_done_on.add(r.slave_id)
+                job.stdout = r.stdout
+                job.stderr = r.stderr
+                job.exception = r.exception
+                job.trace = r.trace
+                job.failed = not r.was_ok
                 if job.start_time:
-                    self.pipegraph.logger.debug(
-                        "%s runtime: %is"
-                        % (job_id_done, job.stop_time - job.start_time)
+                    self.pipegraph.logger.warning(
+                        "%s runtime: %.2fs (%.2fs w/oque)"
+                        % (r.job_id, job.stop_time - job.start_time, r.runtime)
                     )
                 if job.failed:
                     try:
@@ -158,7 +179,7 @@ class LocalSystem:
                             raise pickle.UnpicklingError(
                                 "String Transmission"
                             )  # what an ugly control flow...
-                        job.exception = pickle.loads(exception)
+                        job.exception = pickle.loads(r.exception)
                     except (
                         pickle.UnpicklingError,
                         EOFError,
@@ -167,15 +188,19 @@ class LocalSystem:
                     ):  # some exceptions can't be pickled, so we send a string instead
                         pass
                     if job.exception:
-                        self.pipegraph.logger.warning("Job returned with exception: %s" % job)
-                        self.pipegraph.logger.warning("Exception: %s" % repr(exception))
-                        self.pipegraph.logger.warning("Trace: %s" % trace)
-                if new_jobs is not False:
+                        self.pipegraph.logger.warning(
+                            "Job returned with exception: %s" % job
+                        )
+                        self.pipegraph.logger.warning(
+                            "Exception: %s" % repr(r.exception)
+                        )
+                        self.pipegraph.logger.warning("Trace: %s" % r.trace)
+                if r.new_jobs is not False:
                     if not job.modifies_jobgraph():  # pragma: no cover
                         job.exception = ValueError("This branch should not be reached.")
                         job.failed = True
                     else:
-                        new_jobs = pickle.loads(new_jobs)
+                        new_jobs = pickle.loads(r.new_jobs)
                         self.pipegraph.logger.debug(
                             "We retrieved %i new jobs from %s" % (len(new_jobs), job)
                         )
@@ -233,23 +258,30 @@ class LocalSlave:
         if not job.is_final_job:  # final jobs don't load their (fake) prereqs.
             for preq in job.prerequisites:
                 if preq.is_loadable():
+                    preq.start_time = time.time()
                     if not self.load_job(preq):
                         preq_failed = True
                         break
+                    preq.stop_time = time.time()
+                    self.rc.pipegraph.logger.warning(
+                        "%s load runtime: %.2fs"
+                        % (preq.job_id, preq.stop_time - preq.start_time)
+                    )
         if preq_failed:
             self.rc.que.put(
-                (
-                    self.slave_id,
-                    False,  # failed?
-                    job.job_id,  # id...
-                    "",  # output
-                    "",  # output
-                    "STRPrerequsite failed".encode("UTF-8"),
-                    "",
-                    False,
+                JobReturnValue(
+                    slave_id=self.slave_id,
+                    was_ok=False,
+                    job_id=job.job_id,
+                    stdout="",
+                    stderr="",
+                    exception="STRPrerequsite failed".encode("UTF-8"),
+                    trace="",
+                    new_jobs=False,
+                    runtime=-1,
                 )
             )
-            time.sleep(0)
+            # time.sleep(0)
         else:
             if job.modifies_jobgraph():
                 stdout = tempfile.SpooledTemporaryFile(mode="w+")
@@ -285,6 +317,7 @@ class LocalSlave:
         sys.stderr = stderr
         trace = ""
         new_jobs = False
+        start = time.time()
         try:
             job.load()
             was_ok = True
@@ -297,6 +330,7 @@ class LocalSlave:
                 exception = pickle.dumps(exception)
             except Exception as e:  # some exceptions can't be pickled, so we send a string instead
                 exception = str(e)
+        stop = time.time()
         stdout.seek(0, os.SEEK_SET)
         stdout_text = stdout.read()[-10 * 1024 :]
         stdout.close()
@@ -307,15 +341,16 @@ class LocalSlave:
         sys.stderr = old_stderr
         if not was_ok:
             self.rc.que.put(
-                (
-                    self.slave_id,
-                    was_ok,  # failed?
-                    job.job_id,  # id...
-                    stdout_text,  # output
-                    stderr_text,  # output
-                    exception,
-                    trace,
-                    new_jobs,
+                JobReturnValue(
+                    slave_id=self.slave_id,
+                    was_ok=was_ok,
+                    job_id=job.job_id,
+                    stdout=stdout_text,
+                    stderr=stderr_text,
+                    exception=exception,
+                    trace=trace,
+                    new_jobs=new_jobs,
+                    runtime=stop - start,
                 )
             )
         return was_ok
@@ -337,6 +372,7 @@ class LocalSlave:
         trace = ""
         new_jobs = False
         util.global_pipegraph.new_jobs = None  # ignore jobs created here.
+        start = time.time()
         try:
             temp = job.run()
             was_ok = True
@@ -348,6 +384,7 @@ class LocalSlave:
                     "Job returned a value (which should be new jobs generated here) without having modifies_jobgraph() returning True"
                 )
         except Exception as e:
+            print("exception in ", job.job_id)
             trace = traceback.format_exc()
             was_ok = False
             exception = e
@@ -358,6 +395,8 @@ class LocalSlave:
                     exception = bytes("STR", "UTF-8") + bytes(e)
                 except TypeError:
                     exception = str(e)
+        finally:
+            stop = time.time()
         try:
             stdout.seek(0, os.SEEK_SET)
             stdout_text = stdout.read()
@@ -382,16 +421,18 @@ class LocalSlave:
                 raise
         sys.stdout = old_stdout
         sys.stderr = old_stderr
+        stop = time.time()
         self.rc.que.put(
-            (
-                self.slave_id,
-                was_ok,  # failed?
-                job.job_id,  # id...
-                stdout_text,  # output
-                stderr_text,  # output
-                exception,
-                trace,
-                new_jobs,
+            JobReturnValue(
+                slave_id=self.slave_id,
+                was_ok=was_ok,
+                job_id=job.job_id,
+                stdout=stdout_text,
+                stderr=stderr_text,
+                exception=exception,
+                trace=trace,
+                new_jobs=new_jobs,
+                runtime=stop - start,
             )
         )
         if not is_local:
@@ -431,17 +472,19 @@ class LocalSlave:
                     job.stdout_handle = None
                     job.stderr_handle = None
                     self.rc.que.put(
+                        JobReturnValue
                         (
-                            self.slave_id,
-                            False,
-                            job.job_id,
-                            stdout,
-                            stderr,
-                            pickle.dumps(
+                            slave_id=self.slave_id,
+                            was_ok=False,
+                            job_id=job.job_id,
+                            stdout=stdout,
+                            stderr=stderr,
+                            exception=pickle.dumps(
                                 ppg_exceptions.JobDiedException(proc.exitcode)
                             ),
-                            "",
-                            False,  # no new jobs
+                            trace="",
+                            new_jobs=False,  # no new jobs
+                            runtime=-1,
                         )
                     )
         for proc in remove:

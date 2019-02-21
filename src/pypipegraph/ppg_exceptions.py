@@ -39,6 +39,10 @@ class CycleError(PyPipeGraphError):
 class RuntimeError(PyPipeGraphError):
     """A job died for whatever reason. All unaffected jobs will have been done."""
 
+    def __init__(self, value, exceptions):
+        super().__init__(value)
+        self.exceptions = exceptions
+
     pass
 
 
