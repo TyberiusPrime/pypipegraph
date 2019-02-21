@@ -164,5 +164,4 @@ def checksum_file(filename):
             _hash.update(block)
             block = op.read(block_size)
         res = _hash.hexdigest()
-    print("checksuming", os.path.abspath(filename), file_size, res)
     return res

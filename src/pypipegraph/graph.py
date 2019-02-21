@@ -231,6 +231,7 @@ class Pipegraph(object):
                     error_log = open("logs/ppg_errors.txt", "w")
                 except IOError:  # pragma: no cover
                     error_log = open("/dev/null", "w")  # pragma: no cover
+                exceptions = []
                 for job in self.jobs.values():
                     if job.failed or job.job_id in self.invariant_loading_issues:
                         if not any_failed and not self.quiet:
@@ -241,6 +242,8 @@ class Pipegraph(object):
                             self.print_failed_job(job, sys.stderr)
                             self.print_failed_job(job, error_log)
                             self.print_failed_job(job, str_error_log)
+                        if job.exception is not None:
+                            exceptions.append(job.exception)
                         if job.job_id in self.invariant_loading_issues:
                             print(
                                 "Could not unpickle invariant for %s - exception was %s"
@@ -253,6 +256,7 @@ class Pipegraph(object):
                                 file=sys.stderr,
                             )
                 if any_failed:
+                    print('exceptions', exceptions)
                     if not self.quiet:
                         print("\n------Pipegraph output end-----", file=sys.stderr)
                         print("\n------Pipegraph output end-----", file=error_log)
@@ -261,7 +265,8 @@ class Pipegraph(object):
                                 "\n failed job log in logs/ppg_erros", file=sys.stderr
                             )
                     if not self.restart_afterwards:
-                        raise ppg_exceptions.RuntimeError(str_error_log.getvalue())
+                        raise ppg_exceptions.RuntimeError(str_error_log.getvalue(),
+                                                          exceptions)
                 else:
                     self.cleanup_jobs_that_requested_it()
             finally:
