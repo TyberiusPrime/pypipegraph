@@ -1180,7 +1180,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         if not hasattr(function, "__call__"):
             raise ValueError("function was not a callable")
         if hasattr(self, "callback"):
-            if self.callback != function:
+            if (self.callback.__code__ != function.__code__) or (self.callback.__closure__ != function.__closure__):
                 raise ValueError(
                     "MultiFileGeneratingJob with two different functions"
                 )  # todo: test

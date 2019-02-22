@@ -39,6 +39,8 @@ func_hashes = (
 # import gc
 # gc.set_debug(gc.DEBUG_UNCOLLECTABLE)
 
+def inside_ppg():
+    return global_pipegraph is not None
 
 def output_file_exists(filename):
     """Check if a file exists and its size is > 0"""
@@ -137,6 +139,7 @@ def job_or_filename(job_or_filename, invariant_class=None):
     """Take a filename, or a job. Return filename, dependency-for-that-file
     ie. either the job, or a invariant_class (default: FileChecksumInvariant)"""
     from .job import FileGeneratingJob, FileChecksumInvariant
+
     if invariant_class is None:
         invariant_class = FileChecksumInvariant
 
