@@ -1377,7 +1377,8 @@ class DataLoadingJob(Job):
             raise ValueError("callback was not a callable")
         if hasattr(self, "callback") and self.callback != callback:
             raise ValueError(
-                "Same DataLoadingJob d,ifferent callbacks?"
+                "Same DataLoadingJob d,ifferent callbacks?\n%s\n%s"
+                %  (self.callback, callback)
             )  # todo: test this
 
     def ignore_code_changes(self):
