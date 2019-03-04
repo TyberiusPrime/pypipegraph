@@ -196,6 +196,7 @@ class Pipegraph(object):
         )  # this get's changed in graph modifying jobs, but they reset it to false, which means 'don't accept any new jobs while we are running'
         self.connect_graph()
         self.check_cycles()
+        self.prune()
         self.load_invariant_status()
         self.distribute_invariant_changes()
         self.dump_invariant_status()  # the jobs will have removed their output, so we can safely store the invariant data
@@ -256,7 +257,7 @@ class Pipegraph(object):
                                 file=sys.stderr,
                             )
                 if any_failed:
-                    print('exceptions', exceptions)
+                    print("exceptions", exceptions)
                     if not self.quiet:
                         print("\n------Pipegraph output end-----", file=sys.stderr)
                         print("\n------Pipegraph output end-----", file=error_log)
@@ -265,8 +266,9 @@ class Pipegraph(object):
                                 "\n failed job log in logs/ppg_erros", file=sys.stderr
                             )
                     if not self.restart_afterwards:
-                        raise ppg_exceptions.RuntimeError(str_error_log.getvalue(),
-                                                          exceptions)
+                        raise ppg_exceptions.RuntimeError(
+                            str_error_log.getvalue(), exceptions
+                        )
                 else:
                     self.cleanup_jobs_that_requested_it()
             finally:
@@ -406,6 +408,25 @@ class Pipegraph(object):
                 )
         L.reverse()
         self.possible_execution_order = L
+
+    def prune(self):
+        from .job import FinalJob
+
+        def prune_children(job):
+            for c in job.dependants:
+                if not isinstance(c, FinalJob):
+                    c._pruned = 2
+                    prune_children(c)
+
+        for job in self.jobs.values():
+            if job._pruned is True:
+                job._pruned = (
+                    2
+                )  # we use two instead of true to prevent doing it multiple times for the same branch of the graph
+                prune_children(job)
+        self.possible_execution_order = [
+            x for x in self.possible_execution_order if not x._pruned == 2
+        ]
 
     def load_invariant_status(self):
         """Load Job invariant status from disk (and self.invariant_status_filename)
@@ -978,10 +999,15 @@ class Pipegraph(object):
             edges = []
             for job in self.jobs.values():
                 if not (
-                    isinstance(job, jobs.FunctionInvariant)
-                    or isinstance(job, jobs.ParameterInvariant)
-                    or isinstance(job, jobs.FileChecksumInvariant)
-                    or isinstance(job, jobs.FinalJob)
+                    isinstance(
+                        job,
+                        (
+                            jobs.FunctionInvariant,
+                            jobs.ParameterInvariant,
+                            jobs.FileChecksumInvariant,
+                            jobs.FinalJob,
+                        ),
+                    )
                 ):
                     nodes[job.job_id] = {
                         "is_done": job._is_done,
