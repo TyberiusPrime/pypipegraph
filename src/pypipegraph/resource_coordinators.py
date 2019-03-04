@@ -472,8 +472,7 @@ class LocalSlave:
                     job.stdout_handle = None
                     job.stderr_handle = None
                     self.rc.que.put(
-                        JobReturnValue
-                        (
+                        JobReturnValue(
                             slave_id=self.slave_id,
                             was_ok=False,
                             job_id=job.job_id,
