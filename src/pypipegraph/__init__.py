@@ -6,14 +6,11 @@ try:
     dist_name = __name__
     __version__ = get_distribution(dist_name).version
 except DistributionNotFound:  # pragma: no cover
-    __version__ = 'unknown'
+    __version__ = "unknown"
 finally:
     del get_distribution, DistributionNotFound
 
-from .graph import (
-    run_pipegraph,
-    new_pipegraph,
-)
+from .graph import run_pipegraph, new_pipegraph
 from .ppg_exceptions import (
     RuntimeError,
     RuntimeException,
@@ -21,7 +18,7 @@ from .ppg_exceptions import (
     JobContractError,
     PyPipeGraphError,
     JobDiedException,
-    NothingChanged
+    NothingChanged,
 )
 from . import util
 
