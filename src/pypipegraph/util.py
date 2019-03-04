@@ -39,8 +39,10 @@ func_hashes = (
 # import gc
 # gc.set_debug(gc.DEBUG_UNCOLLECTABLE)
 
+
 def inside_ppg():
     return global_pipegraph is not None
+
 
 def output_file_exists(filename):
     """Check if a file exists and its size is > 0"""
