@@ -198,6 +198,7 @@ class Job(object):
             self.is_temp_job = False
             self._is_done = None
             self.do_cache = False
+            self._pruned = False
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
 
     def __call__(self):
@@ -251,7 +252,7 @@ class Job(object):
                     )
 
             else:
-                if job.prerequisites is None: # this happens during a run
+                if job.prerequisites is None:  # this happens during a run
                     raise ppg_exceptions.PyPipeGraphError(
                         "Mixing jobs from different piepgraphs not supported.\n%s\n%s"
                         % (self, job)
@@ -281,6 +282,11 @@ class Job(object):
         p = ParameterInvariant(self.job_id, params)
         self.depends_on(p)
         return p
+
+    def prune(self):
+        """Pruns this job (and all that will eventually depend on it) from the pipegraph 
+        just before execution)"""
+        self._pruned = True
 
     def is_in_dependency_chain(self, other_job, max_depth):
         """check wether the other job is in this job's dependency chain.
@@ -391,6 +397,8 @@ class Job(object):
                     )  # pragma: no cover - there is a test case, it triggers, but coverage misses it apperantly
                 # else:
                 # continue  # go and check the next one
+            elif preq._pruned:
+                pass
             else:
                 return False
         return True
@@ -1180,7 +1188,9 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         if not hasattr(function, "__call__"):
             raise ValueError("function was not a callable")
         if hasattr(self, "callback"):
-            if (self.callback.__code__ != function.__code__) or (self.callback.__closure__ != function.__closure__):
+            if (self.callback.__code__ != function.__code__) or (
+                self.callback.__closure__ != function.__closure__
+            ):
                 raise ValueError(
                     "MultiFileGeneratingJob with two different functions"
                 )  # todo: test
@@ -1378,7 +1388,7 @@ class DataLoadingJob(Job):
         if hasattr(self, "callback") and self.callback != callback:
             raise ValueError(
                 "Same DataLoadingJob d,ifferent callbacks?\n%s\n%s"
-                %  (self.callback, callback)
+                % (self.callback, callback)
             )  # todo: test this
 
     def ignore_code_changes(self):
