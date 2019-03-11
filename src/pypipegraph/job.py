@@ -1388,7 +1388,7 @@ class DataLoadingJob(Job):
         if hasattr(self, "callback") and ((self.callback.__code__ != callback.__code__) or (self.callback.__closure__ != callback.__closure__)):
             raise ValueError(
                 "Same DataLoadingJob d,ifferent callbacks?\n%s\n%s\n%s\n%s\n%s\n"
-                %  (self.callback, callback,
+                % (self.callback, callback)
                     self.callback.__code__, self.__code__,
                     self.callback.__closure__, callback.__closure__
                 )
