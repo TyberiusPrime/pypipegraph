@@ -2186,16 +2186,16 @@ class TestNotebookJobs:
         assert read("out/A") == "world"
         assert read("out/tag") == "xxx"  # no rerun
 
-
     def test_func_returning_same_job(self):
         def get_job():
             def load():
                 return self.id
-            return ppg.MultiFileGeneratingJob(['shu'], load)
+
+            return ppg.MultiFileGeneratingJob(["shu"], load)
+
         a = get_job()
         b = get_job()
         assert a is b
-
 
     def test_func_returning_different(self):
         first = [True]
@@ -2203,13 +2203,13 @@ class TestNotebookJobs:
         def get_job():
             def load():
                 return self.id
+
             def load2():
                 return self.id
-            res = ppg.MultiFileGeneratingJob(['shu'], load if first[0] else load2)
+
+            ppg.MultiFileGeneratingJob(["shu"], load if first[0] else load2)
             first[0] = False
 
-        a = get_job()
+        get_job()
         with pytest.raises(ValueError):
-            b = get_job()
-
-
+            get_job()

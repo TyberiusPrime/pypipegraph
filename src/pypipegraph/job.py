@@ -284,7 +284,7 @@ class Job(object):
         return p
 
     def prune(self):
-        """Pruns this job (and all that will eventually depend on it) from the pipegraph 
+        """Pruns this job (and all that will eventually depend on it) from the pipegraph
         just before execution)"""
         self._pruned = True
 
@@ -1385,15 +1385,22 @@ class DataLoadingJob(Job):
     def verify_arguments(self, job_id, callback):
         if not hasattr(callback, "__call__"):
             raise ValueError("callback was not a callable")
-        if hasattr(self, "callback") and ((self.callback.__code__ != callback.__code__) or (self.callback.__closure__ != callback.__closure__)):
+        if hasattr(self, "callback") and (
+            (self.callback.__code__ != callback.__code__)
+            or (self.callback.__closure__ != callback.__closure__)
+        ):
             raise ValueError(
-                "Same DataLoadingJob d,ifferent callbacks?\n%s\n%s\n%s\n%s\n%s\n"
-                % (self.callback, callback)
-                    self.callback.__code__, self.__code__,
-                    self.callback.__closure__, callback.__closure__
+                "Same DataLoadingJob d,ifferent callbacks?\n%s\n%s\n%s\n%s\n%s\n%s\n"
+                % (
+                    self.callback,
+                    callback,
+                    self.callback.__code__,
+                    self.__code__,
+                    self.callback.__closure__,
+                    callback.__closure__,
                 )
-            )  # todo: test this                
-                
+            )  # todo: test this
+
     def ignore_code_changes(self):
         self.do_ignore_code_changes = True
 

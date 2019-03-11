@@ -22,66 +22,62 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import os
 from pathlib import Path
-import subprocess
 import pytest
 import pypipegraph as ppg
-from .shared import write, read, append, Dummy, assertRaises
+from .shared import write
 
 
 @pytest.mark.usefixtures("new_pipegraph")
-class TestPruning():
+class TestPruning:
     def test_basic_prune(self):
-        a = ppg.FileGeneratingJob('A', lambda: write('A','A'))
-        b = ppg.FileGeneratingJob('B', lambda: write('B','B'))
+        ppg.FileGeneratingJob("A", lambda: write("A", "A"))
+        b = ppg.FileGeneratingJob("B", lambda: write("B", "B"))
         b.prune()
         ppg.run_pipegraph()
-        assert Path('A').read_text() == 'A'
-        assert not Path('B').exists()
+        assert Path("A").read_text() == "A"
+        assert not Path("B").exists()
 
     def test_basic_prune2(self):
-        a = ppg.FileGeneratingJob('A', lambda: write('A','A'))
-        b = ppg.FileGeneratingJob('B', lambda: write('B','B'))
+        a = ppg.FileGeneratingJob("A", lambda: write("A", "A"))
+        b = ppg.FileGeneratingJob("B", lambda: write("B", "B"))
         b.depends_on(a)
         b.prune()
         ppg.run_pipegraph()
-        assert Path('A').read_text() == 'A'
-        assert not Path('B').exists()
-
+        assert Path("A").read_text() == "A"
+        assert not Path("B").exists()
 
     def test_basic_prune3(self):
-        a = ppg.FileGeneratingJob('A', lambda: write('A','A'))
-        b = ppg.FileGeneratingJob('B', lambda: write('B','B'))
-        c = ppg.FileGeneratingJob('C', lambda: write('C','C'))
-        d = ppg.FileGeneratingJob('D', lambda: write('D','D'))
+        a = ppg.FileGeneratingJob("A", lambda: write("A", "A"))
+        b = ppg.FileGeneratingJob("B", lambda: write("B", "B"))
+        c = ppg.FileGeneratingJob("C", lambda: write("C", "C"))
+        d = ppg.FileGeneratingJob("D", lambda: write("D", "D"))
         b.depends_on(a)
         b.prune()
-        c.depends_on(b) # that is ok, pruning happens after complet build.
+        c.depends_on(b)  # that is ok, pruning happens after complet build.
         d.depends_on(a)
         ppg.run_pipegraph()
-        assert Path('A').read_text() == 'A'
-        assert Path('D').read_text() == 'D'
-        assert not Path('B').exists()
-        assert not Path('C').exists()
+        assert Path("A").read_text() == "A"
+        assert Path("D").read_text() == "D"
+        assert not Path("B").exists()
+        assert not Path("C").exists()
 
     def test_pruning_does_not_prune_final_jobs(self):
-        a = ppg.FileGeneratingJob('A', lambda: write('A','A'))
-        b = ppg.FileGeneratingJob('B', lambda: write('B','B'))
-        c = ppg.FinalJob('shu', lambda: write('C','C'))
+        ppg.FileGeneratingJob("A", lambda: write("A", "A"))
+        b = ppg.FileGeneratingJob("B", lambda: write("B", "B"))
+        ppg.FinalJob("shu", lambda: write("C", "C"))
         b.prune()
-        ppg.run_pipegraph ()
-        assert Path('A').read_text() == 'A'
-        assert Path('C').read_text() == 'C'
-        assert not Path('B').exists()
+        ppg.run_pipegraph()
+        assert Path("A").read_text() == "A"
+        assert Path("C").read_text() == "C"
+        assert not Path("B").exists()
 
     def test_pruning_final_jobs_directly(self):
-        a = ppg.FileGeneratingJob('A', lambda: write('A','A'))
-        b = ppg.FileGeneratingJob('B', lambda: write('B','B'))
-        c = ppg.FinalJob('shu', lambda: write('C','C'))
+        ppg.FileGeneratingJob("A", lambda: write("A", "A"))
+        ppg.FileGeneratingJob("B", lambda: write("B", "B"))
+        c = ppg.FinalJob("shu", lambda: write("C", "C"))
         c.prune()
-        ppg.run_pipegraph ()
-        assert Path('A').read_text() == 'A'
-        assert Path('B').read_text() == 'B'
-        assert not Path('C').exists()
-
+        ppg.run_pipegraph()
+        assert Path("A").read_text() == "A"
+        assert Path("B").read_text() == "B"
+        assert not Path("C").exists()
