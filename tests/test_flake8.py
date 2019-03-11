@@ -1,9 +1,9 @@
 import subprocess
-import pytest
+import pytest  # noqa:F401
 import unittest
 
 
-@pytest.mark.skip
+# @pytest.mark.skip
 class Flake8TestCase(unittest.TestCase):
     def test_flake8(self):
         p = subprocess.Popen("flake8", stdout=subprocess.PIPE, stderr=subprocess.PIPE)
