@@ -117,6 +117,17 @@ def was_inited_before(obj, cls):
         return False
 
 
+def functions_equal(a, b):
+    print("comparing", a, b)
+    print(a.__code__)
+    print(b.__code__)
+    print(a.__closure__)
+    print(b.__closure__)
+    print(a.__code__ == b.__code__)
+    print(a.__closure__ == b.__closure__)
+    return (a.__code__ == b.__code__) and (a.__closure__ == b.__closure__)
+
+
 class Job(object):
     """Base class for all Jobs - never instanciated itself.
 
@@ -583,7 +594,7 @@ class FunctionInvariant(_InvariantJob):
     def verify_arguments(self, job_id, function):
         if not hasattr(function, "__call__") and function is not None:
             raise ValueError("%s function was not a callable (or None)" % job_id)
-        if hasattr(self, "function") and function != self.function:
+        if hasattr(self, "function") and not functions_equal(function, self.function):
             raise ppg_exceptions.JobContractError(
                 "FunctionInvariant %s created twice with different functions: \n%s\n%s"
                 % (job_id, function_to_str(function), function_to_str(self.function))
@@ -1188,9 +1199,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         if not hasattr(function, "__call__"):
             raise ValueError("function was not a callable")
         if hasattr(self, "callback"):
-            if (self.callback.__code__ != function.__code__) or (
-                self.callback.__closure__ != function.__closure__
-            ):
+            if not functions_equal(self.callback, function):
                 raise ValueError(
                     "MultiFileGeneratingJob with two different functions"
                 )  # todo: test
@@ -1385,10 +1394,7 @@ class DataLoadingJob(Job):
     def verify_arguments(self, job_id, callback):
         if not hasattr(callback, "__call__"):
             raise ValueError("callback was not a callable")
-        if hasattr(self, "callback") and (
-            (self.callback.__code__ != callback.__code__)
-            or (self.callback.__closure__ != callback.__closure__)
-        ):
+        if hasattr(self, "callback") and not functions_equal(self.callback, callback):
             raise ValueError(
                 "Same DataLoadingJob d,ifferent callbacks?\n%s\n%s\n%s\n%s\n%s\n%s\n"
                 % (
