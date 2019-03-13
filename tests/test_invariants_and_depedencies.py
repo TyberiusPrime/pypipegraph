@@ -887,13 +887,19 @@ class TestFunctionInvariant:
 
         ppg.FunctionInvariant("A", shu)
         ppg.FunctionInvariant("A", shu)  # ok.
-
-        def inner():
+        with pytest.raises(ppg.JobContractError):
             ppg.FunctionInvariant("A", lambda: "b")  # raises ValueError
 
-        assertRaises(ppg.JobContractError, inner)
+        def sha():
+            def shu():
+                return "b"
 
-    def test_instance_functions_raise(self):
+            return shu
+
+        ppg.FunctionInvariant("B", sha())
+        ppg.FunctionInvariant("B", sha())
+
+    def test_instance_functions_ok(self):
         class shu:
             def __init__(self, letter):
                 self.letter = letter
@@ -917,11 +923,10 @@ class TestFunctionInvariant:
         ppg.new_pipegraph(dump_graph=False)
         x.get_job()
         y = shu("B")
-
-        def inner():
-            y.get_job()
-
-        assertRaises(ppg.JobContractError, inner)
+        j1 = y.get_job()
+        j2 = y.get_job()
+        assert j1 is j2
+        assert j1.callback is j2.callback
 
     def test_invariant_build_in_function(self):
         a = ppg.FunctionInvariant("test", sorted)
