@@ -118,13 +118,10 @@ def was_inited_before(obj, cls):
 
 
 def functions_equal(a, b):
-    print("comparing", a, b)
-    print(a.__code__)
-    print(b.__code__)
-    print(a.__closure__)
-    print(b.__closure__)
-    print(a.__code__ == b.__code__)
-    print(a.__closure__ == b.__closure__)
+    if a is None and b is None:
+        return True
+    elif a is None or b is None:
+        return False
     return (a.__code__ == b.__code__) and (a.__closure__ == b.__closure__)
 
 

@@ -21,6 +21,7 @@ from .ppg_exceptions import (
     NothingChanged,
 )
 from . import util
+inside_ppg = util.inside_ppg
 
 from .job import (
     Job,
@@ -86,6 +87,7 @@ all = [
     FinalJob,
     MemMappedDataLoadingJob,
     util,
+    inside_ppg,
     MultiTempFileGeneratingJob,
     NotebookJob,
 ]

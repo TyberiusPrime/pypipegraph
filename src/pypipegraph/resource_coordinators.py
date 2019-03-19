@@ -147,7 +147,7 @@ class LocalSystem:
                 start = time.time()
                 r = self.que.get(block=True, timeout=self.timeout)
                 stop = time.time()
-                self.pipegraph.logger.warning("Till que.got: %.2f" % (stop - start))
+                self.pipegraph.logger.info("Till que.got: %.2f" % (stop - start))
 
                 if r is None and interactive.interpreter.terminated:  # pragma: no cover
                     # abort was requested
@@ -168,10 +168,12 @@ class LocalSystem:
                 job.trace = r.trace
                 job.failed = not r.was_ok
                 if job.start_time:
-                    self.pipegraph.logger.warning(
-                        "%s runtime: %.2fs (%.2fs w/oque)"
-                        % (r.job_id, job.stop_time - job.start_time, r.runtime)
-                    )
+                    delta = job.stop_time - job.start_time
+                    if delta > 5:
+                        self.pipegraph.logger.warning(
+                            "%s runtime: %.2fs (%.2fs w/oque)"
+                            % (r.job_id, delta, r.runtime)
+                        )
                 if job.failed:
                     try:
                         if job.exception.startswith("STR".encode("UTF-8")):
@@ -263,10 +265,11 @@ class LocalSlave:
                         preq_failed = True
                         break
                     preq.stop_time = time.time()
-                    self.rc.pipegraph.logger.warning(
-                        "%s load runtime: %.2fs"
-                        % (preq.job_id, preq.stop_time - preq.start_time)
-                    )
+                    delta = preq.stop_time - preq.start_time
+                    if delta > 5:
+                        self.rc.pipegraph.logger.warning(
+                            "%s load runtime: %.2fs" % (preq.job_id, delta)
+                        )
         if preq_failed:
             self.rc.que.put(
                 JobReturnValue(
