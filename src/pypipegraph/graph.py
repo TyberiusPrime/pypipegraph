@@ -1177,9 +1177,7 @@ class Pipegraph(object):
             os.system(fn)
 
     def dump_runtimes(self, filename):
-        with open(filename, 'w') as op:
+        with open(filename, "w") as op:
             for j in self.jobs.values():
-                if hasattr(j, 'runtime'):
+                if hasattr(j, "runtime"):
                     op.write("%.2fs\t%s" % (j.runtime, j.job_id))
-
-

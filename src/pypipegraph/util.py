@@ -170,3 +170,15 @@ def checksum_file(filename):
             block = op.read(block_size)
         res = _hash.hexdigest()
     return res
+
+
+def flatten_jobs(j):
+    """Take an arbritary deeply nested list of lists of jobs
+    and return just the jobs"""
+    from .job import Job
+
+    if isinstance(j, Job):
+        yield j
+    else:
+        for sj in j:
+            yield from flatten_jobs(sj)

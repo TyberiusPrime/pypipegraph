@@ -294,6 +294,9 @@ class Job(object):
     def depends_on_func(self, name, func):
         return FunctionInvariant(self.name + '_' + name, func)
 
+    def depends_on_file(self, filename):
+        return FileInvariant(filename)
+
     def prune(self):
         """Pruns this job (and all that will eventually depend on it) from the pipegraph
         just before execution)"""
