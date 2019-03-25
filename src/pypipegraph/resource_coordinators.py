@@ -174,6 +174,9 @@ class LocalSystem:
                             "%s runtime: %.2fs (%.2fs w/oque)"
                             % (r.job_id, delta, r.runtime)
                         )
+                    job.runtime = delta
+                else:
+                    job.runtime = -1
                 if job.failed:
                     try:
                         if job.exception.startswith("STR".encode("UTF-8")):

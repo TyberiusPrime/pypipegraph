@@ -1175,3 +1175,11 @@ class Pipegraph(object):
         fn = os.path.expanduser("~/.pipegraph_finished.py")
         if os.path.exists(fn) and not os.path.isdir(fn) and os.access(fn, os.X_OK):
             os.system(fn)
+
+    def dump_runtimes(self, filename):
+        with open(filename, 'w') as op:
+            for j in self.jobs.values():
+                if hasattr(j, 'runtime'):
+                    op.write("%.2fs\t%s" % (j.runtime, j.job_id))
+
+
