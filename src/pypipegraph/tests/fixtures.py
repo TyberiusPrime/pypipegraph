@@ -67,7 +67,9 @@ def new_pipegraph(request):
                     or request.node.rep_call.outcome == "skipped"
                 ):
                     try:
-                        shutil.rmtree(target_path)
+                        if not hasattr(ppg.util.global_pipegraph,
+                                       'test_keep_output'):
+                            shutil.rmtree(target_path)
                     except OSError:  # pragma: no cover
                         pass
 
