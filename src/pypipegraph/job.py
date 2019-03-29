@@ -1727,7 +1727,6 @@ class PlotJob(FileGeneratingJob):
         self._fiddle = None
 
         import pandas as pd
-        import pyggplot
 
         if not self.skip_caching:
             self.cache_filename = os.path.join("cache", output_filename)
@@ -1758,9 +1757,9 @@ class PlotJob(FileGeneratingJob):
         def run_plot():
             df = self.get_data()
             plot = plot_function(df)
-            if not isinstance(plot, pyggplot._PlotBase):
+            if not hasattr(plot, "render") and not hasattr(plot, "save"):
                 raise ppg_exceptions.JobContractError(
-                    "%s.plot_function did not return a pyggplot.Plot "
+                    "%s.plot_function did not return a plot object (needs to have as render or save function"
                     % (output_filename)
                 )
             if "width" not in render_args and hasattr(plot, "width"):
@@ -1769,7 +1768,12 @@ class PlotJob(FileGeneratingJob):
                 render_args["height"] = plot.height
             if self._fiddle:
                 self._fiddle(plot)
-            plot.render(output_filename, **render_args)
+            if hasattr(plot, "render"):
+                plot.render(output_filename, **render_args)
+            elif hasattr(plot, "save"):
+                plot.save(output_filename, **render_args)
+            else:
+                raise NotImplementedError("Don't know how to handle this plotjob")
 
         FileGeneratingJob.__init__(self, output_filename, run_plot)
         Job.depends_on(
