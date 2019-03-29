@@ -23,6 +23,8 @@ def pytest_runtest_makereport(item, call):
 
 @pytest.fixture
 def new_pipegraph(request):
+    import sys
+
     if request.cls is None:
         target_path = Path(request.fspath).parent / "run" / ("." + request.node.name)
     else:
@@ -69,7 +71,8 @@ def new_pipegraph(request):
                     try:
                         if not hasattr(ppg.util.global_pipegraph,
                                        'test_keep_output'):
-                            shutil.rmtree(target_path)
+                            if not '--profile' in sys.argv:
+                                shutil.rmtree(target_path)
                     except OSError:  # pragma: no cover
                         pass
 

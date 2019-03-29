@@ -145,6 +145,18 @@ class TestInvariant:
         ppg.run_pipegraph()
         assert read("out/A") == param
 
+    def test_depends_on_func(self):
+        a = ppg.FileGeneratingJob("out/A", lambda: write("a"))
+        b = a.depends_on_func("a123", lambda: 123)
+        assert b.job_id.startswith(a.job_id + '_')
+        assert b in a.prerequisites
+
+    def test_depends_on_file(self):
+        a = ppg.FileGeneratingJob("out/A", lambda: write("a"))
+        write("shu", "hello")
+        b = a.depends_on_file("shu")
+        assert b in a.prerequisites
+
     def test_depends_on_params(self):
         a = ppg.FileGeneratingJob("out/A", lambda: write("a"))
         b = a.depends_on_params(23)

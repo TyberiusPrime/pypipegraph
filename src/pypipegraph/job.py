@@ -292,10 +292,14 @@ class Job(object):
         return p
 
     def depends_on_func(self, name, func):
-        return FunctionInvariant(self.name + "_" + name, func)
+        job = FunctionInvariant(self.job_id + "_" + name, func)
+        self.depends_on(job)
+        return job
 
     def depends_on_file(self, filename):
-        return FileInvariant(filename)
+        job = FileInvariant(filename)
+        self.depends_on(job)
+        return job
 
     def prune(self):
         """Pruns this job (and all that will eventually depend on it) from the pipegraph
@@ -546,7 +550,7 @@ def get_cython_filename_and_line_no(cython_func):
                 ):
                     found = sys.modules[name]
                     break
-            except AttributeError:
+            except AttributeError: # pragma: no cover
                 continue
         elif hasattr(sys.modules[name], module_name):
             sub_module = getattr(sys.modules[name], module_name)

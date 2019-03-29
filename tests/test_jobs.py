@@ -45,6 +45,15 @@ class TestJobs:
         job2 = ppg.FileGeneratingJob(of, do_write)
         assert job is job2
 
+    def test_add_job_twice_is_harmless(self, new_pipegraph):
+        job = ppg.FileGeneratingJob("A", lambda: 5)
+        assert job.job_id in ppg.util.global_pipegraph.jobs
+        assert ppg.util.global_pipegraph.jobs[job.job_id] is job
+        ppg.util.global_pipegraph.add_job(job)
+        assert job.job_id in ppg.util.global_pipegraph.jobs
+        assert ppg.util.global_pipegraph.jobs[job.job_id] is job
+        
+
     def test_redifining_a_jobid_with_different_class_raises(self, new_pipegraph):
         new_pipegraph.new_pipegraph()
         of = "out/a"

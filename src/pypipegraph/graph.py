@@ -1177,7 +1177,7 @@ class Pipegraph(object):
         if os.path.exists(fn) and not os.path.isdir(fn) and os.access(fn, os.X_OK):
             os.system(fn)
 
-    def dump_runtimes(self, filename):
+    def dump_runtimes(self, filename): # pragma: no cover
         with open(filename, "w") as op:
             for j in self.jobs.values():
                 if hasattr(j, "runtime"):
