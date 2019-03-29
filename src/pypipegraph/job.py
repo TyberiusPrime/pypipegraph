@@ -209,8 +209,8 @@ class Job(object):
             self._pruned = False
         util.global_pipegraph.add_job(util.job_uniquifier[job_id])
 
-    def __call__(self):
-        return self.dependants
+    # def __call__(self):
+    # return self.dependants
 
     @property
     def cores_needed(self):
@@ -292,7 +292,7 @@ class Job(object):
         return p
 
     def depends_on_func(self, name, func):
-        return FunctionInvariant(self.name + '_' + name, func)
+        return FunctionInvariant(self.name + "_" + name, func)
 
     def depends_on_file(self, filename):
         return FileInvariant(filename)
