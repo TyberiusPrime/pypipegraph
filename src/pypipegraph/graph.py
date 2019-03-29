@@ -655,6 +655,7 @@ class Pipegraph(object):
     def start_jobs(self):  # noqa:C901
         """Instruct slaves to start as many jobs as we can currently spawn under our memory/cpu restrictions"""
         # I really don't like this function... and I also have the strong inkling it should acttually sit in the resource coordinatora         # first, check what we actually have some resources...
+
         resources = (
             self.rc.get_resources()
         )  # a dict of slave name > {cores: y, memory: x}

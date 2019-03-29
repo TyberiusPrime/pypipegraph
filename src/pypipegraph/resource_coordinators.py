@@ -258,17 +258,20 @@ class LocalSlave:
         self.process_to_job = {}
 
     def spawn(self, job):
+        self.rc.pipegraph.logger.debug("spawning %s", job)
         job.start_time = time.time()
         preq_failed = False
         if not job.is_final_job:  # final jobs don't load their (fake) prereqs.
             for preq in job.prerequisites:
                 if preq.is_loadable():
+                    self.rc.pipegraph.logger.debug("Now loading %s", preq)
                     preq.start_time = time.time()
                     if not self.load_job(preq):
                         preq_failed = True
                         break
                     preq.stop_time = time.time()
                     delta = preq.stop_time - preq.start_time
+                    self.rc.pipegraph.logger.debug("load time %s %.2f", preq, delta)
                     if delta > 5:
                         self.rc.pipegraph.logger.warning(
                             "%s load runtime: %.2fs" % (preq.job_id, delta)
