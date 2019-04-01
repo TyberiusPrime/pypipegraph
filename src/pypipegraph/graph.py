@@ -88,9 +88,6 @@ def new_pipegraph(
         dump_graph=dump_graph,
         cache_folder=cache_folder,
     )
-    util.job_uniquifier = {}
-    util.filename_collider_check = {}
-    util.func_hashes = {}
 
 
 class Pipegraph(object):
@@ -137,7 +134,13 @@ class Pipegraph(object):
         self.do_dump_graph = dump_graph
         self.restart_afterwards = False
         self.cache_folder = cache_folder
-        self.job_uniquifier = {}
+        self.job_uniquifier = {}  # to singletonize jobs on job_id
+        self.filename_collider_check = (
+            {}
+        )  # to check wether theres' an overlap in filenames between FileGeneratingJob and MultiFileGeneratingJob
+        self.func_hashes = (
+            {}
+        )  # to calculate invarionts on functions in a slightly more efficent manner
 
     def __del__(self):
         # remove circle link between rc and pipegraph

@@ -660,7 +660,7 @@ class FunctionInvariant(_InvariantJob):
         except AttributeError:
             closure = self.function.__closure__
         key = (id(self.function.__code__), id(closure))
-        if key not in util.func_hashes:
+        if key not in util.global_pipegraph.func_hashes:
             invariant = self.dis_code(self.function.__code__, self.function)
             if closure:
                 for name, cell in zip(self.function.__code__.co_freevars, closure):
@@ -698,8 +698,8 @@ class FunctionInvariant(_InvariantJob):
                         else:
                             raise
 
-            util.func_hashes[id(self.function.__code__)] = invariant
-        return util.func_hashes[id(self.function.__code__)]
+            util.global_pipegraph.func_hashes[id(self.function.__code__)] = invariant
+        return util.global_pipegraph.func_hashes[id(self.function.__code__)]
 
     inner_code_object_re = re.compile(
         r"(<code\sobject\s<?[^>]+>?\sat\s0x[a-f0-9]+[^>]+)"
@@ -1074,15 +1074,15 @@ class FileGeneratingJob(Job):
     def _check_for_filename_collisions(self):
         for x in self.filenames:
             if (
-                x in util.filename_collider_check
-                and util.filename_collider_check[x] is not self
+                x in util.global_pipegraph.filename_collider_check
+                and util.global_pipegraph.filename_collider_check[x] is not self
             ):
                 raise ValueError(
                     "Two jobs generating the same file: %s %s - %s"
-                    % (self, util.filename_collider_check[x], x)
+                    % (self, util.global_pipegraph.filename_collider_check[x], x)
                 )
             else:
-                util.filename_collider_check[x] = self
+                util.global_pipegraph.filename_collider_check[x] = self
 
     # the motivation for this chaching is that we do a lot of stat calls. Tens of thousands - and the answer can basically only change
     # when you either run or invalidate the job. This apperantly cuts down about 9/10 of all stat calls

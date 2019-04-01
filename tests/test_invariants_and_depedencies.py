@@ -980,15 +980,15 @@ class TestFunctionInvariant:
         stat.MockIM = mi
         c.im_class = mi
 
-        assert len(ppg.util.func_hashes) == 0
+        assert len(ppg.util.global_pipegraph.func_hashes) == 0
         a = ppg.FunctionInvariant("test", c)
         a._get_invariant(None, [])
-        assert len(ppg.util.func_hashes) == 0
+        assert len(ppg.util.global_pipegraph.func_hashes) == 0
 
         b = ppg.FunctionInvariant("test2", c2)
         with pytest.raises(ValueError):
             b._get_invariant(None, [])
-        assert len(ppg.util.func_hashes) == 0
+        assert len(ppg.util.global_pipegraph.func_hashes) == 0
 
         assert ppg.job.function_to_str(c).endswith("stat.py 22")
         assert ppg.FunctionInvariant.get_cython_source(c) == "return mode & 0o7777"

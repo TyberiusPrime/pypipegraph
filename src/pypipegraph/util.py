@@ -28,12 +28,6 @@ import time
 
 global_pipegraph = None
 is_remote = False
-filename_collider_check = (
-    {}
-)  # to check wether theres' an overlap in filenames between FileGeneratingJob and MultiFileGeneratingJob
-func_hashes = (
-    {}
-)  # to calculate invarionts on functions in a slightly more efficent manner
 
 # import gc
 # gc.set_debug(gc.DEBUG_UNCOLLECTABLE)
