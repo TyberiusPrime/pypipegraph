@@ -28,7 +28,6 @@ import time
 
 global_pipegraph = None
 is_remote = False
-job_uniquifier = {}  # to singletonize jobs on job_id
 filename_collider_check = (
     {}
 )  # to check wether theres' an overlap in filenames between FileGeneratingJob and MultiFileGeneratingJob

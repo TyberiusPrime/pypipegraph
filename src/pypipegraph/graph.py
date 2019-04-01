@@ -137,6 +137,7 @@ class Pipegraph(object):
         self.do_dump_graph = dump_graph
         self.restart_afterwards = False
         self.cache_folder = cache_folder
+        self.job_uniquifier = {}
 
     def __del__(self):
         # remove circle link between rc and pipegraph
@@ -1177,7 +1178,7 @@ class Pipegraph(object):
         if os.path.exists(fn) and not os.path.isdir(fn) and os.access(fn, os.X_OK):
             os.system(fn)
 
-    def dump_runtimes(self, filename): # pragma: no cover
+    def dump_runtimes(self, filename):  # pragma: no cover
         with open(filename, "w") as op:
             for j in self.jobs.values():
                 if hasattr(j, "runtime"):

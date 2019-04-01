@@ -52,7 +52,6 @@ class TestJobs:
         ppg.util.global_pipegraph.add_job(job)
         assert job.job_id in ppg.util.global_pipegraph.jobs
         assert ppg.util.global_pipegraph.jobs[job.job_id] is job
-        
 
     def test_redifining_a_jobid_with_different_class_raises(self, new_pipegraph):
         new_pipegraph.new_pipegraph()

@@ -71,7 +71,7 @@ def new_pipegraph(request):
                     try:
                         if not hasattr(ppg.util.global_pipegraph,
                                        'test_keep_output'):
-                            if not '--profile' in sys.argv:
+                            if '--profile' not in sys.argv:
                                 shutil.rmtree(target_path)
                     except OSError:  # pragma: no cover
                         pass

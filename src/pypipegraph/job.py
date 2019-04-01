@@ -136,15 +136,17 @@ class Job(object):
     def __new__(cls, job_id, *args, **kwargs):
         """Handles the singletonization on the job_id"""
         job_id = verify_job_id(job_id)
-        if job_id not in util.job_uniquifier:
-            util.job_uniquifier[job_id] = object.__new__(cls)
-            util.job_uniquifier[
+        if util.global_pipegraph is None:
+            raise ValueError("Must instanciate a pipegraph before creating any Jobs")
+        if job_id not in util.global_pipegraph.job_uniquifier:
+            util.global_pipegraph.job_uniquifier[job_id] = object.__new__(cls)
+            util.global_pipegraph.job_uniquifier[
                 job_id
             ].job_id = (
                 job_id
             )  # doing it later will fail because hash apperantly might be called before init has run?
         else:
-            if util.job_uniquifier[job_id].__class__ != cls:
+            if util.global_pipegraph.job_uniquifier[job_id].__class__ != cls:
                 if args and hasattr(args[0], "__code__"):
                     x = (args[0].__code__.co_filename, args[0].__code__.co_firstlineno)
                 else:
@@ -153,9 +155,9 @@ class Job(object):
                     "Same job id, different job classes for %s - was %s and %s.\nOld job: %s\n My args: %s %s\n%s"
                     % (
                         job_id,
-                        util.job_uniquifier[job_id].__class__,
+                        util.global_pipegraph.job_uniquifier[job_id].__class__,
                         cls,
-                        str(util.job_uniquifier[job_id]),
+                        str(util.global_pipegraph.job_uniquifier[job_id]),
                         args,
                         kwargs,
                         x,
@@ -165,7 +167,7 @@ class Job(object):
             raise ValueError(
                 "You must first instanciate a pypipegraph before creating jobs" ""
             )
-        return util.job_uniquifier[job_id]
+        return util.global_pipegraph.job_uniquifier[job_id]
 
     # def __getnewargs__(self):
     # """Provides unpickeling support"""
@@ -207,7 +209,7 @@ class Job(object):
             self._is_done = None
             self.do_cache = False
             self._pruned = False
-        util.global_pipegraph.add_job(util.job_uniquifier[job_id])
+        util.global_pipegraph.add_job(util.global_pipegraph.job_uniquifier[job_id])
 
     # def __call__(self):
     # return self.dependants
@@ -550,7 +552,7 @@ def get_cython_filename_and_line_no(cython_func):
                 ):
                     found = sys.modules[name]
                     break
-            except AttributeError: # pragma: no cover
+            except AttributeError:  # pragma: no cover
                 continue
         elif hasattr(sys.modules[name], module_name):
             sub_module = getattr(sys.modules[name], module_name)
