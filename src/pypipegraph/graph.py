@@ -72,6 +72,8 @@ def new_pipegraph(
     dump_graph=True,
     interactive=True,
     cache_folder="cache",
+    log_file=None,
+    log_level=logging.INFO,
 ):
     """Create a new global pipegraph.
     New jobs will automagically be attached to this pipegraph.
@@ -81,6 +83,8 @@ def new_pipegraph(
         resource_coordinator = resource_coordinators.LocalSystem(
             interactive=interactive
         )
+
+
     util.global_pipegraph = Pipegraph(
         resource_coordinator,
         quiet=quiet,
@@ -88,6 +92,10 @@ def new_pipegraph(
         dump_graph=dump_graph,
         cache_folder=cache_folder,
     )
+    if log_file is not None:
+        util.global_pipegraph.logger.setLevel(log_level)
+        util.global_pipegraph.logger.addHandler(logging.FileHandler(
+            log_file, mode='w',))
 
 
 class Pipegraph(object):
@@ -1185,4 +1193,4 @@ class Pipegraph(object):
         with open(filename, "w") as op:
             for j in self.jobs.values():
                 if hasattr(j, "runtime"):
-                    op.write("%.2fs\t%s" % (j.runtime, j.job_id))
+                    op.write("%.2fs\t%s\n" % (j.runtime, j.job_id))

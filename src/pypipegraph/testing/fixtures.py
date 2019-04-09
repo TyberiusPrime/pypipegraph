@@ -40,7 +40,7 @@ def new_pipegraph(request):
     try:
         first = [False]
 
-        def np():
+        def np(quiet=True):
             if not first[0]:
                 Path(target_path).mkdir(parents=True, exist_ok=True)
                 os.chdir(target_path)
@@ -55,7 +55,7 @@ def new_pipegraph(request):
                 first[0] = True
 
             rc = ppg.resource_coordinators.LocalSystem(1)
-            ppg.new_pipegraph(rc, quiet=True, dump_graph=False)
+            ppg.new_pipegraph(rc, quiet=quiet, dump_graph=False)
             ppg.util.global_pipegraph.result_dir = Path("results")
             g = ppg.util.global_pipegraph
             g.new_pipegraph = np
