@@ -232,6 +232,11 @@ class Job(object):
             )
         self._cores_needed = value
 
+    def use_cores(self, cores_needed):
+        """Set .cores_needed and return self for chaining"""
+        self.cores_needed = cores_needed
+        return self
+
     def depends_on(self, *job_joblist_or_list_of_jobs):
         """Declare that this job depends on the ones passed in (which must be Jobs, JobLists or iterables of such).
         This means that this job can only run, if all previous ones have been done sucessfully.
@@ -1863,6 +1868,13 @@ class PlotJob(FileGeneratingJob):
             hasattr(self, "cache_job") and other_jobs[0] is not self.cache_job
         ):  # activate this after we have added the invariants...
             self.cache_job.depends_on(*other_jobs)
+        return self
+
+    def use_cores(self, cores_needed):
+        if self.skip_caching:
+            Job.use_cores(self, cores_needed)
+        else:
+            self.cache_job.use_cores(cores_needed)
         return self
 
     def inject_auto_invariants(self):

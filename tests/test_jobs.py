@@ -2221,3 +2221,9 @@ class TestNotebookJobs:
         get_job()
         with pytest.raises(ValueError):
             get_job()
+
+    def test_use_cores(self):
+        j = ppg.FileGeneratingJob("a", lambda: None)
+        assert j.cores_needed == 1
+        assert j.use_cores(5) is j
+        assert j.cores_needed == 5

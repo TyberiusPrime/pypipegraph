@@ -84,7 +84,6 @@ def new_pipegraph(
             interactive=interactive
         )
 
-
     util.global_pipegraph = Pipegraph(
         resource_coordinator,
         quiet=quiet,
@@ -94,8 +93,7 @@ def new_pipegraph(
     )
     if log_file is not None:
         util.global_pipegraph.logger.setLevel(log_level)
-        util.global_pipegraph.logger.addHandler(logging.FileHandler(
-            log_file, mode='w',))
+        util.global_pipegraph.logger.addHandler(logging.FileHandler(log_file, mode="w"))
 
 
 class Pipegraph(object):

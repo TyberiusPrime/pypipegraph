@@ -524,6 +524,17 @@ if has_pyggplot:  # noqa C901
             assert "did not return a" in str(p1.cache_job.exception)
             assert pc.error_reason == "Indirect"
 
+        def test_use_cores(self):
+            j = ppg.PlotJob("a.png", lambda: None, lambda: None)
+            assert j.cores_needed == 1
+            assert j.use_cores(5) is j
+            assert j.cores_needed == 1
+            assert j.cache_job.cores_needed == 5
+            j2 = ppg.PlotJob("a.png", lambda: None, lambda: None, skip_caching=True)
+            assert j2.cores_needed == 1
+            assert j2.use_cores(5) is j
+            assert j2.cores_needed == 5
+
 
 if __name__ == "__main__":
     unittest.main()
