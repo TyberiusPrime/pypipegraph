@@ -69,9 +69,8 @@ def new_pipegraph(request):
                     or request.node.rep_call.outcome == "skipped"
                 ):
                     try:
-                        if not hasattr(ppg.util.global_pipegraph,
-                                       'test_keep_output'):
-                            if '--profile' not in sys.argv:
+                        if not hasattr(ppg.util.global_pipegraph, "test_keep_output"):
+                            if "--profile" not in sys.argv:
                                 shutil.rmtree(target_path)
                     except OSError:  # pragma: no cover
                         pass
@@ -82,20 +81,20 @@ def new_pipegraph(request):
     finally:
         os.chdir(old_dir)
 
+
 @pytest.fixture
 def both_ppg_and_no_ppg(request):
     """Create both an inside and an outside ppg test case.
     don't forgot to add this to your conftest.py
 
     Use togother with run_ppg and force_load
-    
+
     ```
     def pytest_generate_tests(metafunc):
         if "both_ppg_and_no_ppg" in metafunc.fixturenames:
             metafunc.parametrize("both_ppg_and_no_ppg", [True, False], indirect=True)
     ```
     """
-
 
     if request.param:
         if request.cls is None:
@@ -181,8 +180,10 @@ def both_ppg_and_no_ppg(request):
 
             def np():
                 ppg.util.global_pipegraph = None
-                class Dummy():
+
+                class Dummy:
                     pass
+
                 d = Dummy
                 d.new_pipegraph = lambda: None
                 return d
@@ -205,4 +206,3 @@ def both_ppg_and_no_ppg(request):
 
         finally:
             os.chdir(old_dir)
-

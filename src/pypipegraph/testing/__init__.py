@@ -9,6 +9,7 @@ def run_pipegraph():
     else:
         pass
 
+
 fl_count = 0
 
 
@@ -19,7 +20,7 @@ def force_load(job, prefix=None):
             if prefix is None:
                 global fl_count
                 fl_count += 1
-                prefix = 'fl_%i' % fl_count
+                prefix = "fl_%i" % fl_count
         else:
             prefix = job.job_id
         return ppg.JobGeneratingJob(prefix + "_force_load", lambda: None).depends_on(
