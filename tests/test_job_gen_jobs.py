@@ -545,3 +545,46 @@ class TestDependencyInjectionJob:
         do_run2()
         assert read("out/A") == "AC"  # same data
         assert read("out/B") == "XX"  # one rerun...
+
+    def test_generated_job_depends_on_failing_job(self, new_pipegraph):
+        # import logging
+        # new_pipegraph.new_pipegraph(log_file="debug.log", log_level=logging.DEBUG)
+        def fn_a():
+            raise ValueError()
+
+        def fn_b():
+            c = ppg.FileGeneratingJob("c", lambda: write("c", read("a")))
+            c.depends_on(a)
+            return [c]
+
+        a = ppg.FileGeneratingJob("a", fn_a)
+        b = ppg.JobGeneratingJob("b", fn_b)
+        with pytest.raises(ppg.RuntimeError):
+            ppg.run_pipegraph()
+
+        assert isinstance(a.exception, ValueError)
+        assert a.error_reason == "Exception"
+        assert b.error_reason == "no error"
+        assert ppg.util.global_pipegraph.jobs["c"].error_reason == "Indirect"
+
+    def test_generated_job_depends_on_failing_job_inverse(self, new_pipegraph):
+        # import logging
+        # new_pipegraph.new_pipegraph(log_file="debug.log", log_level=logging.DEBUG)
+        def fn_a():
+            raise ValueError()
+
+        def fn_b():
+            c = ppg.FileGeneratingJob("c", lambda: write("c", read("a")))
+            c.depends_on(a)
+            return [c]
+
+        # note swapped order respective to previous test
+        b = ppg.JobGeneratingJob("b", fn_b)
+        a = ppg.FileGeneratingJob("a", fn_a)
+        with pytest.raises(ppg.RuntimeError):
+            ppg.run_pipegraph()
+
+        assert isinstance(a.exception, ValueError)
+        assert a.error_reason == "Exception"
+        assert b.error_reason == "no error"
+        assert ppg.util.global_pipegraph.jobs["c"].error_reason == "Indirect"

@@ -26,9 +26,13 @@ import pytest
 from .shared import append, write, read
 import unittest
 import os
+from pathlib import Path
 
 try:
-    import pyggplot
+    import dppd
+    import dppd_plotnine  # noqa: F401
+
+    dp, X = dppd.dppd()
 
     has_pyggplot = True
 except ImportError:
@@ -59,10 +63,10 @@ if has_pyggplot:  # noqa C901
                 )
 
             def plot(df):
-                return pyggplot.Plot(df).add_scatter("X", "Y")
+                return dp(df).p9().add_point("X", "Y")
 
             def plot2(df):
-                p = pyggplot.Plot(df).add_scatter("Y", "X")
+                p = dp(df).p9().add_point("Y", "X")
                 p.width = 5
                 p.height = 2
                 return p
@@ -86,7 +90,7 @@ if has_pyggplot:  # noqa C901
                 )
 
             def plot(df):
-                return pyggplot.Plot(df).add_scatter("X", "Y")
+                return dp(df).p9().add_point("X", "Y")
 
             of = "out/test.png"
             ppg.PlotJob(of, calc, plot, skip_table=True)
@@ -104,7 +108,7 @@ if has_pyggplot:  # noqa C901
                 }
 
             def plot(df):
-                p = pyggplot.Plot(df["A"]).add_scatter("X", "Y")
+                p = dp(df["A"]).p9().add_point("X", "Y")
                 p.width = 5
                 p.height = 1
                 return p
@@ -125,7 +129,7 @@ if has_pyggplot:  # noqa C901
                 }
 
             def plot(df):
-                return pyggplot.Plot(df["A"]).add_scatter("X", "Y")
+                return dp(df["A"]).p9().add_point("X", "Y")
 
             of = "out/test.png"
             p = ppg.PlotJob(of, calc, plot)
@@ -144,7 +148,7 @@ if has_pyggplot:  # noqa C901
                 )
 
             def plot(df):
-                return pyggplot.Plot(df).add_scatter("X", "Y")
+                return dp(df).p9().add_point("X", "Y")
 
             def prep_job():
                 write("A", "A")
@@ -165,7 +169,7 @@ if has_pyggplot:  # noqa C901
                 )
 
             def plot(df):
-                return pyggplot.Plot(df).add_scatter("X", "Y")
+                return dp(df).p9().add_point("X", "Y")
 
             of = "out/test.pdf"
             ppg.PlotJob(of, calc, plot)
@@ -195,7 +199,7 @@ if has_pyggplot:  # noqa C901
                 )
 
             def plot(df):
-                return pyggplot.Plot(df).add_scatter("X", "Y")
+                return dp(df).p9().add_point("X", "Y")
 
             of = "out/test.shu"
 
@@ -214,7 +218,7 @@ if has_pyggplot:  # noqa C901
 
             def plot(df):
                 append("out/plot", "B")
-                return pyggplot.Plot(df).add_scatter("X", "Y")
+                return dp(df).p9().add_point("X", "Y")
 
             of = "out/test.png"
             ppg.PlotJob(of, calc, plot)
@@ -227,7 +231,7 @@ if has_pyggplot:  # noqa C901
 
             def plot2(df):
                 append("out/plot", "B")
-                return pyggplot.Plot(df).add_scatter("Y", "X")
+                return dp(df).p9().add_point("Y", "X")
 
             ppg.PlotJob(of, calc, plot2)
             ppg.run_pipegraph()
@@ -244,7 +248,7 @@ if has_pyggplot:  # noqa C901
 
             def plot(df):
                 append("out/plot", "B")
-                return pyggplot.Plot(df).add_scatter("X", "Y")
+                return dp(df).p9().add_point("X", "Y")
 
             of = "out/test.png"
             job = ppg.PlotJob(of, calc, plot)
@@ -257,7 +261,7 @@ if has_pyggplot:  # noqa C901
 
             def plot2(df):
                 append("out/plot", "B")
-                return pyggplot.Plot(df).add_scatter("Y", "X")
+                return dp(df).p9().add_point("Y", "X")
 
             job = ppg.PlotJob(of, calc, plot2)
             job.ignore_code_changes()
@@ -275,7 +279,7 @@ if has_pyggplot:  # noqa C901
 
             def plot(df):
                 append("out/plot", "B")
-                return pyggplot.Plot(df).add_scatter("X", "Y")
+                return dp(df).p9().add_point("X", "Y")
 
             of = "out/test.png"
             ppg.PlotJob(of, calc, plot)
@@ -308,7 +312,7 @@ if has_pyggplot:  # noqa C901
 
             def plot(df):
                 append("out/plot", "B")
-                return pyggplot.Plot(df).add_scatter("X", "Y")
+                return dp(df).p9().add_point("X", "Y")
 
             of = "out/test.png"
             job = ppg.PlotJob(of, calc, plot)
@@ -340,7 +344,7 @@ if has_pyggplot:  # noqa C901
                 )
 
             def plot(df):
-                return pyggplot.Plot(df).add_scatter("X", "Y")
+                return dp(df).p9().add_point("X", "Y")
 
             of = "out/test.png"
             job = ppg.PlotJob(of, calc, plot)
@@ -354,7 +358,7 @@ if has_pyggplot:  # noqa C901
 
             def plot(df):
                 append("out/plot", "B")
-                return pyggplot.Plot(df).add_scatter("X", "Y")
+                return dp(df).p9().add_point("X", "Y")
 
             of = "out/test.png"
             job = ppg.PlotJob(of, calc, plot)
@@ -412,7 +416,7 @@ if has_pyggplot:  # noqa C901
                 )
 
             def plot(df):
-                return pyggplot.Plot(df).add_scatter("X", "Y")
+                return dp(df).p9().add_point("X", "Y")
 
             of = "out/test.png"
             p = ppg.PlotJob(of, calc, plot)
@@ -435,7 +439,7 @@ if has_pyggplot:  # noqa C901
                 )
 
             def plot(df):
-                return pyggplot.Plot(df).add_scatter("X", "Y")
+                return dp(df).p9().add_point("X", "Y")
 
             def plot2(df):
                 return
@@ -462,7 +466,7 @@ if has_pyggplot:  # noqa C901
                 )
 
             def plot(df):
-                return pyggplot.Plot(df).add_scatter("X", "Y")
+                return dp(df).p9().add_point("X", "Y")
 
             p1 = ppg.PlotJob("out/A.png", calc, plot)
             p2 = ppg.PlotJob("out/B.png", calc2, plot)
@@ -502,7 +506,7 @@ if has_pyggplot:  # noqa C901
                 )
 
             def plot(df):
-                return pyggplot.Plot(df).add_scatter("X", "Y")
+                return dp(df).p9().add_point("X", "Y")
 
             p1 = ppg.PlotJob("out/A.png", calc, plot)
             p2 = ppg.PlotJob("out/B.png", calc2, plot)
@@ -530,10 +534,26 @@ if has_pyggplot:  # noqa C901
             assert j.use_cores(5) is j
             assert j.cores_needed == 1
             assert j.cache_job.cores_needed == 5
-            j2 = ppg.PlotJob("a.png", lambda: None, lambda: None, skip_caching=True)
+            j2 = ppg.PlotJob("b.png", lambda: None, lambda: None, skip_caching=True)
             assert j2.cores_needed == 1
-            assert j2.use_cores(5) is j
+            assert j2.use_cores(5) is j2
             assert j2.cores_needed == 5
+
+        def test_changing_skip_caching_same_name_raises(self):
+            ppg.PlotJob("a.png", lambda: None, lambda: None)
+            with pytest.raises(ValueError):
+                ppg.PlotJob("a.png", lambda: None, lambda: None, skip_caching=True)
+
+        def test_prune(self):
+            j = ppg.PlotJob(
+                "a.png",
+                lambda: pd.DataFrame({"sha": [1]}),
+                lambda df: dp(df).p9().add_point("sha", "sha"),
+            )
+            j.prune()
+            ppg.run_pipegraph()
+            assert not Path("cache/a.png").exists()
+            assert not Path("a.png").exists()
 
 
 if __name__ == "__main__":

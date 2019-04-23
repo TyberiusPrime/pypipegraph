@@ -928,13 +928,18 @@ class Pipegraph(object):
             job.dependants = set([self.jobs[job_id] for job_id in job.dependants])
         for job in new_jobs.values():
             job._reset_is_done_cache()
-            if not job.is_done():
-                if not job.always_runs:
-                    job.invalidated(reason="not done")
+            for p in job.prerequisites:
+                if p.failed:
+                    self.prune_job(job)
+                    break
+                else:
+                    if not job.is_done():
+                        if not job.always_runs:
+                            job.invalidated(reason="not done")
         # self.fill_dependency_callbacks()
         self.connect_graph()
         self.distribute_invariant_changes()
-        if not self.do_dump_graph:
+        if self.do_dump_graph:
             self.dump_graph()
         # we not only need to check the jobs we have received, we also need to check their dependants
         # for example there might have been a DependencyInjectionJob than injected a DataLoadingJob
@@ -959,7 +964,7 @@ class Pipegraph(object):
                 )
             if job.is_loadable():
                 pass
-            elif not job.is_done():
+            elif not job.is_done() and not job.failed:
                 self.possible_execution_order.append(job)
                 self.jobs_to_run_count += 1
             elif not job.runs_in_slave():

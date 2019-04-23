@@ -3,10 +3,14 @@ from pathlib import Path
 import shutil
 import os
 import pypipegraph as ppg
+import sys
 
 
 # support code to remove test created files
 # only if the test suceeded
+ppg.util._running_inside_test = True
+if 'pytest' not in sys.modules:
+    raise ValueError("fixtures can only be used together with pytest")
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)

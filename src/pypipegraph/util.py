@@ -28,6 +28,7 @@ import time
 
 global_pipegraph = None
 is_remote = False
+_running_inside_test = False  # set from testing.fixtures upon import
 
 # import gc
 # gc.set_debug(gc.DEBUG_UNCOLLECTABLE)

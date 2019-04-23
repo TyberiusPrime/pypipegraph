@@ -41,6 +41,7 @@ import time
 import six
 import pickle
 from io import StringIO
+from pathlib import Path
 from . import ppg_exceptions
 from . import util
 
@@ -103,8 +104,9 @@ def verify_job_id(job_id):
             job_id = str(job_id)
         else:
             raise TypeError(
-                "Job_id must be a string, was %s %s" % (job_id, type(job_id))
+                "Job_id must be a string or Path, was %s %s" % (job_id, type(job_id))
             )
+    job_id = str(os.path.relpath(pathlib.Path(job_id).resolve()))  # keep them relative
     return job_id
 
 
@@ -312,6 +314,10 @@ class Job(object):
         """Pruns this job (and all that will eventually depend on it) from the pipegraph
         just before execution)"""
         self._pruned = True
+
+    def unprune(self):
+        """Revert this job to unpruned state. See prune()"""
+        self._pruned = False
 
     def is_in_dependency_chain(self, other_job, max_depth):
         """check wether the other job is in this job's dependency chain.
@@ -1061,8 +1067,8 @@ class FileGeneratingJob(Job):
         """
         if was_inited_before(self, FileGeneratingJob):
             return
-        super().__init__(output_filename)
         output_filename = verify_job_id(output_filename)
+        super().__init__(output_filename)
         if not hasattr(function, "__call__"):
             raise ValueError("function was not a callable")
         self.empty_ok = empty_ok
@@ -1713,6 +1719,14 @@ class PlotJob(FileGeneratingJob):
         skip_caching=False,
     ):
         if was_inited_before(self, PlotJob):
+            if (
+                skip_caching != self.skip_caching
+                or skip_table != self.skip_table
+                or self.render_args != self.render_args
+            ):
+                raise ValueError(
+                    "PlotJob(%s) called twice with different parameters" % self.job_id
+                )
             return
         output_filename = verify_job_id(output_filename)
         if not (
@@ -1740,7 +1754,9 @@ class PlotJob(FileGeneratingJob):
         import pandas as pd
 
         if not self.skip_caching:
-            self.cache_filename = os.path.join("cache", output_filename)
+            self.cache_filename = (
+                Path(util.global_pipegraph.cache_folder) / output_filename
+            )
 
             def run_calc():
                 df = calc_function()
@@ -1819,7 +1835,6 @@ class PlotJob(FileGeneratingJob):
 
     def add_another_plot(self, output_filename, plot_function, render_args=None):
         """Add another plot job that runs on the same data as the original one (calc only done once)"""
-        import pyggplot
 
         if render_args is None:
             render_args = {}
@@ -1827,9 +1842,9 @@ class PlotJob(FileGeneratingJob):
         def run_plot():
             df = self.get_data()
             plot = plot_function(df)
-            if not isinstance(plot, pyggplot.Plot):
+            if not hasattr(plot, "render"):
                 raise ppg_exceptions.JobContractError(
-                    "%s.plot_function did not return a pyggplot.Plot "
+                    "%s.plot_function did not return a plot with a render function"
                     % (output_filename)
                 )
             if "width" not in render_args and hasattr(plot, "width"):
@@ -1869,6 +1884,19 @@ class PlotJob(FileGeneratingJob):
         ):  # activate this after we have added the invariants...
             self.cache_job.depends_on(*other_jobs)
         return self
+
+    def prune(self):
+        """Pruns this job (and all that will eventually depend on it) from the pipegraph
+        just before execution)"""
+        if not self.skip_caching:
+            self.cache_job.prune()
+        super().prune()
+
+    def unprune(self):
+        """Revert this job to unpruned state. See prune()"""
+        if not self.skip_caching:
+            self.cache_job.unprune()
+        super().unprune()
 
     def use_cores(self, cores_needed):
         if self.skip_caching:

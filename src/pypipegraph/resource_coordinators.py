@@ -106,7 +106,7 @@ class LocalSystem:
         self.timeout = 5
         self.profile = profile
         if (multiprocessing.current_process().name != "MainProcess") or (
-            "pytest" in sys.modules
+            util._running_inside_test
         ):
             interactive = False
         self.interactive = interactive
@@ -502,7 +502,7 @@ class LocalSlave:
         for process, job in self.process_to_job.items():
             if job == target_job:
                 print("Found target job")
-                self.rc.pypipegraph.logger.info("Killing job on user request: %s", job)
+                self.rc.pipegraph.logger.info("Killing job on user request: %s", job)
                 process.terminate()
 
     def kill_jobs(self):  # pragma: no cover (needed by interactive)
