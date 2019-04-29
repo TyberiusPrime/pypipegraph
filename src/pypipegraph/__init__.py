@@ -49,6 +49,7 @@ from .job import (
     MemMappedDataLoadingJob,
     MultiTempFileGeneratingJob,
     NotebookJob,
+    verify_job_id
 )
 
 assert_uniqueness_of_object = util.assert_uniqueness_of_object
