@@ -9,7 +9,7 @@ import sys
 # support code to remove test created files
 # only if the test suceeded
 ppg.util._running_inside_test = True
-if 'pytest' not in sys.modules:
+if "pytest" not in sys.modules:
     raise ValueError("fixtures can only be used together with pytest")
 
 
@@ -87,6 +87,49 @@ def new_pipegraph(request):
 
 
 @pytest.fixture
+def no_pipegraph(request):
+    """No pipegraph, but seperate directory per test"""
+    if request.cls is None:
+        target_path = Path(request.fspath).parent / "run" / ("." + request.node.name)
+    else:
+        target_path = (
+            Path(request.fspath).parent
+            / "run"
+            / (request.cls.__name__ + "." + request.node.name)
+        )
+    if target_path.exists():  # pragma: no cover
+        shutil.rmtree(target_path)
+    target_path = target_path.absolute()
+    target_path.mkdir()
+    old_dir = Path(os.getcwd()).absolute()
+    os.chdir(target_path)
+    try:
+
+        def np():
+            ppg.util.global_pipegraph = None
+            return None
+
+        def finalize():
+            if hasattr(request.node, "rep_setup"):
+
+                if request.node.rep_setup.passed and (
+                    request.node.rep_call.passed
+                    or request.node.rep_call.outcome == "skipped"
+                ):
+                    try:
+                        shutil.rmtree(target_path)
+                    except OSError:  # pragma: no cover
+                        pass
+
+        request.addfinalizer(finalize)
+        ppg.util.global_pipegraph = None
+        yield np()
+
+    finally:
+        os.chdir(old_dir)
+
+
+@pytest.fixture
 def both_ppg_and_no_ppg(request):
     """Create both an inside and an outside ppg test case.
     don't forgot to add this to your conftest.py
@@ -134,7 +177,7 @@ def both_ppg_and_no_ppg(request):
                     h.setLevel(logging.WARNING)
                     first[0] = True
 
-                rc = ppg.resource_coordinators.LocalSystem(1)
+                rc = ppg.resource_coordinators.LocalSystem()
                 ppg.new_pipegraph(rc, quiet=True, dump_graph=False)
                 ppg.util.global_pipegraph.result_dir = Path("results")
                 g = ppg.util.global_pipegraph
