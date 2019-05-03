@@ -148,7 +148,7 @@ class TestInvariant:
     def test_depends_on_func(self):
         a = ppg.FileGeneratingJob("out/A", lambda: write("a"))
         b = a.depends_on_func("a123", lambda: 123)
-        assert b.job_id.startswith(a.job_id + '_')
+        assert b.job_id.startswith(a.job_id + "_")
         assert b in a.prerequisites
 
     def test_depends_on_file(self):
@@ -1623,6 +1623,29 @@ class TestDependency:
         jobA.depends_on(gen_deps)
         ppg.run_pipegraph()
         assert read("out/A") == "ABC"
+
+    def test_dependency_placeholder_dynamic_auto_invariants(self):
+        jobA = ppg.FileGeneratingJob(
+            "out/A", lambda: write("out/A", "A" + read("out/B"))
+        )
+
+        def check_function_invariant():
+            write("out/B", "B")
+            preqs = ppg.util.global_pipegraph.jobs["out/B"].prerequisites
+            for x in preqs:
+                if isinstance(x, ppg.FunctionInvariant):
+                    break
+            else:
+                raise ValueError("no function invariant for gen_deps created job")
+
+        def gen_deps():
+            jobB = ppg.FileGeneratingJob("out/B", check_function_invariant)
+            print("gen deps called")
+            return [jobB]
+
+        jobA.depends_on(gen_deps)
+        ppg.run_pipegraph()
+        assert read("out/A") == "AB"
 
 
 @pytest.mark.usefixtures("new_pipegraph")
