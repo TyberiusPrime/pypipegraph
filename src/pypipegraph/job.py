@@ -505,12 +505,13 @@ class Job(object):
 
     def __str__(self):
         if hasattr(self, "callback"):
-            return "%s (job_id=%s,id=%s\n Callback: %s:%s)" % (
+            return "%s (%s\n%s:%s\n%i)" % (
                 self.__class__.__name__,
                 self.job_id,
-                id(self),
+                # id(self),
                 self.callback.__code__.co_filename,
                 self.callback.__code__.co_firstlineno,
+                self.cores_needed,
             )
         else:
             return "%s (job_id=%s,id=%s)" % (
@@ -2130,6 +2131,9 @@ class CachedAttributeLoadingJob(_CachingJobMixin, AttributeLoadingJob):
             cache_filename, target_object, target_attribute, calculating_function
         )
 
+    def use_cores(self, n):
+        return self.lfg.use_cores(n)
+
 
 class CachedDataLoadingJob(_CachingJobMixin, DataLoadingJob):
     """Like a DataLoadingJob, except that the callback value is pickled into
@@ -2200,6 +2204,9 @@ class CachedDataLoadingJob(_CachingJobMixin, DataLoadingJob):
                 self.__class__.__name__,
                 self.job_id,
             )
+
+    def use_cores(self, n):
+        return self.lfg.use_cores(n)
 
 
 class MemMappedDataLoadingJob(_CachingJobMixin, DataLoadingJob):

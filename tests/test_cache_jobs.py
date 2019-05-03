@@ -298,6 +298,12 @@ class TestCachedAttributeJob:
 
         assertRaises(TypeError, inner)
 
+    def test_use_cores(self):
+        o = Dummy()
+        ca = ppg.CachedAttributeLoadingJob("out/C", o, "c", lambda: 55)
+        ca.use_cores(5)
+        assert ca.lfg.cores_needed == 5
+
 
 @pytest.mark.usefixtures("new_pipegraph")
 class TestCachedDataLoadingJob:
@@ -514,6 +520,11 @@ class TestCachedDataLoadingJob:
             ppg.run_pipegraph()
         assert isinstance(job.exception, ValueError)
         assert "Unpickling error" in str(job.exception)
+
+    def test_use_cores(self):
+        ca = ppg.CachedDataLoadingJob("out/C", lambda: 55, lambda x: None)
+        ca.use_cores(5)
+        assert ca.lfg.cores_needed == 5
 
 
 is_pypy = platform.python_implementation() == "PyPy"
