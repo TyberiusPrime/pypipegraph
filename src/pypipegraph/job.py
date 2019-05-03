@@ -1789,10 +1789,15 @@ class PlotJob(FileGeneratingJob):
                     "%s.plot_function did not return a plot object (needs to have as render or save function"
                     % (output_filename)
                 )
+            if hasattr(plot, "pd"):
+                plot = plot.pd
+            render_args = {}
             if "width" not in render_args and hasattr(plot, "width"):
                 render_args["width"] = plot.width
             if "height" not in render_args and hasattr(plot, "height"):
                 render_args["height"] = plot.height
+            render_args.update(getattr(plot, "render_args", {}))
+            render_args.update(self.render_args)
             if self._fiddle:
                 self._fiddle(plot)
             if hasattr(plot, "render"):
