@@ -301,7 +301,7 @@ class TestCachedAttributeJob:
     def test_use_cores(self):
         o = Dummy()
         ca = ppg.CachedAttributeLoadingJob("out/C", o, "c", lambda: 55)
-        ca.use_cores(5)
+        assert ca.use_cores(5) is ca
         assert ca.lfg.cores_needed == 5
 
 
@@ -523,7 +523,7 @@ class TestCachedDataLoadingJob:
 
     def test_use_cores(self):
         ca = ppg.CachedDataLoadingJob("out/C", lambda: 55, lambda x: None)
-        ca.use_cores(5)
+        assert ca.use_cores(5) is ca
         assert ca.lfg.cores_needed == 5
 
 

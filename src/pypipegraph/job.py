@@ -2137,7 +2137,8 @@ class CachedAttributeLoadingJob(_CachingJobMixin, AttributeLoadingJob):
         )
 
     def use_cores(self, n):
-        return self.lfg.use_cores(n)
+        self.lfg.use_cores(n)
+        return self
 
 
 class CachedDataLoadingJob(_CachingJobMixin, DataLoadingJob):
@@ -2211,7 +2212,8 @@ class CachedDataLoadingJob(_CachingJobMixin, DataLoadingJob):
             )
 
     def use_cores(self, n):
-        return self.lfg.use_cores(n)
+        self.lfg.use_cores(n)
+        return self
 
 
 class MemMappedDataLoadingJob(_CachingJobMixin, DataLoadingJob):
