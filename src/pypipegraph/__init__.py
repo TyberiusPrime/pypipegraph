@@ -91,4 +91,5 @@ all = [
     inside_ppg,
     MultiTempFileGeneratingJob,
     NotebookJob,
+    verify_job_id
 ]

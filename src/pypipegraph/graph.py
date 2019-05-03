@@ -194,10 +194,10 @@ class Pipegraph(object):
             raise ValueError("Each pipegraph may be run only once.")
         self.logger.debug("MCP pid: %i" % os.getpid())
         self.logger.debug("Preparing pypipegraph")
-        # internal to the mcp
-        self.inject_auto_invariants()
 
+        # internal to the mcp
         self.fill_dependency_callbacks()
+        self.inject_auto_invariants()
         self.was_run = True  # since build_
 
         self.running = True
