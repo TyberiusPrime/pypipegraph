@@ -44,6 +44,7 @@ install:
     if [[ "$JOB" == "UNITTEST" ]]; then
       pip install setuptools -U
       pip install pytest -U
+      pip install pyscaffold
       pip install .[testing]
     fi
   - pip list
