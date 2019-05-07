@@ -25,7 +25,7 @@ SOFTWARE.
 from pathlib import Path
 import pytest
 import pypipegraph as ppg
-from .shared import write
+from .shared import write, read
 
 
 @pytest.mark.usefixtures("new_pipegraph")
@@ -61,6 +61,7 @@ class TestPruning:
         assert Path("D").read_text() == "D"
         assert not Path("B").exists()
         assert not Path("C").exists()
+        assert c._pruned == b.job_id
 
     def test_pruning_does_not_prune_final_jobs(self):
         ppg.FileGeneratingJob("A", lambda: write("A", "A"))
@@ -81,3 +82,26 @@ class TestPruning:
         assert Path("A").read_text() == "A"
         assert Path("B").read_text() == "B"
         assert not Path("C").exists()
+
+    def test_tempfile_not_run_on_prune(self):
+         a = ppg.TempFileGeneratingJob("A", lambda: write("A", "A"))
+         b = ppg.FileGeneratingJob("B", lambda: write("B", "B" + read("A")))
+         b.depends_on(a)
+         b.prune()
+         ppg.run_pipegraph()
+         assert not Path('B').exists()
+         assert not Path('A').exists()
+
+    def test_tempfile_still_run_if_needed_for_other(self):
+         a = ppg.TempFileGeneratingJob("A", lambda: write("A", "A"))
+         b = ppg.FileGeneratingJob("B", lambda: write("B", "B" + read("A")))
+         c = ppg.FileGeneratingJob("C", lambda: write("C", "C" + read("A")))
+         b.depends_on(a)
+         c.depends_on(a)
+         b.prune()
+         ppg.run_pipegraph()
+         assert not Path('B').exists()
+         assert Path('C').exists()
+         assert Path('C').read_text() == 'CA'
+         assert not Path('A').exists()
+

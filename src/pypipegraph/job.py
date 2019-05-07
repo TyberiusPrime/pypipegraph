@@ -470,7 +470,9 @@ class Job(object):
         for preq in self.prerequisites:
             all_done = True
             for dep in preq.dependants:
-                if dep.failed or (not dep.was_run) or not preq.is_done():
+                if dep._pruned:
+                    continue
+                elif dep.failed or (not dep.was_run) or not preq.is_done():
                     all_done = False
                     break
             if all_done:
@@ -1325,8 +1327,9 @@ class TempFileGeneratingJob(FileGeneratingJob):
             return True
         else:
             for dep in self.dependants:
-                if (not dep.is_done()) and (not dep.is_loadable()):
-                    return False
+                if not dep._pruned:
+                    if (not dep.is_done()) and (not dep.is_loadable()):
+                        return False
             return True
 
 

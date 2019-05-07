@@ -422,20 +422,20 @@ class Pipegraph(object):
     def prune(self):
         from .job import FinalJob
 
-        def prune_children(job):
+        def prune_children(job, reason):
             for c in job.dependants:
                 if not isinstance(c, FinalJob):
-                    c._pruned = 2
-                    prune_children(c)
+                    c._pruned = reason
+                    prune_children(c, reason)
 
         for job in self.jobs.values():
             if job._pruned is True:
                 job._pruned = (
-                    2
+                    job.job_id
                 )  # we use two instead of true to prevent doing it multiple times for the same branch of the graph
-                prune_children(job)
+                prune_children(job, job.job_id)
         self.possible_execution_order = [
-            x for x in self.possible_execution_order if not x._pruned == 2
+            x for x in self.possible_execution_order if not isinstance(x._pruned, str)
         ]
 
     def load_invariant_status(self):
@@ -579,7 +579,7 @@ class Pipegraph(object):
             job.do_cache = True
         for job in self.jobs.values():
             if (
-                not job.is_done()
+                not job.is_done() and not job._pruned
             ):  # is done can return True, False, and None ( = False, but even if is_temp_job, rerun dependants...)
                 if not job.is_loadable():
                     needs_to_be_run.add(job.job_id)
@@ -600,6 +600,7 @@ class Pipegraph(object):
                 job.was_invalidated  # this has been invalidated
                 and job.runs_in_slave()  # it is not one of the invariantes
                 and not job.is_loadable()  # and it is not a loading job (these the slaves do automagically for now)
+                and not (job.is_temp_job and job.is_done)
             ):
                 needs_to_be_run.add(job.job_id)
             elif not job.runs_in_slave():
