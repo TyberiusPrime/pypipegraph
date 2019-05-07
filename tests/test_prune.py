@@ -84,24 +84,23 @@ class TestPruning:
         assert not Path("C").exists()
 
     def test_tempfile_not_run_on_prune(self):
-         a = ppg.TempFileGeneratingJob("A", lambda: write("A", "A"))
-         b = ppg.FileGeneratingJob("B", lambda: write("B", "B" + read("A")))
-         b.depends_on(a)
-         b.prune()
-         ppg.run_pipegraph()
-         assert not Path('B').exists()
-         assert not Path('A').exists()
+        a = ppg.TempFileGeneratingJob("A", lambda: write("A", "A"))
+        b = ppg.FileGeneratingJob("B", lambda: write("B", "B" + read("A")))
+        b.depends_on(a)
+        b.prune()
+        ppg.run_pipegraph()
+        assert not Path("B").exists()
+        assert not Path("A").exists()
 
     def test_tempfile_still_run_if_needed_for_other(self):
-         a = ppg.TempFileGeneratingJob("A", lambda: write("A", "A"))
-         b = ppg.FileGeneratingJob("B", lambda: write("B", "B" + read("A")))
-         c = ppg.FileGeneratingJob("C", lambda: write("C", "C" + read("A")))
-         b.depends_on(a)
-         c.depends_on(a)
-         b.prune()
-         ppg.run_pipegraph()
-         assert not Path('B').exists()
-         assert Path('C').exists()
-         assert Path('C').read_text() == 'CA'
-         assert not Path('A').exists()
-
+        a = ppg.TempFileGeneratingJob("A", lambda: write("A", "A"))
+        b = ppg.FileGeneratingJob("B", lambda: write("B", "B" + read("A")))
+        c = ppg.FileGeneratingJob("C", lambda: write("C", "C" + read("A")))
+        b.depends_on(a)
+        c.depends_on(a)
+        b.prune()
+        ppg.run_pipegraph()
+        assert not Path("B").exists()
+        assert Path("C").exists()
+        assert Path("C").read_text() == "CA"
+        assert not Path("A").exists()
