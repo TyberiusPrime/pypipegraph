@@ -16,3 +16,4 @@ pypipegraph/tests/covhtml/*
 tests/run/*
 *.egg-info
 .pytest_cache/
+pip-wheel-metadata/
