@@ -73,7 +73,7 @@ if has_pyggplot:  # noqa C901
 
             of = "out/test.png"
             p = ppg.PlotJob(of, calc, plot)
-            p.add_fiddle(lambda p: dp(p).scale_x_continuous(trans='log10').pd)
+            p.add_fiddle(lambda p: dp(p).scale_x_continuous(trans="log10").pd)
             p.add_another_plot("out/test2.png", plot2)
             ppg.run_pipegraph()
             assert magic(of).find(b"PNG image") != -1

@@ -21,6 +21,7 @@ from .ppg_exceptions import (
     NothingChanged,
 )
 from . import util
+
 inside_ppg = util.inside_ppg
 
 from .job import (
@@ -49,7 +50,7 @@ from .job import (
     MemMappedDataLoadingJob,
     MultiTempFileGeneratingJob,
     NotebookJob,
-    verify_job_id
+    verify_job_id,
 )
 
 assert_uniqueness_of_object = util.assert_uniqueness_of_object
@@ -91,5 +92,5 @@ all = [
     inside_ppg,
     MultiTempFileGeneratingJob,
     NotebookJob,
-    verify_job_id
+    verify_job_id,
 ]

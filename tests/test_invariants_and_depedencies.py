@@ -725,8 +725,8 @@ class TestFunctionInvariant:
         bv = b.get_invariant(False, [])
         cv = c.get_invariant(False, [])
         assert a.get_invariant(False, [])
-        assert bv == av
-        assert not (av == cv)
+        assert bv[2:] == av[2:]
+        assert not (av[2:] == cv[2:])
 
     def test_lambdas(self):
         def get_func(x):
@@ -762,8 +762,8 @@ class TestFunctionInvariant:
         cv = c.get_invariant(False, [])
         self.maxDiff = 20000
         assert a.get_invariant(False, [])
-        assert bv == av
-        assert not (av == cv)
+        assert bv[2:] == av[2:]
+        assert not (av[2:] == cv[2:])
 
     def test_inner_functions(self):
         def get_func(x):
@@ -795,8 +795,8 @@ class TestFunctionInvariant:
         bv = b.get_invariant(False, [])
         cv = c.get_invariant(False, [])
         assert a.get_invariant(False, [])
-        assert bv == av
-        assert not (av == cv)
+        assert bv[2:] == av[2:]
+        assert not (av[2:] == cv[2:])
 
     def test_nested_inner_functions(self):
         def get_func(x):
@@ -837,8 +837,8 @@ class TestFunctionInvariant:
         bv = b.get_invariant(False, [])
         cv = c.get_invariant(False, [])
         assert a.get_invariant(False, [])
-        assert bv == av
-        assert not (av == cv)  # constat value is different
+        assert bv[2:] == av[2:]
+        assert not (av[2:] == cv[2:])  # constat value is different
 
     def test_inner_functions_with_parameters(self):
         def get_func(x):
@@ -858,8 +858,8 @@ class TestFunctionInvariant:
         bv = b.get_invariant(False, [])
         cv = c.get_invariant(False, [])
         assert a.get_invariant(False, [])
-        assert bv == av
-        assert not (av == cv)
+        assert bv[2:] == av[2:]
+        assert not (av[2:] == cv[2:])
 
     def test_passing_non_function_raises(self):
         def inner():
@@ -1100,6 +1100,96 @@ class TestFunctionInvariant:
         assert a.get_invariant(False, [])
         assert bv == av
         assert not (av == cv)
+
+    def test_invariant_caching(self):
+
+        a = ppg.FunctionInvariant("a", ppg.inside_ppg)
+        old_dis = a.dis_code
+        counter = [0]
+
+        def new_dis(*args, **kwargs):
+            counter[0] += 1
+            return old_dis(*args, **kwargs)
+
+        a.dis_code = new_dis
+        # round 0 - everything needs to be calculated
+        assert len(ppg.util.global_pipegraph.func_hashes) == 0
+        iv1 = a._get_invariant(False, [])
+        assert counter[0] == 1
+        assert len(ppg.util.global_pipegraph.func_hashes) == 1
+        assert len(ppg.util.global_pipegraph.file_hashes) == 1
+
+        # same function again - no new calc
+        iv2 = a._get_invariant(False, [])
+        assert iv1 == iv2
+        assert counter[0] == 1
+
+        # we lost the function hash, and were passed false:
+        ppg.util.global_pipegraph.func_hashes.clear()
+        iv3 = a._get_invariant(False, [])
+        assert iv3 == iv2
+        assert counter[0] == 2
+        assert len(ppg.util.global_pipegraph.func_hashes) == 1
+
+        # we lost the function hash - but were passed an old tuple
+        # with matching file hash
+        ppg.util.global_pipegraph.func_hashes.clear()
+        iv3b = a._get_invariant(iv3, [])
+        assert iv3 is iv3b
+        assert counter[0] == 2
+        assert len(ppg.util.global_pipegraph.func_hashes) == 0
+        ppg.util.global_pipegraph.func_hashes.clear()
+
+        # now let's simulate the file changing
+        faked_iv3 = ("aa",) + iv3[1:]
+        ppg.util.global_pipegraph.func_hashes.clear()
+        with pytest.raises(ppg.NothingChanged) as e:
+            a._get_invariant(faked_iv3, [])
+        iv4 = e.value.new_value
+        assert iv4[2:] == iv3[2:]
+        assert len(ppg.util.global_pipegraph.func_hashes) == 1
+        assert counter[0] == 3
+        assert (
+            len(ppg.util.global_pipegraph.file_hashes) == 1
+        )  # we still used the the function.__code__.co_filename
+
+        # now let's simulate the line no changing.
+        faked_iv3 = (iv3[0],) + (1,) + iv3[2:]
+        ppg.util.global_pipegraph.func_hashes.clear()
+        with pytest.raises(ppg.NothingChanged) as e:
+            a._get_invariant(faked_iv3, [])
+        iv5 = e.value.new_value
+        assert iv5[2:] == iv3[2:]
+        assert len(ppg.util.global_pipegraph.func_hashes) == 1
+        assert counter[0] == 4
+        assert (
+            len(ppg.util.global_pipegraph.file_hashes) == 1
+        )  # we still used the the function.__code__.co_filename
+
+        # and now, going from the old to the new...
+        old = iv1[2] + iv1[3]
+        with pytest.raises(ppg.NothingChanged) as e:
+            a._get_invariant(old, [])
+        assert e.value.new_value == iv1
+
+        # and last but not least let's test the closure based seperation
+        ppg.util.global_pipegraph.func_hashes.clear()
+        ppg.util.global_pipegraph.file_hashes.clear()
+
+        def capture(x):
+            def inner():
+                return 5 + x
+
+            return inner
+
+        b = ppg.FunctionInvariant("x5", capture(5))
+        c = ppg.FunctionInvariant("x10", capture(10))
+        ivb = b._get_invariant(False, [])
+        assert len(ppg.util.global_pipegraph.func_hashes) == 1
+        ivc = c._get_invariant(False, [])
+        # no recalc - reuse the one from the previous function
+        assert len(ppg.util.global_pipegraph.func_hashes) == 1
+        assert ivb[:3] == ivc[:3]
 
 
 @pytest.mark.usefixtures("new_pipegraph")

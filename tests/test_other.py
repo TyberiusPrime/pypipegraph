@@ -363,20 +363,21 @@ def test_interactive_import(new_pipegraph):
 
 def test_logging(new_pipegraph):
     import logging
-    my_logger = logging.getLogger('pypipegraph')
-    h = logging.FileHandler(filename='ppg.log', mode='w')
+
+    my_logger = logging.getLogger("pypipegraph")
+    h = logging.FileHandler(filename="ppg.log", mode="w")
     my_logger.addHandler(h)
     logging.getLogger().warning("Should not be in the log.")
     try:
         my_logger.setLevel(logging.DEBUG)
-        f = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        f = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         h.setFormatter(f)
-        ppg.FileGeneratingJob('out/A', lambda: write('out/A', 'A'))
+        ppg.FileGeneratingJob("out/A", lambda: write("out/A", "A"))
         ppg.run_pipegraph()
     finally:
         my_logger.removeHandler(h)
-    assert os.path.exists('ppg.log')
-    d = read('ppg.log')
-    assert not ('Should not be in the log.\n' in d)
-    assert 'pypipegraph - INFO' in d
-    assert 'pypipegraph - DEBUG' in d
+    assert os.path.exists("ppg.log")
+    d = read("ppg.log")
+    assert not ("Should not be in the log.\n" in d)
+    assert "pypipegraph - INFO" in d
+    assert "pypipegraph - DEBUG" in d

@@ -147,6 +147,7 @@ class Pipegraph(object):
         self.func_hashes = (
             {}
         )  # to calculate invarionts on functions in a slightly more efficent manner
+        self.file_hashes = {}
 
     def __del__(self):
         # remove circle link between rc and pipegraph

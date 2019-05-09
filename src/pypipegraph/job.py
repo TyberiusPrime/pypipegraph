@@ -669,51 +669,89 @@ class FunctionInvariant(_InvariantJob):
                 # print(repr(self.function))
                 # print(repr(self.function.im_func))
                 raise ValueError("Can't handle this object %s" % self.function)
-        try:
-            closure = self.function.func_closure
-        except AttributeError:
-            closure = self.function.__closure__
-        key = (id(self.function.__code__), id(closure))
-        if key not in util.global_pipegraph.func_hashes:
-            invariant = self.dis_code(self.function.__code__, self.function)
-            if closure:
-                for name, cell in zip(self.function.__code__.co_freevars, closure):
-                    # we ignore references to self - in that use case you're expected
-                    # to make your own ParameterInvariants, and we could not detect
-                    # self.parameter anyhow (only self would be bound)
-                    # we also ignore bound functions - their address changes
-                    # every run.
-                    # IDEA: Make this recursive (might get to be too expensive)
-                    try:
-                        if (
-                            name != "self"
-                            and not hasattr(cell.cell_contents, "__code__")
-                            and not isinstance(cell.cell_contents, module_type)
-                        ):
-                            if isinstance(cell.cell_contents, dict):
-                                x = repr(sorted(list(cell.cell_contents.items())))
-                            elif isinstance(cell.cell_contents, set) or isinstance(
-                                cell.cell_contents, frozenset
-                            ):
-                                x = repr(sorted(list(cell.cell_contents)))
-                            else:
-                                x = repr(cell.cell_contents)
-                            if (
-                                "at 0x" in x
-                            ):  # if you don't have a sensible str(), we'll default to the class path. This takes things like <chipseq.quality_control.AlignedLaneQualityControl at 0x73246234>.
-                                x = x[: x.find("at 0x")]
-                            if "id=" in x:  # pragma: no cover - defensive
-                                print(x)
-                                raise ValueError("Still an issue, %s", repr(x))
-                            invariant += "\n" + x
-                    except ValueError as e:  # pragma: no cover - defensive
-                        if str(e) == "Cell is empty":
-                            pass
-                        else:
-                            raise
+        key = id(self.function.__code__)
+        if isinstance(old, tuple):
+            old_filehash = old[0]
+            old_lineno = old[1]
+            old_funchash = old[2]
+            old_closure = old[3]
+            new_filehash = self.get_file_hash(self.function.__code__.co_filename)
+            new_line_no = self.function.__code__.co_firstlineno
+            if (
+                new_filehash == old_filehash and old_lineno == new_line_no
+            ):  # same file, same line -> same func
+                return old
+            else:
+                if key not in util.global_pipegraph.func_hashes:
+                    util.global_pipegraph.func_hashes[key] = self.dis_code(
+                        self.function.__code__, self.function
+                    )
+                new_funchash = util.global_pipegraph.func_hashes[key]
+                new_closure = self.extract_closure(self.function)
+                res = (new_filehash, new_line_no, new_funchash, new_closure)
+                if (
+                    new_funchash == old_funchash and new_closure == old_closure
+                ):  # unrelated change in the file
+                    raise ppg_exceptions.NothingChanged(res)
+                else:
+                    return res
+        else:
+            new_filehash = self.get_file_hash(self.function.__code__.co_filename)
+            new_line_no = self.function.__code__.co_firstlineno
+            if key not in util.global_pipegraph.func_hashes:
+                util.global_pipegraph.func_hashes[key] = self.dis_code(
+                    self.function.__code__, self.function
+                )
+            new_funchash = util.global_pipegraph.func_hashes[key]
+            new_closure = self.extract_closure(self.function)
+            res = (new_filehash, new_line_no, new_funchash, new_closure)
+            if isinstance(old, str):
+                if old == new_funchash + new_closure:
+                    raise ppg_exceptions.NothingChanged(res)
+            return res
 
-            util.global_pipegraph.func_hashes[id(self.function.__code__)] = invariant
-        return util.global_pipegraph.func_hashes[id(self.function.__code__)]
+    def extract_closure(self, function):
+        try:
+            closure = function.func_closure
+        except AttributeError:
+            closure = function.__closure__
+        output = ""
+        if closure:
+            for name, cell in zip(self.function.__code__.co_freevars, closure):
+                # we ignore references to self - in that use case you're expected
+                # to make your own ParameterInvariants, and we could not detect
+                # self.parameter anyhow (only self would be bound)
+                # we also ignore bound functions - their address changes
+                # every run.
+                # IDEA: Make this recursive (might get to be too expensive)
+                try:
+                    if (
+                        name != "self"
+                        and not hasattr(cell.cell_contents, "__code__")
+                        and not isinstance(cell.cell_contents, module_type)
+                    ):
+                        if isinstance(cell.cell_contents, dict):
+                            x = repr(sorted(list(cell.cell_contents.items())))
+                        elif isinstance(cell.cell_contents, set) or isinstance(
+                            cell.cell_contents, frozenset
+                        ):
+                            x = repr(sorted(list(cell.cell_contents)))
+                        else:
+                            x = repr(cell.cell_contents)
+                        if (
+                            "at 0x" in x
+                        ):  # if you don't have a sensible str(), we'll default to the class path. This takes things like <chipseq.quality_control.AlignedLaneQualityControl at 0x73246234>.
+                            x = x[: x.find("at 0x")]
+                        if "id=" in x:  # pragma: no cover - defensive
+                            print(x)
+                            raise ValueError("Still an issue, %s", repr(x))
+                        output += "\n" + x
+                except ValueError as e:  # pragma: no cover - defensive
+                    if str(e) == "Cell is empty":
+                        pass
+                    else:
+                        raise
+        return output
 
     inner_code_object_re = re.compile(
         r"(<code\sobject\s<?[^>]+>?\sat\s0x[a-f0-9]+[^>]+)"
@@ -722,10 +760,18 @@ class FunctionInvariant(_InvariantJob):
     )
 
     @classmethod
-    def dis_code(cls, code, function):
+    def get_file_hash(self, filename):
+        if filename not in util.global_pipegraph.file_hashes:
+            util.global_pipegraph.file_hashes[filename] = util.checksum_file(filename)
+        return util.global_pipegraph.file_hashes[filename]
+
+    # @classmethod
+    def dis_code(self, code, function):
         """'dissassemble' python code.
-        Strips lambdas (they change address every execution otherwise)"""
-        # TODO: replace with bytecode based smarter variant
+        Strips lambdas (they change address every execution otherwise),
+        but beginning with 3.7 these are actually included
+        """
+
         out = StringIO()
         old_stdout = sys.stdout
         try:
@@ -740,13 +786,13 @@ class FunctionInvariant(_InvariantJob):
             row = row.split()
             res.append("\t".join(row[1:]))
         res = "\n".join(res)
-        res = cls.inner_code_object_re.sub("lambda", res)
+        res = self.inner_code_object_re.sub("lambda", res)
         if function and hasattr(function, "__qualname__"):
             res = res.replace(function.__qualname__, "<func name ommited>")
         for ii, constant in enumerate(code.co_consts):
             if hasattr(constant, "co_code"):
                 res += "inner no %i" % ii
-                res += cls.dis_code(constant, None)
+                res += self.dis_code(constant, None)
         return res
 
     @staticmethod
