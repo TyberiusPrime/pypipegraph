@@ -148,6 +148,7 @@ class Pipegraph(object):
             {}
         )  # to calculate invarionts on functions in a slightly more efficent manner
         self.file_hashes = {}
+        self.job_id_cache = {}  # used by verify_job_id
 
     def __del__(self):
         # remove circle link between rc and pipegraph

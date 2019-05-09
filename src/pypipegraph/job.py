@@ -106,8 +106,12 @@ def verify_job_id(job_id):
             raise TypeError(
                 "Job_id must be a string or Path, was %s %s" % (job_id, type(job_id))
             )
-    job_id = str(os.path.relpath(pathlib.Path(job_id).resolve()))  # keep them relative
-    return job_id
+    # if '..' in job_id:
+    if job_id not in util.global_pipegraph.job_id_cache:
+        util.global_pipegraph.job_id_cache[job_id] = str(
+            os.path.relpath(pathlib.Path(job_id).resolve())
+        )  # keep them relative
+    return util.global_pipegraph.job_id_cache[job_id]
 
 
 def was_inited_before(obj, cls):
@@ -137,9 +141,9 @@ class Job(object):
 
     def __new__(cls, job_id, *args, **kwargs):
         """Handles the singletonization on the job_id"""
-        job_id = verify_job_id(job_id)
         if util.global_pipegraph is None:
             raise ValueError("Must instanciate a pipegraph before creating any Jobs")
+        job_id = verify_job_id(job_id)
         if job_id not in util.global_pipegraph.job_uniquifier:
             util.global_pipegraph.job_uniquifier[job_id] = object.__new__(cls)
             util.global_pipegraph.job_uniquifier[
