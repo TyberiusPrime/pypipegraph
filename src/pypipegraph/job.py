@@ -98,22 +98,6 @@ class JobList(object):
         )
 
 
-def verify_job_id(job_id):
-    if not isinstance(job_id, str):
-        if isinstance(job_id, pathlib.Path):
-            job_id = str(job_id)
-        else:
-            raise TypeError(
-                "Job_id must be a string or Path, was %s %s" % (job_id, type(job_id))
-            )
-    # if '..' in job_id:
-    if job_id not in util.global_pipegraph.job_id_cache:
-        util.global_pipegraph.job_id_cache[job_id] = str(
-            os.path.relpath(pathlib.Path(job_id).resolve())
-        )  # keep them relative
-    return util.global_pipegraph.job_id_cache[job_id]
-
-
 def was_inited_before(obj, cls):
     if type(obj) is cls:
         res = hasattr(obj, "_init_done")
@@ -139,18 +123,32 @@ class Job(object):
     is generated via new_pipegraph()
     """
 
+    @classmethod
+    def verify_job_id(cls, job_id):
+        if not isinstance(job_id, str):
+            if isinstance(job_id, pathlib.Path):
+                job_id = str(job_id)
+            else:
+                raise TypeError(
+                    "Job_id must be a string or Path, was %s %s"
+                    % (job_id, type(job_id))
+                )
+        # if '..' in job_id:
+        if job_id not in util.global_pipegraph.job_id_cache:
+            util.global_pipegraph.job_id_cache[job_id] = str(
+                os.path.relpath(pathlib.Path(job_id).resolve())
+            )  # keep them relative
+        return util.global_pipegraph.job_id_cache[job_id]
+
     def __new__(cls, job_id, *args, **kwargs):
         """Handles the singletonization on the job_id"""
         if util.global_pipegraph is None:
             raise ValueError("Must instanciate a pipegraph before creating any Jobs")
-        job_id = verify_job_id(job_id)
+        job_id = cls.verify_job_id(job_id)
         if job_id not in util.global_pipegraph.job_uniquifier:
             util.global_pipegraph.job_uniquifier[job_id] = object.__new__(cls)
-            util.global_pipegraph.job_uniquifier[
-                job_id
-            ].job_id = (
-                job_id
-            )  # doing it later will fail because hash apperantly might be called before init has run?
+            util.global_pipegraph.job_uniquifier[job_id].job_id = job_id
+            # doing it later will fail because hash apperantly might be called before init has run?
         else:
             if util.global_pipegraph.job_uniquifier[job_id].__class__ != cls:
                 if args and hasattr(args[0], "__code__"):
@@ -180,12 +178,10 @@ class Job(object):
     # return (self.job_id, )
 
     def __init__(self, job_id):
-        job_id = verify_job_id(job_id)
         if was_inited_before(self, Job):
             return
         if not hasattr(self, "dependants"):  # test any of the following
             # else: this job was inited before, and __new__ returned an existing instance
-            self.job_id = job_id
             self.job_no = -1
             self._cores_needed = 1
             self.memory_needed = -1
@@ -215,7 +211,7 @@ class Job(object):
             self._is_done = None
             self.do_cache = False
             self._pruned = False
-        util.global_pipegraph.add_job(util.global_pipegraph.job_uniquifier[job_id])
+        util.global_pipegraph.add_job(util.global_pipegraph.job_uniquifier[self.job_id])
 
     # def __call__(self):
     # return self.dependants
@@ -611,8 +607,7 @@ class FunctionInvariant(_InvariantJob):
     currently via disassembly"""
 
     def __init__(self, job_id, function):
-        job_id = verify_job_id(job_id)
-        self.verify_arguments(job_id, function)
+        self.verify_arguments(self.job_id, function)
         if was_inited_before(self, FunctionInvariant):
             return
         super().__init__(job_id)
@@ -857,15 +852,14 @@ class ParameterInvariant(_InvariantJob):
     """
 
     def __new__(cls, job_id, *parameters, **kwargs):
-        job_id = "PI" + verify_job_id(job_id)
+        job_id = "PI" + cls.verify_job_id(job_id)
         return Job.__new__(cls, job_id)
 
     def __init__(self, job_id, parameters, accept_as_unchanged_func=None):
-        job_id = "PI" + verify_job_id(job_id)
-        self.verify_arguments(job_id, parameters, accept_as_unchanged_func)
+        self.verify_arguments(self.job_id, parameters, accept_as_unchanged_func)
         if was_inited_before(self, ParameterInvariant):
             return
-        super().__init__(job_id)
+        super().__init__(self.job_id)
         self.parameters = parameters
         self.accept_as_unchanged_func = accept_as_unchanged_func
 
@@ -1120,7 +1114,7 @@ class FileGeneratingJob(Job):
         """
         if was_inited_before(self, FileGeneratingJob):
             return
-        output_filename = verify_job_id(output_filename)
+        output_filename = self.job_id  # was verifyied by job.__new__
         super().__init__(output_filename)
         if not hasattr(function, "__call__"):
             raise ValueError("function was not a callable")
@@ -1240,10 +1234,12 @@ class MultiFileGeneratingJob(FileGeneratingJob):
             )
         if not hasattr(filenames, "__iter__"):
             raise TypeError("filenames was not iterable")
-        filenames = [verify_job_id(f) for f in filenames]
+        filenames = [cls.verify_job_id(f) for f in filenames]
 
         job_id = ":".join(sorted(filenames))
-        return Job.__new__(cls, job_id)
+        res = Job.__new__(cls, job_id)
+        res.filenames = filenames
+        return res
 
     # def __getnewargs__(self):  # so that unpickling works
     # return (self.filenames,)
@@ -1253,13 +1249,11 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         when the job crashes will be renamed to output_filename + '.broken'
         (overwriting whatever was there before)
         """
-        filenames = sorted([verify_job_id(f) for f in filenames])
-        self.verify_arguments(filenames, function, rename_broken, empty_ok)
+        # filenames = sorted([verify_job_id(f) for f in filenames])
+        self.verify_arguments(function, rename_broken, empty_ok)
         if was_inited_before(self, MultiFileGeneratingJob):
             return
-        self.filenames = filenames
-        job_id = ":".join(self.filenames)
-        Job.__init__(self, job_id)
+        Job.__init__(self, self.job_id)
 
         self._check_for_filename_collisions()
 
@@ -1268,7 +1262,7 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         self.do_ignore_code_changes = False
         self.empty_ok = empty_ok
 
-    def verify_arguments(self, filenames, function, rename_broken, empty_ok):
+    def verify_arguments(self, function, rename_broken, empty_ok):
         if not hasattr(function, "__call__"):
             raise ValueError("function was not a callable")
         if hasattr(self, "callback"):
@@ -1734,11 +1728,11 @@ class FinalJob(Job):
     FinalJobs are also run on each run - but only if no other job died.
     """
 
-    def __init__(self, jobid, callback):
+    def __init__(self, job_id, callback):
         if was_inited_before(self, FinalJob):
             return
 
-        Job.__init__(self, jobid)
+        Job.__init__(self, self.job_id)
         self.callback = callback
         self.is_final_job = True
         self.do_ignore_code_changes = False
@@ -1782,7 +1776,7 @@ class PlotJob(FileGeneratingJob):
                     "PlotJob(%s) called twice with different parameters" % self.job_id
                 )
             return
-        output_filename = verify_job_id(output_filename)
+        output_filename = self.job_id
         if not (
             output_filename.endswith(".png")
             or output_filename.endswith(".pdf")
@@ -2017,7 +2011,7 @@ def CombinedPlotJob(
 
     To use these jobs, you need to have pyggplot available.
     """
-    output_filename = verify_job_id(output_filename)
+    output_filename = Job.verify_job_id(output_filename)
     if not (output_filename.endswith(".png") or output_filename.endswith(".pdf")):
         raise ValueError(
             "Don't know how to create this file %s, must end on .png or .pdf"
@@ -2151,14 +2145,12 @@ class CachedAttributeLoadingJob(_CachingJobMixin, AttributeLoadingJob):
     a file called job_id and reread on the next run"""
 
     def __new__(cls, job_id, *args, **kwargs):
-
-        job_id = verify_job_id(job_id)
-        return Job.__new__(cls, job_id + "_load")
+        return Job.__new__(cls, str(job_id) + "_load")
 
     def __init__(
         self, cache_filename, target_object, target_attribute, calculating_function
     ):
-        cache_filename = verify_job_id(cache_filename)
+        cache_filename = self.verify_job_id(cache_filename)
         self.verify_arguments(
             cache_filename, target_object, target_attribute, calculating_function
         )
@@ -2204,7 +2196,7 @@ class CachedDataLoadingJob(_CachingJobMixin, DataLoadingJob):
         )  # plus load, so that the cached data goes into the cache_filename passed to the constructor...
 
     def __init__(self, cache_filename, calculating_function, loading_function):
-        cache_filename = verify_job_id(cache_filename)
+        cache_filename = self.verify_job_id(cache_filename)
         self.verify_arguments(cache_filename, calculating_function, loading_function)
         if was_inited_before(self, CachedDataLoadingJob):
             return
@@ -2288,7 +2280,7 @@ class MemMappedDataLoadingJob(_CachingJobMixin, DataLoadingJob):
         )  # plus load, so that the cached data goes into the cache_filename passed to the constructor...
 
     def __init__(self, cache_filename, calculating_function, loading_function, dtype):
-        cache_filename = verify_job_id(cache_filename)
+        cache_filename = self.verify_job_id(cache_filename)
         self.verify_arguments(
             cache_filename, calculating_function, loading_function, dtype
         )
