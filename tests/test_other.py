@@ -381,3 +381,13 @@ def test_logging(new_pipegraph):
     assert not ("Should not be in the log.\n" in d)
     assert "pypipegraph - INFO" in d
     assert "pypipegraph - DEBUG" in d
+
+
+def test_version_is_correct():
+    import configparser
+    from pathlib import Path
+
+    c = configparser.ConfigParser()
+    c.read(Path(__file__).parent.parent / "setup.cfg")
+    version = c["metadata"]["version"]
+    assert version == ppg.__version__
