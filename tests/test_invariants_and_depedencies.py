@@ -1191,6 +1191,26 @@ class TestFunctionInvariant:
         assert len(ppg.util.global_pipegraph.func_hashes) == 1
         assert ivb[:3] == ivc[:3]
 
+    def test_37_dis_changes(self):
+        # starting with python 3.7
+        # dis can go into functions - we used to do this manually.
+        # unfortunatly, we ran some projects before we discovered this
+        # so let's see if we can get this fixed...
+        import sys
+
+        if sys.version_info >= (3, 7):
+
+            def shu(x):
+                return lambda: x + 5
+
+            a = ppg.FunctionInvariant("shu", shu)
+            new = ("dummy_file_hash", 0, a.dis_code(shu.__code__, shu, (3, 7, 1)), "")
+            old = ("dummy_file_hash", 0, a.dis_code(shu.__code__, shu, (3, 6, 1)), "")
+            assert new != old
+            with pytest.raises(ppg.NothingChanged) as e:
+                a._get_invariant(old, [])
+            assert e.value.new_value[2] == new[2]
+
 
 @pytest.mark.usefixtures("new_pipegraph")
 class TestMultiFileInvariant:

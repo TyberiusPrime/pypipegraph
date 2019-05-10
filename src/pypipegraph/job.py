@@ -134,10 +134,18 @@ class Job(object):
                     % (job_id, type(job_id))
                 )
         # if '..' in job_id:
-        if job_id not in util.global_pipegraph.job_id_cache:
-            util.global_pipegraph.job_id_cache[job_id] = str(
+
+        if (
+            util.global_pipegraph is None
+            or job_id not in util.global_pipegraph.job_id_cache
+        ):
+            new_job_id = str(
                 os.path.relpath(pathlib.Path(job_id).resolve())
             )  # keep them relative
+            if util.global_pipegraph is not None:
+                util.global_pipegraph.job_id_cache[job_id] = new_job_id
+            else:
+                return new_job_id
         return util.global_pipegraph.job_id_cache[job_id]
 
     def __new__(cls, job_id, *args, **kwargs):
@@ -651,7 +659,7 @@ class FunctionInvariant(_InvariantJob):
                 id(self),
             )
 
-    def _get_invariant(self, old, all_invariant_stati):
+    def _get_invariant(self, old, all_invariant_stati, version_info=sys.version_info):
         if self.function is None:
             return (
                 None
@@ -688,9 +696,9 @@ class FunctionInvariant(_InvariantJob):
                 new_funchash = util.global_pipegraph.func_hashes[key]
                 new_closure = self.extract_closure(self.function)
                 res = (new_filehash, new_line_no, new_funchash, new_closure)
-                if (
-                    new_funchash == old_funchash and new_closure == old_closure
-                ):  # unrelated change in the file
+                if self.func_hash_didnt_change(
+                    old_funchash, old_closure, new_funchash, new_closure, version_info
+                ):
                     raise ppg_exceptions.NothingChanged(res)
                 else:
                     return res
@@ -708,6 +716,29 @@ class FunctionInvariant(_InvariantJob):
                 if old == new_funchash + new_closure:
                     raise ppg_exceptions.NothingChanged(res)
             return res
+
+    @classmethod
+    def func_hash_didnt_change(
+        cls,
+        old_funchash,
+        old_closure,
+        new_funchash,
+        new_closure,
+        version_info=sys.version_info,
+    ):
+        """Compare two function hashesh, allow 3.7 derived changes in how 
+        inner functions/lambdas are handled"""
+        if new_funchash == old_funchash and new_closure == old_closure:
+            # unrelated change in the file
+            return True
+        elif (
+            version_info >= (3, 7)
+            and "\ninner no " in old_funchash
+            and old_funchash[: old_funchash.find("\ninner no") + 1] == new_funchash
+        ):
+            # change in how we handled lambdas within functions
+            return True
+        return False
 
     def extract_closure(self, function):
         try:
@@ -764,8 +795,8 @@ class FunctionInvariant(_InvariantJob):
             util.global_pipegraph.file_hashes[filename] = util.checksum_file(filename)
         return util.global_pipegraph.file_hashes[filename]
 
-    # @classmethod
-    def dis_code(self, code, function):
+    @classmethod
+    def dis_code(cls, code, function, version_info=sys.version_info):
         """'dissassemble' python code.
         Strips lambdas (they change address every execution otherwise),
         but beginning with 3.7 these are actually included
@@ -785,13 +816,16 @@ class FunctionInvariant(_InvariantJob):
             row = row.split()
             res.append("\t".join(row[1:]))
         res = "\n".join(res)
-        res = self.inner_code_object_re.sub("lambda", res)
+        res = cls.inner_code_object_re.sub("lambda", res)
         if function and hasattr(function, "__qualname__"):
             res = res.replace(function.__qualname__, "<func name ommited>")
-        for ii, constant in enumerate(code.co_consts):
-            if hasattr(constant, "co_code"):
-                res += "inner no %i" % ii
-                res += self.dis_code(constant, None)
+        # beginning with  version 3.7, this piece of code is obsolete,
+        # since dis does depth descend by itself way.
+        if version_info < (3, 7):
+            for ii, constant in enumerate(code.co_consts):
+                if hasattr(constant, "co_code"):
+                    res += "inner no %i" % ii
+                    res += cls.dis_code(constant, None)
         return res
 
     @staticmethod
