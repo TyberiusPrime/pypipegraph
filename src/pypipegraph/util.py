@@ -176,3 +176,18 @@ def flatten_jobs(j):
     else:
         for sj in j:
             yield from flatten_jobs(sj)
+
+
+def load_invariant_stati(filename):
+    import pickle
+
+    result = {}
+    with open(filename, "rb") as op_in:
+        try:
+            while True:
+                name = pickle.load(op_in)
+                value = pickle.load(op_in)
+                result[name] = value
+        except EOFError:
+            pass
+    return result

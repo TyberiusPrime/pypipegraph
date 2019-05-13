@@ -139,9 +139,14 @@ class Job(object):
             util.global_pipegraph is None
             or job_id not in util.global_pipegraph.job_id_cache
         ):
-            new_job_id = str(
-                os.path.relpath(pathlib.Path(job_id).resolve())
-            )  # keep them relative
+            if ".." in job_id or job_id.startswith("/"):
+                job_id = Path(job_id).resolve()
+                new_job_id = str(os.path.relpath(job_id))  # keep them relative
+            else:
+                new_job_id = job_id
+
+            import logging
+
             if util.global_pipegraph is not None:
                 util.global_pipegraph.job_id_cache[job_id] = new_job_id
             else:
