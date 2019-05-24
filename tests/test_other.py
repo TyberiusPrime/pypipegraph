@@ -391,3 +391,40 @@ def test_version_is_correct():
     c.read(Path(__file__).parent.parent / "setup.cfg")
     version = c["metadata"]["version"]
     assert version == ppg.__version__
+
+
+def test_dataloading_job_changing_cwd(new_pipegraph):
+    from pathlib import Path
+
+    os.mkdir("shu")
+
+    def load():
+        os.chdir("shu")
+        Path('b').write_text('world')
+        return 55
+
+    a = ppg.FileGeneratingJob("a", lambda: Path("a").write_text("hello"))
+    b = ppg.DataLoadingJob("b", load)
+    a.depends_on(b)
+    ppg.run_pipegraph()
+    assert read("a") == "hello"
+    assert read("shu/b") == "world"
+
+def test_job_generating_job_changing_cwd(new_pipegraph):
+    from pathlib import Path
+
+    os.mkdir("shu")
+
+    def load():
+        os.chdir("shu")
+        Path('b').write_text('world')
+        return 55
+
+    a = ppg.FileGeneratingJob("a", lambda: Path("a").write_text("hello"))
+    b = ppg.JobGeneratingJob("b", load)
+    a.depends_on(b)
+    ppg.run_pipegraph()
+    assert read("a") == "hello"
+    assert read("shu/b") == "world"
+
+

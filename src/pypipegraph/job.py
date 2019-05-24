@@ -145,8 +145,6 @@ class Job(object):
             else:
                 new_job_id = job_id
 
-            import logging
-
             if util.global_pipegraph is not None:
                 util.global_pipegraph.job_id_cache[job_id] = new_job_id
             else:
@@ -1253,11 +1251,12 @@ class FileGeneratingJob(Job):
             filecheck = util.output_file_exists
         if not filecheck(self.job_id):
             raise ppg_exceptions.JobContractError(
-                "%s did not create its file %s %s"
+                "%s did not create its file %s %s\n.Cwd: %s"
                 % (
                     self,
                     self.callback.__code__.co_filename,
                     self.callback.__code__.co_firstlineno,
+                    os.path.abspath(os.getcwd())
                 )
             )
 

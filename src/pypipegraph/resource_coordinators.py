@@ -362,6 +362,7 @@ class LocalSlave:
                     runtime=stop - start,
                 )
             )
+        os.chdir(self.rc.pipegraph.chdir)
         return was_ok
 
     def wrap_run(self, job, stdout, stderr, is_local):

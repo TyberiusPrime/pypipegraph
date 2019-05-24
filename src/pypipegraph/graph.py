@@ -206,6 +206,7 @@ class Pipegraph(object):
         self.new_jobs = (
             False
         )  # this get's changed in graph modifying jobs, but they reset it to false, which means 'don't accept any new jobs while we are running'
+        self.chdir = os.path.abspath((os.getcwd()))
         self.connect_graph()
         self.check_cycles()
         self.prune()
@@ -230,6 +231,7 @@ class Pipegraph(object):
             self.dump_invariant_status()
             self.destroy_job_connections()
             self.logger.debug("sucessfull cleanup")
+            os.chdir(self.chdir)
 
         # and propagate if there was an exception
         try:
@@ -869,6 +871,7 @@ class Pipegraph(object):
 
     def job_executed(self, job):
         """A job was done. Returns whether there are more jobs read run"""
+        os.chdir(self.chdir)  #  no job must modify this, otherwise the checks get inconsistent
         job._reset_is_done_cache()
         if job.failed:
             self.logger.warning("job_executed %s failed: %s" % (job, job.failed))
