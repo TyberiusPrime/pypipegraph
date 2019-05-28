@@ -194,12 +194,11 @@ def load_invariant_stati(filename):
 
 
 def freeze(obj):
-    """ Turn dicts into frozendict,
+    """ Turn dicts into tuples of (key,value),
         lists into tuples, and sets
         into frozensets, recursively - usefull
         to get a hash value..
     """
-    from frozendict import frozendict
 
     try:
         hash(obj)
@@ -208,8 +207,8 @@ def freeze(obj):
         pass
 
     if isinstance(obj, dict):
-        frz = {k: freeze(obj[k]) for k in obj}
-        return frozendict(frz)
+        frz = tuple(sorted([(k, freeze(obj[k])) for k in obj]))
+        return frz
     elif isinstance(obj, (list, tuple)):
         return tuple([freeze(x) for x in obj])
 
