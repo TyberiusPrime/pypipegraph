@@ -58,11 +58,11 @@ else:
     )  # pragma: no cover
 
 
-def run_pipegraph():
+def run_pipegraph(*args, **kwargs):
     """Run the current global pipegraph"""
     if util.global_pipegraph is None:
         raise ValueError("You need to call new_pipegraph first")
-    util.global_pipegraph.run()
+    util.global_pipegraph.run(*args, **kwargs)
 
 
 def new_pipegraph(
@@ -183,7 +183,7 @@ class Pipegraph(object):
             else:
                 pass
 
-    def run(self):
+    def run(self, dry_run=False):
         """Run the Pipegraph. Gives control to the graph until all jobs have run (or failed).
         May fail right away if a JobContractError occurs - for example if you've built a cycle
         of dependencies.
@@ -191,11 +191,15 @@ class Pipegraph(object):
         If any job does not complete (exception, segfault, failed to produce output), RuntimeError
         will be thrown, and the job's exception (if available) be stored in job.exception
 
+        if @dry_run is set, the Graph will throw an exception 
+        on the first invariant change it detects
+
         """
         if self.was_run:
             raise ValueError("Each pipegraph may be run only once.")
         self.logger.debug("MCP pid: %i" % os.getpid())
         self.logger.debug("Preparing pypipegraph")
+        self.dry_run = dry_run
 
         # internal to the mcp
         self.fill_dependency_callbacks()
@@ -565,13 +569,23 @@ class Pipegraph(object):
                     job.job_id
                 ] = inv  # so not to recheck next time...
             if inv != old:
-                job.invalidated(reason="invariant")
+                if self.dry_run:
+                    print(ValueError(
+f"""Invariant change detected
+Job: {job}
+old: {old}
+new: {inv}
+"""))
+                else:
+                    job.invalidated(reason="invariant")
                 job.invalidation_count = self._distribute_invariant_changes_count
                 self.invariant_status[
                     job.job_id
                 ] = (
                     inv
                 )  # for now, it is the dependant job's job to clean up so they get reinvalidated if the executing is terminated before they are reubild (ie. filegenjobs delete their outputfiles)
+        if self.dry_run:
+            raise ValueError("dry run end")
         self._distribute_invariant_changes_count += 1
 
     def build_todo_list(self):
