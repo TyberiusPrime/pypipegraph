@@ -112,7 +112,13 @@ def functions_equal(a, b):
         return True
     elif a is None or b is None:
         return False
-    return (a.__code__ == b.__code__) and (a.__closure__ == b.__closure__)
+    elif (hasattr(a, '__code__') and hasattr(a, '__closure__')):
+        if (hasattr(b, '__code__') and hasattr(b, '__closure__')):
+            return (a.__code__ == b.__code__) and (a.__closure__ == b.__closure__)
+        else:
+            return False
+    else:
+        return ~(hasattr(b, '__code__') and hasattr(b, '__closure__'))
 
 
 class Job(object):
