@@ -623,12 +623,13 @@ class FunctionInvariant(_InvariantJob):
     """FunctionInvariant detects (bytecode) changes in a python function,
     currently via disassembly"""
 
-    def __init__(self, job_id, function):
+    def __init__(self, job_id, function, absolute_path = None):
         self.verify_arguments(self.job_id, function)
         if was_inited_before(self, FunctionInvariant):
             return
         super().__init__(job_id)
         self.function = function
+        self.absolute_path = absolute_path
 
     def verify_arguments(self, job_id, function):
         if not hasattr(function, "__call__") and function is not None:
@@ -686,12 +687,18 @@ class FunctionInvariant(_InvariantJob):
                 # print(repr(self.function.im_func))
                 raise ValueError("Can't handle this object %s" % self.function)
         key = id(self.function.__code__)
+        code_filepath = self.function.__code__.co_filename
+        if not os.path.isabs(code_filepath):
+            if self.absolute_path is None:
+                raise ValueError(f"No absolute path to code file {code_filepath} is given.")
+            else:
+                code_filepath = os.path.join(self.absolute_path, code_filepath)
         if isinstance(old, tuple):
             old_filehash = old[0]
             old_lineno = old[1]
             old_funchash = old[2]
             old_closure = old[3]
-            new_filehash = self.get_file_hash(self.function.__code__.co_filename)
+            new_filehash = self.get_file_hash(code_filepath)
             new_line_no = self.function.__code__.co_firstlineno
             if (
                 new_filehash == old_filehash and old_lineno == new_line_no
@@ -712,7 +719,7 @@ class FunctionInvariant(_InvariantJob):
                 else:
                     return res
         else:
-            new_filehash = self.get_file_hash(self.function.__code__.co_filename)
+            new_filehash = self.get_file_hash(code_filepath)
             new_line_no = self.function.__code__.co_firstlineno
             if key not in util.global_pipegraph.func_hashes:
                 util.global_pipegraph.func_hashes[key] = self.dis_code(
