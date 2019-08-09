@@ -112,13 +112,13 @@ def functions_equal(a, b):
         return True
     elif a is None or b is None:
         return False
-    elif (hasattr(a, '__code__') and hasattr(a, '__closure__')):
-        if (hasattr(b, '__code__') and hasattr(b, '__closure__')):
+    elif hasattr(a, "__code__") and hasattr(a, "__closure__"):
+        if hasattr(b, "__code__") and hasattr(b, "__closure__"):
             return (a.__code__ == b.__code__) and (a.__closure__ == b.__closure__)
         else:
             return False
     else:
-        return ~(hasattr(b, '__code__') and hasattr(b, '__closure__'))
+        return ~(hasattr(b, "__code__") and hasattr(b, "__closure__"))
 
 
 class Job(object):
@@ -623,7 +623,7 @@ class FunctionInvariant(_InvariantJob):
     """FunctionInvariant detects (bytecode) changes in a python function,
     currently via disassembly"""
 
-    def __init__(self, job_id, function, absolute_path = None):
+    def __init__(self, job_id, function, absolute_path=None):
         self.verify_arguments(self.job_id, function)
         if was_inited_before(self, FunctionInvariant):
             return
@@ -687,8 +687,8 @@ class FunctionInvariant(_InvariantJob):
                 # print(repr(self.function.im_func))
                 raise ValueError("Can't handle this object %s" % self.function)
         key = id(self.function.__code__)
-        #code_filepath = self.function.__code__.co_filename
-        #if not os.path.isabs(code_filepath):
+        # code_filepath = self.function.__code__.co_filename
+        # if not os.path.isabs(code_filepath):
         #    if self.absolute_path is None:
         #        raise ValueError(f"No absolute path to code file {code_filepath} is given.")
         #    else:
@@ -698,7 +698,7 @@ class FunctionInvariant(_InvariantJob):
             old_lineno = old[1]
             old_funchash = old[2]
             old_closure = old[3]
-#            new_filehash = self.get_file_hash(code_filepath)
+            #            new_filehash = self.get_file_hash(code_filepath)
             new_co_code = self.function.__code__.co_code
             new_line_no = self.function.__code__.co_firstlineno
             if (
@@ -720,7 +720,7 @@ class FunctionInvariant(_InvariantJob):
                 else:
                     return res
         else:
-            #new_filehash = self.get_file_hash(code_filepath)
+            # new_filehash = self.get_file_hash(code_filepath)
             new_co_code = self.function.__code__.co_code
 
             new_line_no = self.function.__code__.co_firstlineno
@@ -745,7 +745,7 @@ class FunctionInvariant(_InvariantJob):
         new_closure,
         version_info=sys.version_info,
     ):
-        """Compare two function hashesh, allow 3.7 derived changes in how 
+        """Compare two function hashesh, allow 3.7 derived changes in how
         inner functions/lambdas are handled"""
         if new_funchash == old_funchash and new_closure == old_closure:
             # unrelated change in the file
@@ -1272,7 +1272,7 @@ class FileGeneratingJob(Job):
                     self,
                     self.callback.__code__.co_filename,
                     self.callback.__code__.co_firstlineno,
-                    os.path.abspath(os.getcwd())
+                    os.path.abspath(os.getcwd()),
                 )
             )
 

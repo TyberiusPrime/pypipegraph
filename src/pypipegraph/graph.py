@@ -871,7 +871,9 @@ class Pipegraph(object):
 
     def job_executed(self, job):
         """A job was done. Returns whether there are more jobs read run"""
-        os.chdir(self.chdir)  #  no job must modify this, otherwise the checks get inconsistent
+        os.chdir(
+            self.chdir
+        )  # no job must modify this, otherwise the checks get inconsistent
         job._reset_is_done_cache()
         if job.failed:
             self.logger.warning("job_executed %s failed: %s" % (job, job.failed))
