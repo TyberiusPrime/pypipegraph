@@ -125,6 +125,7 @@ class LocalSystem:
         return res
 
     def enter_loop(self):
+        os.environ['RAYON_NUM_THREADS'] = "%i" % (self.max_cores_to_use,)
         self.spawn_slaves()
         if sys.version_info[0] == 2 and sys.version_info[1] < 7:  # pragma: no cover
             raise ValueError("pypipegraph needs python >=2.7")
