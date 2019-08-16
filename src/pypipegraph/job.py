@@ -1844,6 +1844,7 @@ class PlotJob(FileGeneratingJob):
             self.cache_filename = (
                 Path(util.global_pipegraph.cache_folder) / output_filename
             )
+            self.cache_filename.parent.mkdir(exist_ok=True, parents=True)
 
             def run_calc():
                 df = calc_function()
