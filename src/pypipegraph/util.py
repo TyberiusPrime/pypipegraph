@@ -191,3 +191,29 @@ def load_invariant_stati(filename):
         except EOFError:
             pass
     return result
+
+
+def freeze(obj):
+    """ Turn dicts into tuples of (key,value),
+        lists into tuples, and sets
+        into frozensets, recursively - usefull
+        to get a hash value..
+    """
+
+    try:
+        hash(obj)
+        return obj
+    except TypeError:
+        pass
+
+    if isinstance(obj, dict):
+        frz = tuple(sorted([(k, freeze(obj[k])) for k in obj]))
+        return frz
+    elif isinstance(obj, (list, tuple)):
+        return tuple([freeze(x) for x in obj])
+
+    elif isinstance(obj, set):
+        return frozenset(obj)
+    else:
+        msg = "Unsupported type: %r" % type(obj).__name__
+        raise TypeError(msg)
