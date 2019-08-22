@@ -400,7 +400,7 @@ def test_dataloading_job_changing_cwd(new_pipegraph):
 
     def load():
         os.chdir("shu")
-        Path('b').write_text('world')
+        Path("b").write_text("world")
         return 55
 
     a = ppg.FileGeneratingJob("a", lambda: Path("a").write_text("hello"))
@@ -410,6 +410,7 @@ def test_dataloading_job_changing_cwd(new_pipegraph):
     assert read("a") == "hello"
     assert read("shu/b") == "world"
 
+
 def test_job_generating_job_changing_cwd(new_pipegraph):
     from pathlib import Path
 
@@ -417,7 +418,7 @@ def test_job_generating_job_changing_cwd(new_pipegraph):
 
     def load():
         os.chdir("shu")
-        Path('b').write_text('world')
+        Path("b").write_text("world")
         return 55
 
     a = ppg.FileGeneratingJob("a", lambda: Path("a").write_text("hello"))
@@ -426,5 +427,3 @@ def test_job_generating_job_changing_cwd(new_pipegraph):
     ppg.run_pipegraph()
     assert read("a") == "hello"
     assert read("shu/b") == "world"
-
-

@@ -112,7 +112,13 @@ def functions_equal(a, b):
         return True
     elif a is None or b is None:
         return False
-    return (a.__code__ == b.__code__) and (a.__closure__ == b.__closure__)
+    elif hasattr(a, "__code__") and hasattr(a, "__closure__"):
+        if hasattr(b, "__code__") and hasattr(b, "__closure__"):
+            return (a.__code__ == b.__code__) and (a.__closure__ == b.__closure__)
+        else:
+            return False
+    else:
+        return ~(hasattr(b, "__code__") and hasattr(b, "__closure__"))
 
 
 class Job(object):
@@ -617,12 +623,13 @@ class FunctionInvariant(_InvariantJob):
     """FunctionInvariant detects (bytecode) changes in a python function,
     currently via disassembly"""
 
-    def __init__(self, job_id, function):
+    def __init__(self, job_id, function, absolute_path=None):
         self.verify_arguments(self.job_id, function)
         if was_inited_before(self, FunctionInvariant):
             return
         super().__init__(job_id)
         self.function = function
+        self.absolute_path = absolute_path
 
     def verify_arguments(self, job_id, function):
         if not hasattr(function, "__call__") and function is not None:
@@ -680,15 +687,22 @@ class FunctionInvariant(_InvariantJob):
                 # print(repr(self.function.im_func))
                 raise ValueError("Can't handle this object %s" % self.function)
         key = id(self.function.__code__)
+        # code_filepath = self.function.__code__.co_filename
+        # if not os.path.isabs(code_filepath):
+        #    if self.absolute_path is None:
+        #        raise ValueError(f"No absolute path to code file {code_filepath} is given.")
+        #    else:
+        #        code_filepath = os.path.join(self.absolute_path, os.path.basename(code_filepath))
         if isinstance(old, tuple):
-            old_filehash = old[0]
+            old_co_code = old[0]
             old_lineno = old[1]
             old_funchash = old[2]
             old_closure = old[3]
-            new_filehash = self.get_file_hash(self.function.__code__.co_filename)
+            #            new_filehash = self.get_file_hash(code_filepath)
+            new_co_code = self.function.__code__.co_code
             new_line_no = self.function.__code__.co_firstlineno
             if (
-                new_filehash == old_filehash and old_lineno == new_line_no
+                new_co_code == old_co_code and old_lineno == new_line_no
             ):  # same file, same line -> same func
                 return old
             else:
@@ -698,7 +712,7 @@ class FunctionInvariant(_InvariantJob):
                     )
                 new_funchash = util.global_pipegraph.func_hashes[key]
                 new_closure = self.extract_closure(self.function)
-                res = (new_filehash, new_line_no, new_funchash, new_closure)
+                res = (new_co_code, new_line_no, new_funchash, new_closure)
                 if self.func_hash_didnt_change(
                     old_funchash, old_closure, new_funchash, new_closure, version_info
                 ):
@@ -706,7 +720,9 @@ class FunctionInvariant(_InvariantJob):
                 else:
                     return res
         else:
-            new_filehash = self.get_file_hash(self.function.__code__.co_filename)
+            # new_filehash = self.get_file_hash(code_filepath)
+            new_co_code = self.function.__code__.co_code
+
             new_line_no = self.function.__code__.co_firstlineno
             if key not in util.global_pipegraph.func_hashes:
                 util.global_pipegraph.func_hashes[key] = self.dis_code(
@@ -714,7 +730,7 @@ class FunctionInvariant(_InvariantJob):
                 )
             new_funchash = util.global_pipegraph.func_hashes[key]
             new_closure = self.extract_closure(self.function)
-            res = (new_filehash, new_line_no, new_funchash, new_closure)
+            res = (new_co_code, new_line_no, new_funchash, new_closure)
             if isinstance(old, str):
                 if old == new_funchash + new_closure:
                     raise ppg_exceptions.NothingChanged(res)
@@ -729,7 +745,7 @@ class FunctionInvariant(_InvariantJob):
         new_closure,
         version_info=sys.version_info,
     ):
-        """Compare two function hashesh, allow 3.7 derived changes in how 
+        """Compare two function hashesh, allow 3.7 derived changes in how
         inner functions/lambdas are handled"""
         if new_funchash == old_funchash and new_closure == old_closure:
             # unrelated change in the file
@@ -1256,7 +1272,7 @@ class FileGeneratingJob(Job):
                     self,
                     self.callback.__code__.co_filename,
                     self.callback.__code__.co_firstlineno,
-                    os.path.abspath(os.getcwd())
+                    os.path.abspath(os.getcwd()),
                 )
             )
 
@@ -1292,7 +1308,6 @@ class MultiFileGeneratingJob(FileGeneratingJob):
         if was_inited_before(self, MultiFileGeneratingJob):
             return
         Job.__init__(self, self.job_id)
-
         self._check_for_filename_collisions()
 
         self.callback = function
@@ -1843,6 +1858,7 @@ class PlotJob(FileGeneratingJob):
             self.cache_filename = (
                 Path(util.global_pipegraph.cache_folder) / output_filename
             )
+            self.cache_filename.parent.mkdir(exist_ok=True, parents=True)
 
             def run_calc():
                 df = calc_function()

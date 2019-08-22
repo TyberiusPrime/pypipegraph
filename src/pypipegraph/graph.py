@@ -191,7 +191,7 @@ class Pipegraph(object):
         If any job does not complete (exception, segfault, failed to produce output), RuntimeError
         will be thrown, and the job's exception (if available) be stored in job.exception
 
-        if @dry_run is set, the Graph will throw an exception 
+        if @dry_run is set, the Graph will throw an exception
         on the first invariant change it detects
 
         """
@@ -570,12 +570,15 @@ class Pipegraph(object):
                 ] = inv  # so not to recheck next time...
             if inv != old:
                 if self.dry_run:
-                    print(ValueError(
-f"""Invariant change detected
+                    print(
+                        ValueError(
+                            f"""Invariant change detected
 Job: {job}
 old: {old}
 new: {inv}
-"""))
+"""
+                        )
+                    )
                 else:
                     job.invalidated(reason="invariant")
                 job.invalidation_count = self._distribute_invariant_changes_count
@@ -885,7 +888,9 @@ new: {inv}
 
     def job_executed(self, job):
         """A job was done. Returns whether there are more jobs read run"""
-        os.chdir(self.chdir)  #  no job must modify this, otherwise the checks get inconsistent
+        os.chdir(
+            self.chdir
+        )  # no job must modify this, otherwise the checks get inconsistent
         job._reset_is_done_cache()
         if job.failed:
             self.logger.warning("job_executed %s failed: %s" % (job, job.failed))
