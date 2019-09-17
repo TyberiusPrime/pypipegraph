@@ -62,7 +62,7 @@ class JobList(object):
         jobs = list(jobs)
         for job in jobs:
             if not isinstance(job, Job):
-                raise ValueError("%s was not a job object" % job)
+                raise ValueError("%s was not a job object" % (job,))
         self.jobs = set(jobs)
 
     def __iter__(self):
