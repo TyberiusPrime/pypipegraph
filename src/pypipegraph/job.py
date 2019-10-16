@@ -1823,7 +1823,7 @@ class PlotJob(FileGeneratingJob):
             if (
                 skip_caching != self.skip_caching
                 or skip_table != self.skip_table
-                or self.render_args != self.render_args
+                or render_args != self.render_args
             ):
                 raise ValueError(
                     "PlotJob(%s) called twice with different parameters" % self.job_id

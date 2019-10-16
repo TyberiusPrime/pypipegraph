@@ -162,6 +162,24 @@ if has_pyggplot:  # noqa C901
             assert magic(of).find(b"PNG image") != -1
             assert not os.path.exists("cache/out/test.png")
 
+        def test_redefiniton_and_skip_changes_raises(self):
+            def calc():
+                return pd.DataFrame(
+                    {"X": list(range(0, 100)), "Y": list(range(50, 150))}
+                )
+
+            def plot(df):
+                return dp(df).p9().add_point("X", "Y")
+
+            of = "out/test.png"
+            ppg.PlotJob(of, calc, plot)
+            with pytest.raises(ValueError):
+                ppg.PlotJob(of, calc, plot, skip_caching=True)
+            with pytest.raises(ValueError):
+                ppg.PlotJob(of, calc, plot, skip_table=True)
+            with pytest.raises(ValueError):
+                ppg.PlotJob(of, calc, plot, render_args={"something": 55})
+
         def test_pdf(self):
             def calc():
                 return pd.DataFrame(
