@@ -1847,6 +1847,7 @@ class PlotJob(FileGeneratingJob):
         self.calc_function = calc_function
         self.plot_function = plot_function
         self.skip_caching = skip_caching
+        self.skip_table = skip_table
         if render_args is None:
             render_args = {}
         self.render_args = render_args
