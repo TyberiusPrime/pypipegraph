@@ -26,6 +26,7 @@ def print_status_not_found():
     print("try passing --status=")
     sys.exit(1)
 
+
 def main():
 
     if len(sys.argv) < 2:
@@ -134,5 +135,5 @@ def main():
                 print(job_id)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
