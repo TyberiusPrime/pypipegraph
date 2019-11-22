@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-__version__ = "0.187"  # test enforces this to be in sync with setup.cfg
+__version__ = "0.189"  # test enforces this to be in sync with setup.cfg
 
 from .graph import run_pipegraph, new_pipegraph
 from .ppg_exceptions import (

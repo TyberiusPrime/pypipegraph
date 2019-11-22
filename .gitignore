@@ -24,4 +24,4 @@ pypipegraph/tests/run
 .coverage*
 .eggs
 tests/run
-
+pip-wheel-metadata

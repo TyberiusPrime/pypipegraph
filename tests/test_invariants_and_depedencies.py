@@ -1117,7 +1117,7 @@ class TestFunctionInvariant:
         iv1 = a._get_invariant(False, [])
         assert counter[0] == 1
         assert len(ppg.util.global_pipegraph.func_hashes) == 1
-        assert len(ppg.util.global_pipegraph.file_hashes) == 1
+        assert len(ppg.util.global_pipegraph.file_hashes) == 0
 
         # same function again - no new calc
         iv2 = a._get_invariant(False, [])
@@ -1150,7 +1150,7 @@ class TestFunctionInvariant:
         assert len(ppg.util.global_pipegraph.func_hashes) == 1
         assert counter[0] == 3
         assert (
-            len(ppg.util.global_pipegraph.file_hashes) == 1
+            len(ppg.util.global_pipegraph.file_hashes) == 0
         )  # we still used the the function.__code__.co_filename
 
         # now let's simulate the line no changing.
@@ -1163,7 +1163,7 @@ class TestFunctionInvariant:
         assert len(ppg.util.global_pipegraph.func_hashes) == 1
         assert counter[0] == 4
         assert (
-            len(ppg.util.global_pipegraph.file_hashes) == 1
+            len(ppg.util.global_pipegraph.file_hashes) == 0
         )  # we still used the the function.__code__.co_filename
 
         # and now, going from the old to the new...
