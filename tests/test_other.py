@@ -24,6 +24,7 @@ SOFTWARE.
 
 import os
 import subprocess
+import sys
 import pytest
 import pypipegraph as ppg
 from .shared import write, read, append, Dummy, assertRaises
@@ -189,7 +190,7 @@ class TestingTheUnexpectedTests:
         old_dir = os.getcwd()
         os.chdir(os.path.dirname(__file__))
         p = subprocess.Popen(
-            ["python", "_import_does_not_hang.py"],
+            [sys.executable, "_import_does_not_hang.py"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
