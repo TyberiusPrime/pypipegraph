@@ -37,10 +37,14 @@ def new_pipegraph(request):
             / "run"
             / (request.cls.__name__ + "." + request.node.name)
         )
-    if target_path.exists():  # pragma: no cover
-        shutil.rmtree(target_path)
-    target_path = target_path.absolute()
+        target_path = target_path.absolute()
     old_dir = Path(os.getcwd()).absolute()
+    if old_dir == target_path:
+        pass
+    else:
+        if target_path.exists():  # pragma: no cover
+            shutil.rmtree(target_path)
+
     try:
         first = [False]
 
