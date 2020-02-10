@@ -73,7 +73,8 @@ def main():
                         if name == job_id:
                             return value
                 except EOFError:
-                    raise KeyError("Job not found in %s" % filename)
+                    #raise KeyError("Job not found in %s" % filename)
+                    return "job was not present"
             print(
                 "Using %s as status filename, use --status if you want another one"
                 % status_prefix
