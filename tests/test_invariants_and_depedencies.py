@@ -1204,13 +1204,14 @@ class TestFunctionInvariant:
             def shu(x):
                 return lambda: x + 5
 
-            source = "            def shu(x):\n                return lambda: x + 5\n"
+            source = "(x):\n                return lambda: x + 5"
             a = ppg.FunctionInvariant("shu", shu)
             old = {
                 "source": source,
                 str((3, 6)): a.dis_code(shu.__code__, shu, (3, 6, 1)),
             }
             expected_new = old.copy()
+            expected_new['_version'] = 3
             expected_new[str(sys.version_info[:2])] = (
                 a.dis_code(shu.__code__, shu, sys.version_info),
                 "",
@@ -1932,3 +1933,49 @@ RETURN_VALUE"""
                 new[str(sys.version_info[:2])][1],
                 old,
             )
+
+    def test_function_name_is_irrelevant(self):
+        def test_a():
+            return 55
+
+        def test_b():
+            return 55
+
+        def test_c():
+            return 56
+
+        a = ppg.FunctionInvariant("a", test_a)
+        b = ppg.FunctionInvariant("b", test_b)
+        c = ppg.FunctionInvariant("c", test_c)
+        assert a.get_invariant(False, []) == b.get_invariant(False, [])
+        assert a.get_invariant(False, []) != c.get_invariant(False, [])
+
+    def test_docstring_is_irrelevant(self):
+        def test():
+            """A"""
+            return 55
+
+        a = ppg.FunctionInvariant("a", test)
+
+        # fmt: off
+        def test():
+            '''B'''
+            return 55
+        # fmt: on
+        b = ppg.FunctionInvariant("b", test)
+
+        def test():
+            "c"
+            return 56
+
+        c = ppg.FunctionInvariant("c", test)
+
+        def test():
+            "c"
+            return 56
+
+        d = ppg.FunctionInvariant("d", test)
+
+        assert a.get_invariant(False, []) == b.get_invariant(False, [])
+        assert a.get_invariant(False, []) != c.get_invariant(False, [])
+        assert c.get_invariant(False, []) == d.get_invariant(False, [])

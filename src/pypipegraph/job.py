@@ -668,39 +668,56 @@ class FunctionInvariant(_InvariantJob):
                 id(self),
             )
 
-    def _get_invariant_from_non_python_function(self):
-        if str(self.function).startswith("<built-in function"):
-            return str(self.function)
-        elif hasattr(self.function, "im_func") and (
-            "cyfunction" in repr(self.function.im_func)
-            or repr(self.function.im_func).startswith("<built-in function")
+    @classmethod
+    def _get_invariant_from_non_python_function(cls, function):
+        if str(function).startswith("<built-in function"):
+            return str(function)
+        elif hasattr(function, "im_func") and (
+            "cyfunction" in repr(function.im_func)
+            or repr(function.im_func).startswith("<built-in function")
         ):
-            return self.get_cython_source(self.function)
+            return cls.get_cython_source(function)
         else:
-            # print(repr(self.function))
-            # print(repr(self.function.im_func))
-            raise ValueError("Can't handle this object %s" % self.function)
+            # print(repr(function))
+            # print(repr(function.im_func))
+            raise ValueError("Can't handle this object %s" % function)
 
-    def _get_func_hash(self, key):
+    @classmethod
+    def _get_func_hash(cls, key, function):
         if key not in util.global_pipegraph.func_hashes:
+            source = inspect.getsource(function).strip()
+            # cut off function definition / name, but keep parameters
+            if source.startswith("def"):
+                source = source[source.find("(") :]
+            # filter doc string
+            if function.__doc__:
+                for prefix in ['"""', "'''", '"', "'"]:
+                    if prefix + function.__doc__ + prefix in source:
+                        source = source.replace(prefix + function.__doc__ + prefix, "",)
+
             util.global_pipegraph.func_hashes[key] = (
-                inspect.getsource(self.function),
-                self.dis_code(self.function.__code__, self.function),
+                source,
+                cls.dis_code(function.__code__, function),
             )
         return util.global_pipegraph.func_hashes[key]
+
+    @classmethod
+    def _hash_function(cls, function):
+        if not hasattr(function, "__code__"):
+            return cls._get_invariant_from_non_python_function(function)
+        key = id(function.__code__)
+        new_source, new_funchash = cls._get_func_hash(key, function)
+        new_closure = cls.extract_closure(function)
+        return new_source, new_funchash, new_closure
 
     def _get_invariant(self, old, all_invariant_stati, version_info=sys.version_info):
         if self.function is None:
             # since the 'default invariant' is False, this will still read 'invalidated the first time it's being used'
             return None
         if not hasattr(self.function, "__code__"):
-            return self._get_invariant_from_non_python_function()
-        key = id(self.function.__code__)
-        new_source, new_funchash = self._get_func_hash(key)
-        new_closure = self.extract_closure(self.function)
-        return FunctionInvariant._compare_new_and_old(
-            new_source, new_funchash, new_closure, old
-        )
+            return self._get_invariant_from_non_python_function(self.function)
+        new_source, new_funchash, new_closure = self._hash_function(self.function)
+        return self._compare_new_and_old(new_source, new_funchash, new_closure, old)
 
     @staticmethod
     def _compare_new_and_old(new_source, new_funchash, new_closure, old):
@@ -732,17 +749,21 @@ class FunctionInvariant(_InvariantJob):
             )
         unchanged = False
         for k in set(new.keys()).intersection(old.keys()):
-            if new[k] == old[k]:
+            if k != "_version" and new[k] == old[k]:
                 unchanged = True
         out = old.copy()
         out.update(new)
+        out[
+            "_version"
+        ] = 3  # future proof, since this is *at least* the third way we're doing this
         if "old" in out:
             del out["old"]
         if unchanged:
             raise ppg_exceptions.NothingChanged(out)
         return out
 
-    def extract_closure(self, function):
+    @staticmethod
+    def extract_closure(function):
         """extract the bound variables from a function into a string representation"""
         try:
             closure = function.func_closure
@@ -750,7 +771,7 @@ class FunctionInvariant(_InvariantJob):
             closure = function.__closure__
         output = ""
         if closure:
-            for name, cell in zip(self.function.__code__.co_freevars, closure):
+            for name, cell in zip(function.__code__.co_freevars, closure):
                 # we ignore references to self - in that use case you're expected
                 # to make your own ParameterInvariants, and we could not detect
                 # self.parameter anyhow (only self would be bound)
