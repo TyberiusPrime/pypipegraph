@@ -311,6 +311,65 @@ class TestJobGeneratingJob:
         assert read("out/D") == "D"
 
 
+
+    def test_invalidation(self, new_pipegraph):
+        def gen():
+            ppg.FileGeneratingJob("out/D", lambda: write("out/D", "D"))
+        ppg.JobGeneratingJob("A", gen)
+        ppg.run_pipegraph()
+        assert read("out/D") == "D"
+        new_pipegraph.new_pipegraph()
+        def gen():
+            ppg.FileGeneratingJob("out/D", lambda: write("out/D", "E"))
+        ppg.JobGeneratingJob("A", gen)
+        ppg.run_pipegraph()
+        assert read("out/D") == "E"
+
+    def test_invalidation_multiple_stages(self, new_pipegraph):
+        counter = [0]
+        def count():
+            counter[0] += 1
+            return str(counter[0])
+        def gen():
+            def genB():
+                def genC():
+                    count()
+                    ppg.FileGeneratingJob("out/D", lambda: write("out/D", "D"))
+
+                ppg.JobGeneratingJob("C", genC)
+
+            ppg.JobGeneratingJob("B", genB)
+
+        ppg.JobGeneratingJob("A", gen)
+        ppg.run_pipegraph()
+        assert read("out/D") == "D"
+        assert counter[0] == 1
+
+        new_pipegraph.new_pipegraph()
+        ppg.JobGeneratingJob("A", gen)
+        ppg.run_pipegraph()
+        assert read("out/D") == "D"
+        assert counter[0] == 2
+
+        new_pipegraph.new_pipegraph()
+        def gen():
+            def genB():
+                def genC():
+                    count()
+                    ppg.FileGeneratingJob("out/D", lambda: write("out/D", "E"))
+
+                ppg.JobGeneratingJob("C", genC)
+
+            ppg.JobGeneratingJob("B", genB)
+
+        ppg.JobGeneratingJob("A", gen)
+        ppg.run_pipegraph()
+        assert read("out/D") == "E"
+        assert counter[0] == 3
+
+
+
+
 @pytest.mark.usefixtures("new_pipegraph")
 class TestDependencyInjectionJob:
     def test_basic(self, new_pipegraph):
