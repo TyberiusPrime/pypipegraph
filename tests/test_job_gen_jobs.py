@@ -223,7 +223,7 @@ class TestJobGeneratingJob:
         assertRaises(TypeError, inner)
 
     def test_generated_jobs_that_can_not_run_right_away_because_of_dataloading_do_not_crash(
-        self
+        self,
     ):
         o = Dummy()
         existing_dl = ppg.AttributeLoadingJob("a", o, "a", lambda: "Ashu")
@@ -310,26 +310,29 @@ class TestJobGeneratingJob:
         assert not os.path.exists("out/C")  # that job never makes it to the pipeline
         assert read("out/D") == "D"
 
-
-
     def test_invalidation(self, new_pipegraph):
         def gen():
             ppg.FileGeneratingJob("out/D", lambda: write("out/D", "D"))
+
         ppg.JobGeneratingJob("A", gen)
         ppg.run_pipegraph()
         assert read("out/D") == "D"
         new_pipegraph.new_pipegraph()
+
         def gen():
             ppg.FileGeneratingJob("out/D", lambda: write("out/D", "E"))
+
         ppg.JobGeneratingJob("A", gen)
         ppg.run_pipegraph()
         assert read("out/D") == "E"
 
     def test_invalidation_multiple_stages(self, new_pipegraph):
         counter = [0]
+
         def count():
             counter[0] += 1
             return str(counter[0])
+
         def gen():
             def genB():
                 def genC():
@@ -352,6 +355,7 @@ class TestJobGeneratingJob:
         assert counter[0] == 2
 
         new_pipegraph.new_pipegraph()
+
         def gen():
             def genB():
                 def genC():
@@ -366,8 +370,6 @@ class TestJobGeneratingJob:
         ppg.run_pipegraph()
         assert read("out/D") == "E"
         assert counter[0] == 3
-
-
 
 
 @pytest.mark.usefixtures("new_pipegraph")

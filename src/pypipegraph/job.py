@@ -33,6 +33,7 @@ import os
 import stat
 import sys
 import dis
+import inspect
 import shutil
 import hashlib
 import traceback
@@ -215,8 +216,8 @@ class Job(object):
             self.was_loaded = False
             self.was_invalidated = False
             self.invalidation_count = (
-                0
-            )  # used to save some time in graph.distribute_invariant_changes
+                0  # used to save some time in graph.distribute_invariant_changes
+            )
             self.was_cleaned_up = False
             self.always_runs = False
             self.start_time = None
@@ -440,9 +441,7 @@ class Job(object):
                     # but that does not mean that it's done enough to start the next one. Was_run means it has returned.
                     # On the other hand, it might have been a job that didn't need to run, then was_invalidated should be false.
                     # or it was a loadable job anyhow, then it doesn't matter.
-                    return (
-                        False
-                    )  # pragma: no cover - there is a test case, it triggers, but coverage misses it apperantly
+                    return False  # pragma: no cover - there is a test case, it triggers, but coverage misses it apperantly
                 # else:
                 # continue  # go and check the next one
             elif preq._pruned:
@@ -669,97 +668,83 @@ class FunctionInvariant(_InvariantJob):
                 id(self),
             )
 
+    def _get_invariant_from_non_python_function(self):
+        if str(self.function).startswith("<built-in function"):
+            return str(self.function)
+        elif hasattr(self.function, "im_func") and (
+            "cyfunction" in repr(self.function.im_func)
+            or repr(self.function.im_func).startswith("<built-in function")
+        ):
+            return self.get_cython_source(self.function)
+        else:
+            # print(repr(self.function))
+            # print(repr(self.function.im_func))
+            raise ValueError("Can't handle this object %s" % self.function)
+
+    def _get_func_hash(self, key):
+        if key not in util.global_pipegraph.func_hashes:
+            util.global_pipegraph.func_hashes[key] = (
+                inspect.getsource(self.function),
+                self.dis_code(self.function.__code__, self.function),
+            )
+        return util.global_pipegraph.func_hashes[key]
+
     def _get_invariant(self, old, all_invariant_stati, version_info=sys.version_info):
         if self.function is None:
-            return (
-                None
-            )  # since the 'default invariant' is False, this will still read 'invalidated the first time it's being used'
+            # since the 'default invariant' is False, this will still read 'invalidated the first time it's being used'
+            return None
         if not hasattr(self.function, "__code__"):
-            if str(self.function).startswith("<built-in function"):
-                return str(self.function)
-            elif hasattr(self.function, "im_func") and (
-                "cyfunction" in repr(self.function.im_func)
-                or repr(self.function.im_func).startswith("<built-in function")
-            ):
-                return self.get_cython_source(self.function)
-            else:
-                # print(repr(self.function))
-                # print(repr(self.function.im_func))
-                raise ValueError("Can't handle this object %s" % self.function)
+            return self._get_invariant_from_non_python_function()
         key = id(self.function.__code__)
-        # code_filepath = self.function.__code__.co_filename
-        # if not os.path.isabs(code_filepath):
-        #    if self.absolute_path is None:
-        #        raise ValueError(f"No absolute path to code file {code_filepath} is given.")
-        #    else:
-        #        code_filepath = os.path.join(self.absolute_path, os.path.basename(code_filepath))
-        if isinstance(old, tuple):
-            old_co_code = old[0]
-            old_lineno = old[1]
+        new_source, new_funchash = self._get_func_hash(key)
+        new_closure = self.extract_closure(self.function)
+        return FunctionInvariant._compare_new_and_old(
+            new_source, new_funchash, new_closure, old
+        )
+
+    @staticmethod
+    def _compare_new_and_old(new_source, new_funchash, new_closure, old):
+        new = {"source": new_source, sys.version_info[:2]: (new_funchash, new_closure)}
+
+        if isinstance(old, dict):
+            pass  # the current style
+        elif isinstance(old, tuple):
+            # the previous style.
             old_funchash = old[2]
             old_closure = old[3]
-            #            new_filehash = self.get_file_hash(code_filepath)
-            new_co_code = self.function.__code__.co_code
-            new_line_no = self.function.__code__.co_firstlineno
-            if (
-                new_co_code == old_co_code and old_lineno == new_line_no
-            ):  # same file, same line -> same func
-                return old
-            else:
-                if key not in util.global_pipegraph.func_hashes:
-                    util.global_pipegraph.func_hashes[key] = self.dis_code(
-                        self.function.__code__, self.function
-                    )
-                new_funchash = util.global_pipegraph.func_hashes[key]
-                new_closure = self.extract_closure(self.function)
-                res = (new_co_code, new_line_no, new_funchash, new_closure)
-                if self.func_hash_didnt_change(
-                    old_funchash, old_closure, new_funchash, new_closure, version_info
-                ):
-                    raise ppg_exceptions.NothingChanged(res)
-                else:
-                    return res
-        else:
-            # new_filehash = self.get_file_hash(code_filepath)
-            new_co_code = self.function.__code__.co_code
-
-            new_line_no = self.function.__code__.co_firstlineno
-            if key not in util.global_pipegraph.func_hashes:
-                util.global_pipegraph.func_hashes[key] = self.dis_code(
-                    self.function.__code__, self.function
+            old = {
+                sys.version_info[
+                    :2
+                ]: (  # if you change python version and pypipegraph at the same time, you're out of luck
+                    old_funchash,
+                    old_closure,
                 )
-            new_funchash = util.global_pipegraph.func_hashes[key]
-            new_closure = self.extract_closure(self.function)
-            res = (new_co_code, new_line_no, new_funchash, new_closure)
-            if isinstance(old, str):
-                if old == new_funchash + new_closure:
-                    raise ppg_exceptions.NothingChanged(res)
-            return res
-
-    @classmethod
-    def func_hash_didnt_change(
-        cls,
-        old_funchash,
-        old_closure,
-        new_funchash,
-        new_closure,
-        version_info=sys.version_info,
-    ):
-        """Compare two function hashesh, allow 3.7 derived changes in how
-        inner functions/lambdas are handled"""
-        if new_funchash == old_funchash and new_closure == old_closure:
-            # unrelated change in the file
-            return True
-        elif (
-            version_info >= (3, 7)
-            and "\ninner no " in old_funchash
-            and old_funchash[: old_funchash.find("\ninner no") + 1] == new_funchash
-        ):
-            # change in how we handled lambdas within functions
-            return True
-        return False
+            }
+        elif isinstance(old, str):
+            # the old old style, just concatenated.
+            old = {"old": old}
+            new["old"] = new_funchash + new_closure
+        elif old == False:  # never ran before
+            return new
+        else:  # pragma: no cover
+            raise ValueError(
+                "Could not understand old FunctionInvariant invariant. Was Type(%s): %s"
+                % (type(old), old)
+            )
+        unchanged = False
+        for k in set(new.keys()).intersection(old.keys()):
+            if new[k] == old[k]:
+                unchanged = True
+        out = old.copy()
+        out.update(new)
+        if "old" in out:
+            del out["old"]
+        if unchanged:
+            raise ppg_exceptions.NothingChanged(out)
+        return out
 
     def extract_closure(self, function):
+        """extract the bound variables from a function into a string representation"""
         try:
             closure = function.func_closure
         except AttributeError:
@@ -807,12 +792,6 @@ class FunctionInvariant(_InvariantJob):
         + "|"
         + "(<code\tobject\t<[^>]+>,\tfile\t'[^']+',\tline\t[0-9]+)"  # that's the cpython way  # that's how they look like in pypy. More sensibly, actually
     )
-
-    @classmethod
-    def get_file_hash(self, filename):
-        if filename not in util.global_pipegraph.file_hashes:
-            util.global_pipegraph.file_hashes[filename] = util.checksum_file(filename)
-        return util.global_pipegraph.file_hashes[filename]
 
     @classmethod
     def dis_code(cls, code, function, version_info=sys.version_info):
@@ -971,9 +950,10 @@ class RobustFileChecksumInvariant(_InvariantJob):
                     old = all_invariant_stati[job_id]
                     if isinstance(old, tuple):
                         if len(old) == 2:
-                            old_filesize, old_chksum = (
-                                old
-                            )  # pragma: no cover - upgrade from older pipegraph and move at the same time
+                            (
+                                old_filesize,
+                                old_chksum,
+                            ) = old  # pragma: no cover - upgrade from older pipegraph and move at the same time
                         else:
                             dummy_old_filetime, old_filesize, old_chksum = old
                         if old_filesize == filesize:
