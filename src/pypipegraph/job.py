@@ -704,7 +704,10 @@ class FunctionInvariant(_InvariantJob):
 
     @staticmethod
     def _compare_new_and_old(new_source, new_funchash, new_closure, old):
-        new = {"source": new_source, sys.version_info[:2]: (new_funchash, new_closure)}
+        new = {
+            "source": new_source,
+            str(sys.version_info[:2]): (new_funchash, new_closure),
+        }
 
         if isinstance(old, dict):
             pass  # the current style
@@ -713,18 +716,14 @@ class FunctionInvariant(_InvariantJob):
             old_funchash = old[2]
             old_closure = old[3]
             old = {
-                sys.version_info[
-                    :2
-                ]: (  # if you change python version and pypipegraph at the same time, you're out of luck
-                    old_funchash,
-                    old_closure,
-                )
+                # if you change python version and pypipegraph at the same time, you're out of luck and will possibly rebuild
+                str(sys.version_info[:2]): (old_funchash, old_closure,)
             }
         elif isinstance(old, str):
             # the old old style, just concatenated.
             old = {"old": old}
             new["old"] = new_funchash + new_closure
-        elif old == False:  # never ran before
+        elif old is False:  # never ran before
             return new
         else:  # pragma: no cover
             raise ValueError(

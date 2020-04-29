@@ -1206,9 +1206,12 @@ class TestFunctionInvariant:
 
             source = "            def shu(x):\n                return lambda: x + 5\n"
             a = ppg.FunctionInvariant("shu", shu)
-            old = {"source": source, (3, 6): a.dis_code(shu.__code__, shu, (3, 6, 1))}
+            old = {
+                "source": source,
+                str((3, 6)): a.dis_code(shu.__code__, shu, (3, 6, 1)),
+            }
             expected_new = old.copy()
-            expected_new[sys.version_info[:2]] = (
+            expected_new[str(sys.version_info[:2])] = (
                 a.dis_code(shu.__code__, shu, sys.version_info),
                 "",
             )
@@ -1873,10 +1876,10 @@ RETURN_VALUE"""
         # if byte code is present, in the right version and identical, ok.
         with pytest.raises(ppg.NothingChanged):
             ppg.FunctionInvariant._compare_new_and_old(
-                source, py380, "", {sys.version_info[:2]: (py380, "")}
+                source, py380, "", {str(sys.version_info[:2]): (py380, "")}
             )
         # nothing store -> change
-        assert sys.version_info[:2] in ppg.FunctionInvariant._compare_new_and_old(
+        assert str(sys.version_info[:2]) in ppg.FunctionInvariant._compare_new_and_old(
             source, py380, {}, {}
         )
         # if source is present and identical, ignore all others, take 2
@@ -1900,14 +1903,15 @@ RETURN_VALUE"""
         old = (
             "ignored",
             "ignored",
-            new[sys.version_info[:2]][0],
-            new[sys.version_info[:2]][1],
+            new[str(sys.version_info[:2])][0],
+            new[str(sys.version_info[:2])][1],
         )
+
         with pytest.raises(ppg.NothingChanged):
             ppg.FunctionInvariant._compare_new_and_old(
                 new["source"],
-                new[sys.version_info[:2]][0],
-                new[sys.version_info[:2]][1],
+                new[str(sys.version_info[:2])][0],
+                new[str(sys.version_info[:2])][1],
                 old,
             )
 
@@ -1920,11 +1924,11 @@ RETURN_VALUE"""
 
         iv = ppg.FunctionInvariant("shu", test)
         new = iv._get_invariant(False, [])
-        old = new[sys.version_info[:2]][0] + new[sys.version_info[:2]][1]
+        old = new[str(sys.version_info[:2])][0] + new[str(sys.version_info[:2])][1]
         with pytest.raises(ppg.NothingChanged):
             ppg.FunctionInvariant._compare_new_and_old(
                 new["source"],
-                new[sys.version_info[:2]][0],
-                new[sys.version_info[:2]][1],
+                new[str(sys.version_info[:2])][0],
+                new[str(sys.version_info[:2])][1],
                 old,
             )
