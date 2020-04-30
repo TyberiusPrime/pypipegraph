@@ -684,7 +684,7 @@ class FunctionInvariant(_InvariantJob):
 
     @classmethod
     def _get_func_hash(cls, key, function):
-        if key not in util.global_pipegraph.func_hashes:
+        if not util.global_pipegraph or key not in util.global_pipegraph.func_hashes:
             source = inspect.getsource(function).strip()
             # cut off function definition / name, but keep parameters
             if source.startswith("def"):
@@ -694,11 +694,14 @@ class FunctionInvariant(_InvariantJob):
                 for prefix in ['"""', "'''", '"', "'"]:
                     if prefix + function.__doc__ + prefix in source:
                         source = source.replace(prefix + function.__doc__ + prefix, "",)
-
-            util.global_pipegraph.func_hashes[key] = (
+            value = (
                 source,
                 cls.dis_code(function.__code__, function),
             )
+            if not util.global_pipegraph:
+                return value
+            util.global_pipegraph.func_hashes[key] = value
+
         return util.global_pipegraph.func_hashes[key]
 
     @classmethod
