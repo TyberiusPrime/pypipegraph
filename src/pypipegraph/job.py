@@ -46,7 +46,6 @@ from pathlib import Path
 from . import ppg_exceptions
 from . import util
 
-
 is_pypy = platform.python_implementation() == "PyPy"
 module_type = type(sys)
 checksum_file = util.checksum_file
@@ -744,6 +743,8 @@ class FunctionInvariant(_InvariantJob):
             old = {"old": old}
             new["old"] = new_funchash + new_closure
         elif old is False:  # never ran before
+            return new
+        elif old is None:  # if you provided a None type instead of a function, you will run into this
             return new
         else:  # pragma: no cover
             raise ValueError(
