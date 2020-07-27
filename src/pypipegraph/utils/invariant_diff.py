@@ -21,13 +21,13 @@ def print_usage():
     sys.exit(1)
 
 
-def print_status_not_found():
+def print_status_not_found(status_prefix):
     print("Status filename: %s  not found" % status_prefix)
     print("try passing --status=")
     sys.exit(1)
 
 
-def main():
+def main():  # noqa: C901
 
     if len(sys.argv) < 2:
         print_usage()
@@ -58,9 +58,9 @@ def main():
                     )
                     break
             else:
-                print_status_not_found()
+                print_status_not_found(status_prefix)
         else:
-            print_status_not_found()
+            print_status_not_found(status_prefix)
 
     if modus == "job":
 
@@ -73,7 +73,8 @@ def main():
                         if name == job_id:
                             return value
                 except EOFError:
-                    raise KeyError("Job not found in %s" % filename)
+                    # raise KeyError("Job not found in %s" % filename)
+                    return "job was not present"
             print(
                 "Using %s as status filename, use --status if you want another one"
                 % status_prefix
