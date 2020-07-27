@@ -382,9 +382,9 @@ class TestDependencyInjectionJob:
         # reference different objects.
         # I'm not sure how to handle this right now though.
 
-        # I have an idea: Do JobGraphModifyingJobs in each slave, and send back just the
+        # I have an idea: Do JobGraphModifyingJobs in each worker, and send back just the
         # dependency data (and new job name).
-        # that way, we can still execute on any slave, and all the pointers should be
+        # that way, we can still execute on any worker, and all the pointers should be
         # right.
         new_pipegraph.new_pipegraph()
 

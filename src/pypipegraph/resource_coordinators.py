@@ -42,7 +42,7 @@ from . import util
 
 
 class DummyResourceCoordinator:
-    """For the calculating slaves. so it throws exceptions..."""
+    """For the calculating workers. so it throws exceptions..."""
 
 
 def get_memory_available():
@@ -78,7 +78,7 @@ def signal_handler(signal, frame):  # pragma: no cover - interactive
 JobReturnValue = collections.namedtuple(
     "JobReturnValue",
     (
-        "slave_id",
+        "worker_id",
         "was_ok",
         "job_id",
         "stdout",
@@ -95,12 +95,12 @@ class LocalSystem:
     """A ResourceCoordinator that uses the current machine,
     up to max_cores_to_use cores of it
 
-    It uses multiprocessing and the LocalSlave
+    It uses multiprocessing and the LocalWorker
     """
 
     def __init__(self, max_cores_to_use=util.CPUs(), profile=False, interactive=True):
         self.max_cores_to_use = max_cores_to_use  # todo: update to local cpu count...
-        self.slave = LocalSlave(self)
+        self.worker = LocalWorker(self)
         self.cores_available = max_cores_to_use
         self.physical_memory, self.swap_memory = get_memory_available()
         self.timeout = 5
@@ -111,12 +111,12 @@ class LocalSystem:
             interactive = False
         self.interactive = interactive
 
-    def spawn_slaves(self):
-        return {"LocalSlave": self.slave}
+    def spawn_workers(self):
+        return {"LocalWorker": self.worker}
 
     def get_resources(self):
         res = {
-            "LocalSlave": {  # this is always the maximum available - the graph is handling the bookeeping of running jobs
+            "LocalWorker": {  # this is always the maximum available - the graph is handling the bookeeping of running jobs
                 "cores": self.cores_available,
                 "physical_memory": self.physical_memory,
                 "swap_memory": self.swap_memory,
@@ -126,7 +126,7 @@ class LocalSystem:
 
     def enter_loop(self):
         os.environ['RAYON_NUM_THREADS'] = "%i" % (self.max_cores_to_use,)
-        self.spawn_slaves()
+        self.spawn_workers()
         if sys.version_info[0] == 2 and sys.version_info[1] < 7:  # pragma: no cover
             raise ValueError("pypipegraph needs python >=2.7")
         else:
@@ -141,7 +141,7 @@ class LocalSystem:
             interactive_thread.start()
             s = signal.signal(signal.SIGINT, signal_handler)  # ignore ctrl-c
         while True:
-            self.slave.check_for_dead_jobs()  # whether time out or or job was done, let's check this...
+            self.worker.check_for_dead_jobs()  # whether time out or or job was done, let's check this...
             if self.interactive:  # pragma: no cover
                 self.see_if_output_is_requested()
             try:
@@ -152,9 +152,9 @@ class LocalSystem:
 
                 if r is None and interactive.interpreter.terminated:  # pragma: no cover
                     # abort was requested
-                    self.slave.kill_jobs()
+                    self.worker.kill_jobs()
                     break
-                # slave_id, was_ok, job_id_done, stdout, stderr, exception, trace, new_jobs, runtime = (
+                # worker_id, was_ok, job_id_done, stdout, stderr, exception, trace, new_jobs, runtime = (
                 # r
                 # )  # was there a job done?t
                 self.pipegraph.logger.debug(
@@ -162,7 +162,7 @@ class LocalSystem:
                 )
                 job = self.pipegraph.jobs[r.job_id]
                 job.stop_time = time.time()
-                job.was_done_on.add(r.slave_id)
+                job.was_done_on.add(r.worker_id)
                 job.stdout = r.stdout
                 job.stderr = r.stderr
                 job.exception = r.exception
@@ -246,16 +246,16 @@ class LocalSystem:
         self.que.put(None)
 
     def kill_job(self, job):  # pragma: no cover - interactive
-        self.slave.kill_job(job)
+        self.worker.kill_job(job)
 
     def get_job_pid(self, job):  # pragma: no cover - interactive
-        return self.slave.get_job_pid(job)
+        return self.worker.get_job_pid(job)
 
 
-class LocalSlave:
+class LocalWorker:
     def __init__(self, rc):
         self.rc = rc
-        self.slave_id = "LocalSlave"
+        self.worker_id = "LocalWorker"
         self.process_to_job = {}
 
     def spawn(self, job):
@@ -280,7 +280,7 @@ class LocalSlave:
         if preq_failed:
             self.rc.que.put(
                 JobReturnValue(
-                    slave_id=self.slave_id,
+                    worker_id=self.worker_id,
                     was_ok=False,
                     job_id=job.job_id,
                     stdout="",
@@ -352,7 +352,7 @@ class LocalSlave:
         if not was_ok:
             self.rc.que.put(
                 JobReturnValue(
-                    slave_id=self.slave_id,
+                    worker_id=self.worker_id,
                     was_ok=was_ok,
                     job_id=job.job_id,
                     stdout=stdout_text,
@@ -435,7 +435,7 @@ class LocalSlave:
         stop = time.time()
         self.rc.que.put(
             JobReturnValue(
-                slave_id=self.slave_id,
+                worker_id=self.worker_id,
                 was_ok=was_ok,
                 job_id=job.job_id,
                 stdout=stdout_text,
@@ -461,7 +461,7 @@ class LocalSlave:
         self.rc.pipegraph.new_jobs_generated_during_runtime(job_dict)
         return pickle.dumps(
             {}
-        )  # The LocalSlave does not need to serialize back the jobs, it already is running in the space of the MCP
+        )  # The LocalWorker does not need to serialize back the jobs, it already is running in the space of the MCP
 
     def check_for_dead_jobs(self):
         remove = []
@@ -484,7 +484,7 @@ class LocalSlave:
                     job.stderr_handle = None
                     self.rc.que.put(
                         JobReturnValue(
-                            slave_id=self.slave_id,
+                            worker_id=self.worker_id,
                             was_ok=False,
                             job_id=job.job_id,
                             stdout=stdout,

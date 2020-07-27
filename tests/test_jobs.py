@@ -806,7 +806,7 @@ shared_value = ""
 
 @pytest.mark.usefixtures("new_pipegraph")
 class TestDataLoadingJob:
-    def test_modifies_slave(self):
+    def test_modifies_worker(self):
         # global shared
         # shared = "I was the the global in the mcp"
         def load():
